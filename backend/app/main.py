@@ -10,6 +10,7 @@ from .routes_internal_processes import router as internal_processes_router
 from .routes_internal_scheduler import router as scheduler_router
 from .routes_client_profiles import router as client_profiles_router
 from .routes_tasks_dashboard import router as tasks_dashboard_router
+from .routes_control_events import router as control_events_router
 
 from .tasks import router as tasks_router
 
@@ -66,10 +67,13 @@ def api_config():
 
 # Public API under /api
 app.include_router(tasks_router,           prefix="/api")
-app.include_router(tasks_dashboard_router, prefix="/api")  # /api/tasks/today, /api/tasks/export
+app.include_router(tasks_dashboard_router, prefix="/api")
 app.include_router(clients_router,         prefix="/api")
 app.include_router(invoices_router,        prefix="/api")
 app.include_router(products_router,        prefix="/api")
+
+# Control events
+app.include_router(control_events_router, prefix="/api")
 
 # Internal API under /api/internal
 app.include_router(client_profiles_router,    prefix="/api/internal")
