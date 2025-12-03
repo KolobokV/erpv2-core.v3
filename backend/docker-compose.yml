@@ -1,0 +1,16 @@
+﻿services:
+  erpv2_backend_connect:
+    build: .
+    container_name: erpv2_backend_connect
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped

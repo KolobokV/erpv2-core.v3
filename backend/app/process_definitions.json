@@ -1,0 +1,164 @@
+[
+  {
+    "id": "ip_usn_dr_monthly",
+    "name": "IP USN DR monthly routine",
+    "description": "Monthly routine for IP on USN DR",
+    "scope": "ip_usn_dr",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "bank_request_statement",
+        "title": "Request bank statement",
+        "order": 1,
+        "description": "Request bank statement for current month",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "bank_request_documents",
+        "title": "Request documents",
+        "order": 2,
+        "description": "Request primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "usn_advance_payment",
+        "title": "USN advance payment control",
+        "order": 3,
+        "description": "Check USN advance payment",
+        "default_deadline_offset_days": 19
+      }
+    ]
+  },
+
+  {
+    "id": "llc_osno_nds_monthly",
+    "name": "LLC OSNO monthly routine",
+    "description": "Monthly payroll + NDFL + contributions + bank tasks",
+    "scope": "llc_osno_nds",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "payroll_advance",
+        "title": "Salary advance",
+        "order": 1,
+        "description": "Monthly salary advance",
+        "default_deadline_offset_days": 9
+      },
+      {
+        "id": "payroll_advance_ndfl",
+        "title": "NDFL after salary advance",
+        "order": 2,
+        "description": "NDFL payment control after salary advance",
+        "default_deadline_offset_days": 10
+      },
+      {
+        "id": "payroll_main",
+        "title": "Main salary payment",
+        "order": 3,
+        "description": "Main part of the salary",
+        "default_deadline_offset_days": 24
+      },
+      {
+        "id": "payroll_main_ndfl",
+        "title": "NDFL after main salary",
+        "order": 4,
+        "description": "NDFL payment control after main salary",
+        "default_deadline_offset_days": 25
+      },
+      {
+        "id": "insurance_contributions",
+        "title": "Insurance contributions",
+        "order": 5,
+        "description": "Previous month insurance contributions",
+        "default_deadline_offset_days": 45
+      },
+      {
+        "id": "bank_request_statement",
+        "title": "Request bank statement",
+        "order": 6,
+        "description": "Request bank statement",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "bank_request_documents",
+        "title": "Request documents",
+        "order": 7,
+        "description": "Request primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "six_ndfl_control",
+        "title": "6-NDFL monthly control",
+        "order": 8,
+        "description": "Monthly consistency check of 6-NDFL",
+        "default_deadline_offset_days": 20
+      }
+    ]
+  },
+
+  {
+    "id": "llc_usn_dr_tourist_monthly",
+    "name": "LLC USN DR with tourist fee monthly routine",
+    "description": "Payroll + NDFL + contributions + bank requests + tourist fee",
+    "scope": "llc_usn_dr_tourist",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "payroll_advance",
+        "title": "Salary advance",
+        "order": 1,
+        "description": "Monthly salary advance",
+        "default_deadline_offset_days": 4
+      },
+      {
+        "id": "payroll_advance_ndfl",
+        "title": "NDFL after salary advance",
+        "order": 2,
+        "description": "NDFL control after salary advance",
+        "default_deadline_offset_days": 5
+      },
+      {
+        "id": "payroll_main",
+        "title": "Main salary payment",
+        "order": 3,
+        "description": "Main salary payment",
+        "default_deadline_offset_days": 19
+      },
+      {
+        "id": "payroll_main_ndfl",
+        "title": "NDFL after main salary",
+        "order": 4,
+        "description": "NDFL control after main salary",
+        "default_deadline_offset_days": 20
+      },
+      {
+        "id": "insurance_contributions",
+        "title": "Insurance contributions",
+        "order": 5,
+        "description": "Previous month insurance contributions",
+        "default_deadline_offset_days": 45
+      },
+      {
+        "id": "tourist_fee",
+        "title": "Tourist fee",
+        "order": 6,
+        "description": "Tourist fee declaration + payment",
+        "default_deadline_offset_days": 55
+      },
+      {
+        "id": "bank_request_statement",
+        "title": "Request bank statement",
+        "order": 7,
+        "description": "Request bank statement for current month",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "bank_request_documents",
+        "title": "Request documents",
+        "order": 8,
+        "description": "Request primary documents",
+        "default_deadline_offset_days": 2
+      }
+    ]
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "client_01",
+    "created_at": "2025-12-01T11:46:23Z",
+    "name": "IP USN DR test",
+    "inn": "000000000001",
+    "tax_regime": "ip_usn_dr",
+    "updated_at": "2025-12-01T11:46:23Z"
+  },
+  {
+    "id": "client_02",
+    "created_at": "2025-12-01T11:46:23Z",
+    "name": "LLC OSNO VAT test",
+    "inn": "000000000002",
+    "tax_regime": "llc_osno_nds",
+    "updated_at": "2025-12-01T11:46:23Z"
+  },
+  {
+    "id": "client_03",
+    "created_at": "2025-12-01T11:46:23Z",
+    "name": "LLC USN DR tourist test",
+    "inn": "000000000003",
+    "tax_regime": "llc_usn_dr_tourist",
+    "updated_at": "2025-12-01T11:46:23Z"
+  }
+]

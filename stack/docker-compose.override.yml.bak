@@ -1,0 +1,16 @@
+services:
+  erpv2_api_ext:
+    build:
+      context: ./api_ext
+    container_name: erpv2_stack_stage3_api_ext
+    ports:
+      - "8088:8088"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8088/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  erpv2_front:
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro

@@ -1,0 +1,30 @@
+services:
+  backend:
+    container_name: erpv2_backend
+    build:
+      context: ../ERPv2_backend_connect
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../ERPv2_backend_connect/app:/app/app
+      - ../ERPv2_backend_connect/data:/app/data
+
+  frontend:
+    container_name: erpv2_front
+    image: erpv2_front:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    volumes:
+      - ./nginx/frontend.conf:/etc/nginx/conf.d/default.conf:ro

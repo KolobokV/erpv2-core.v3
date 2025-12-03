@@ -1,0 +1,479 @@
+[
+  {
+    "id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "all",
+    "period_type": "monthly",
+    "stages": [],
+    "meta": {},
+    "created_at": "2025-11-25T09:59:52Z",
+    "updated_at": "2025-11-25T09:59:52Z"
+  },
+  {
+    "id": "b3a5373b-34e5-4990-afb8-9decd30326f5",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconciliation",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and verify balances",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-25T11:59:16Z",
+    "updated_at": "2025-11-25T11:59:16Z"
+  },
+  {
+    "id": "b409f2a2-09b5-4458-afd0-2b7e1d6106d4",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconciliation",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and verify balances",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-25T12:01:13Z",
+    "updated_at": "2025-11-25T12:01:13Z"
+  },
+  {
+    "id": "c34485b6-dbdc-4093-a6ef-4afbfbec1404",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconciliation",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and verify balances",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-25T13:15:18Z",
+    "updated_at": "2025-11-25T13:15:18Z"
+  },
+  {
+    "id": "30ed0427-9529-466c-a228-20209fe65045",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconciliation",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and verify balances",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-25T18:21:37Z",
+    "updated_at": "2025-11-25T18:21:37Z"
+  },
+  {
+    "id": "0c4ed26f-1eb2-4c5e-a54e-a87ac07855a2",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "quarterly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconciliation",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and verify balances",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-25T18:27:36Z",
+    "updated_at": "2025-11-25T18:27:36Z"
+  },
+  {
+    "id": "9cad0f02-491a-4d8f-85ee-8935483fd284",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconcile",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and prepare reports",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-26T13:47:02Z",
+    "updated_at": "2025-11-26T13:47:02Z"
+  },
+  {
+    "id": "1ddb7672-fe71-4923-b4e9-96ca74e2a1a3",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconcile",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and prepare reports",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-27T09:30:15Z",
+    "updated_at": "2025-11-27T09:30:15Z"
+  },
+  {
+    "id": "e3527cfe-8a31-460f-9288-265c6dc7a2e5",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconcile",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and prepare reports",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-27T10:40:03Z",
+    "updated_at": "2025-11-27T10:40:03Z"
+  },
+  {
+    "id": "726c7626-8d80-438c-a4eb-d7f677815c7b",
+    "name": "Monthly Closing",
+    "description": "Basic monthly accounting workflow",
+    "scope": "accounting",
+    "period_type": "quarterly",
+    "stages": [
+      {
+        "id": "collect_bank",
+        "title": "Collect bank statements",
+        "order": 1,
+        "description": "Request statements for the period",
+        "default_deadline_offset_days": 0
+      },
+      {
+        "id": "collect_docs",
+        "title": "Collect primary documents",
+        "order": 2,
+        "description": "Request all primary documents",
+        "default_deadline_offset_days": 2
+      },
+      {
+        "id": "reconcile",
+        "title": "Perform reconciliation",
+        "order": 3,
+        "description": "Reconcile accounts and prepare reports",
+        "default_deadline_offset_days": 5
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-11-27T10:40:28Z",
+    "updated_at": "2025-11-27T10:40:28Z"
+  },
+  {
+    "id": "5e8aeb25-77d7-4147-8c6a-31f05df92695",
+    "name": "IP USN DR monthly routine",
+    "description": "Monthly routine for IP on USN DR",
+    "scope": "ip_usn_dr",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "default_deadline_offset_days": 0,
+        "title": "Request bank statement",
+        "description": "Request bank statement for the period",
+        "id": "bank_statement",
+        "order": 1
+      },
+      {
+        "default_deadline_offset_days": 2,
+        "title": "Request documents",
+        "description": "Request primary docs after bank statement",
+        "id": "request_docs",
+        "order": 2
+      },
+      {
+        "default_deadline_offset_days": 19,
+        "title": "Control insurance payments plan",
+        "description": "Control planned insurance payments for current month",
+        "id": "insurance_control",
+        "order": 3
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-12-01T11:46:48Z",
+    "updated_at": "2025-12-01T11:46:48Z"
+  },
+  {
+    "id": "af5baeff-7957-45df-9b35-8fca97d67812",
+    "name": "LLC OSNO monthly routine",
+    "description": "Monthly payroll and taxes for LLC on OSNO with VAT",
+    "scope": "llc_osno_nds",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "default_deadline_offset_days": 9,
+        "title": "Salary advance",
+        "description": "Pay salary advance",
+        "id": "salary_advance",
+        "order": 1
+      },
+      {
+        "default_deadline_offset_days": 10,
+        "title": "NDFL after salary advance",
+        "description": "Control NDFL payment after salary advance",
+        "id": "ndfl_after_advance",
+        "order": 2
+      },
+      {
+        "default_deadline_offset_days": 24,
+        "title": "Salary main payment",
+        "description": "Pay main part of salary",
+        "id": "salary_main",
+        "order": 3
+      },
+      {
+        "default_deadline_offset_days": 25,
+        "title": "NDFL after main salary",
+        "description": "Control NDFL payment after main salary",
+        "id": "ndfl_after_main",
+        "order": 4
+      },
+      {
+        "default_deadline_offset_days": 45,
+        "title": "Insurance contributions",
+        "description": "Control insurance contributions payment for previous month",
+        "id": "insurance_contrib",
+        "order": 5
+      },
+      {
+        "default_deadline_offset_days": 0,
+        "title": "Request bank statement",
+        "description": "Request bank statement for the period",
+        "id": "bank_statement",
+        "order": 6
+      },
+      {
+        "default_deadline_offset_days": 2,
+        "title": "Request documents",
+        "description": "Request primary docs after bank statement",
+        "id": "request_docs",
+        "order": 7
+      },
+      {
+        "default_deadline_offset_days": 20,
+        "title": "6-NDFL control",
+        "description": "Control 6-NDFL data for the month",
+        "id": "six_ndfl_control",
+        "order": 8
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-12-01T11:47:03Z",
+    "updated_at": "2025-12-01T11:47:03Z"
+  },
+  {
+    "id": "b177ef8f-05a2-4de3-b2fc-2d11ed3a7b5e",
+    "name": "LLC USN DR with tourist fee monthly",
+    "description": "Monthly routine for LLC on USN DR with tourist fee",
+    "scope": "llc_usn_dr_tourist",
+    "period_type": "monthly",
+    "stages": [
+      {
+        "default_deadline_offset_days": 4,
+        "title": "Salary advance",
+        "description": "Pay salary advance",
+        "id": "salary_advance",
+        "order": 1
+      },
+      {
+        "default_deadline_offset_days": 5,
+        "title": "NDFL after salary advance",
+        "description": "Control NDFL payment after salary advance",
+        "id": "ndfl_after_advance",
+        "order": 2
+      },
+      {
+        "default_deadline_offset_days": 19,
+        "title": "Salary main payment",
+        "description": "Pay main part of salary",
+        "id": "salary_main",
+        "order": 3
+      },
+      {
+        "default_deadline_offset_days": 20,
+        "title": "NDFL after main salary",
+        "description": "Control NDFL payment after main salary",
+        "id": "ndfl_after_main",
+        "order": 4
+      },
+      {
+        "default_deadline_offset_days": 45,
+        "title": "Insurance contributions",
+        "description": "Control insurance contributions payment for previous month",
+        "id": "insurance_contrib",
+        "order": 5
+      },
+      {
+        "default_deadline_offset_days": 55,
+        "title": "Tourist fee report and payment",
+        "description": "Prepare and pay tourist fee for previous month",
+        "id": "tourist_fee",
+        "order": 6
+      },
+      {
+        "default_deadline_offset_days": 0,
+        "title": "Request bank statement",
+        "description": "Request bank statement for the period",
+        "id": "bank_statement",
+        "order": 7
+      },
+      {
+        "default_deadline_offset_days": 2,
+        "title": "Request documents",
+        "description": "Request primary docs after bank statement",
+        "id": "request_docs",
+        "order": 8
+      }
+    ],
+    "meta": {},
+    "created_at": "2025-12-01T11:47:16Z",
+    "updated_at": "2025-12-01T11:47:16Z"
+  }
+]

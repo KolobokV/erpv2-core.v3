@@ -1,0 +1,57 @@
+﻿from __future__ import annotations
+import os, platform, time
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+# settings import (robust: supports both absolute and relative)
+try:
+    from .settings import DOLI_BASE_URL, read_api_key
+except Exception:
+    from app.settings import DOLI_BASE_URL, read_api_key  # type: ignore
+
+app = FastAPI(title="ERPv2 Backend Connect")
+
+START_TS = time.time()
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "uptime_sec": int(time.time() - START_TS)}
+
+# Dolibarr health
+import httpx
+
+@app.get("/health/dolibarr")
+async def health_dolibarr():
+    key = read_api_key()
+    if not key:
+        return JSONResponse({"ok": False, "error": "DOLI_API_KEY not set"}, status_code=500)
+    headers = {"DOLAPIKEY": key}
+    url = f"{DOLI_BASE_URL.rstrip('/')}/thirdparties"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, headers=headers, params={"limit": 1, "sortfield": "t.rowid", "sortorder": "ASC"})
+    ok = r.status_code < 400
+    return {"ok": ok, "status_code": r.status_code}
+
+@app.get("/config")
+async def config():
+    key_present = bool(read_api_key())
+    return {
+        "dolibarr_base_url": DOLI_BASE_URL,
+        "api_key_present": key_present,
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "workdir": os.getcwd()
+    }
+
+# include routers (robust import order)
+try:
+    from .doliproxy import router as doli_router
+except Exception:
+    from app.doliproxy import router as doli_router  # type: ignore
+app.include_router(doli_router)
+
+try:
+    from .tasks import router as tasks_router
+except Exception:
+    from app.tasks import router as tasks_router  # type: ignore
+app.include_router(tasks_router)
