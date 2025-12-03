@@ -1,132 +1,129 @@
-from datetime import date, timedelta
-import calendar
-from typing import List, Dict, Any, Optional
+﻿from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from datetime import date
+from typing import List, Optional
 
-router = APIRouter()
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
-
-def first_working_day(year: int, month: int) -> date:
-    """Return first working day (Mon-Fri) of given month."""
-    d = date(year, month, 1)
-    while d.weekday() >= 5:  # 5=Sat, 6=Sun
-        d += timedelta(days=1)
-    return d
+from .control_events_service import generate_demo_events
 
 
-def create_salary_events(
-    year: int,
-    month: int,
-    days: List[int],
+router = APIRouter(
+    prefix="/api",
+    tags=["control-events"],
+)
+
+
+class ControlEventItem(BaseModel):
+    id: str
+    client_id: str = Field(..., description="Client identifier")
+    title: str
+    date: date
+    category: str
+    depends_on: Optional[str] = None
+
+
+class ControlEventsResponse(BaseModel):
+    client_id: str
+    year: int
+    month: int
+    events: List[ControlEventItem]
+
+
+def _map_kind_to_category(kind: str) -> str:
+    """Map internal kind to simple category for UI."""
+    if kind == "bank_statement_request":
+        return "bank"
+    if kind == "primary_documents_request":
+        return "documents"
+    if kind == "salary_payment":
+        return "salary"
+    if kind == "tax_payment":
+        return "tax"
+    return kind
+
+
+@router.get(
+    "/control-events/{client_id}",
+    response_model=ControlEventsResponse,
+    summary="Get control events for client and period",
+)
+async def get_control_events_for_client(
     client_id: str,
-    label: str,
-) -> List[Dict[str, Any]]:
-    events: List[Dict[str, Any]] = []
-    _, last_day = calendar.monthrange(year, month)
+    year: int = Query(..., ge=2000, le=2100, description="Year, e.g. 2025"),
+    month: int = Query(..., ge=1, le=12, description="Month number 1-12"),
+) -> ControlEventsResponse:
+    """
+    Return list of control events for a given client and month.
 
-    for d in days:
-        if d < 1 or d > last_day:
-            continue
-        events.append(
+    External response format is stable:
+    {
+        "client_id": "...",
+        "year": 2025,
+        "month": 12,
+        "events": [
             {
-                "id": f"salary_{d}",
-                "client_id": client_id,
-                "title": f"Salary payment ({label})",
-                "date": date(year, month, d).isoformat(),
-                "category": "salary",
+                "id": "...",
+                "client_id": "...",
+                "title": "...",
+                "date": "YYYY-MM-DD",
+                "category": "bank | documents | salary | tax",
+                "depends_on": "..." | null
             }
-        )
-    return events
-
-
-def build_events_for_client(
-    client_id: str,
-    year: int,
-    month: int,
-) -> List[Dict[str, Any]]:
-    """
-    Minimal demo logic for control events.
-    Later this will be replaced by real client profiles + scheduler rules.
-    """
-
-    events: List[Dict[str, Any]] = []
-
-    # base bank statement + documents chain
-    statement_date = first_working_day(year, month)
-    events.append(
-        {
-            "id": "monthly_statement_request",
-            "client_id": client_id,
-            "title": "Monthly bank statement request",
-            "date": statement_date.isoformat(),
-            "category": "bank",
-        }
-    )
-
-    events.append(
-        {
-            "id": "documents_request_after_statement",
-            "client_id": client_id,
-            "title": "Request documents after bank statement",
-            "date": (statement_date + timedelta(days=1)).isoformat(),
-            "category": "documents",
-            "depends_on": "monthly_statement_request",
-        }
-    )
-
-    # client-specific salary schedule (demo)
-    if client_id == "ip_usn_demo":
-        # IP USN: single salary date, for example 10th
-        salary_days = [10]
-        events.extend(
-            create_salary_events(year, month, salary_days, client_id, "IP USN demo")
-        )
-    elif client_id == "ooo_vat_demo":
-        # LLC with VAT: 3 employees, salary 10 and 25
-        salary_days = [10, 25]
-        events.extend(
-            create_salary_events(
-                year, month, salary_days, client_id, "LLC with VAT demo"
-            )
-        )
-    elif client_id == "ooo_usn_tour_demo":
-        # LLC USN + tourist fee: salary 5 and 20
-        salary_days = [5, 20]
-        events.extend(
-            create_salary_events(
-                year, month, salary_days, client_id, "LLC USN + tourist demo"
-            )
-        )
-    else:
-        # default: only bank statement and documents
-        pass
-
-    # sort events by date, then by id
-    events.sort(key=lambda e: (e["date"], e["id"]))
-    return events
-
-
-@router.get("/control-events/{client_id}")
-def get_control_events(
-    client_id: str,
-    year: Optional[int] = Query(default=None),
-    month: Optional[int] = Query(default=None),
-):
-    """
-    Return control events for a client for given year/month.
-    If year/month are not provided, current year/month are used.
-    """
-
-    today = date.today()
-    effective_year = year or today.year
-    effective_month = month or today.month
-
-    events = build_events_for_client(client_id, effective_year, effective_month)
-
-    return {
-        "client_id": client_id,
-        "year": effective_year,
-        "month": effective_month,
-        "events": events,
+        ]
     }
+
+    Internal events are generated by control_events_service.
+    """
+    try:
+        raw_events = generate_demo_events(
+            client_id=client_id,
+            year=year,
+            month=month,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    items: List[ControlEventItem] = []
+
+    # First pass: create items without depends_on
+    for raw in raw_events:
+        event_id = raw.get("id")
+        event_client_id = raw.get("clientId", client_id)
+        title = raw.get("title", event_id or "")
+        event_date = raw.get("date")
+        kind = raw.get("kind", "")
+        category = _map_kind_to_category(kind)
+
+        item = ControlEventItem(
+            id=event_id,
+            client_id=event_client_id,
+            title=title,
+            date=event_date,
+            category=category,
+            depends_on=None,
+        )
+        items.append(item)
+
+    # Second pass: simple dependency example
+    # If there is a "documents" event and a "bank" event in the same period,
+    # we can mark documents event as depending on bank event.
+    bank_event_id: Optional[str] = None
+    for item in items:
+        if item.category == "bank":
+            bank_event_id = item.id
+            break
+
+    if bank_event_id:
+        for item in items:
+            if item.category == "documents":
+                item.depends_on = bank_event_id
+
+    response = ControlEventsResponse(
+        client_id=client_id,
+        year=year,
+        month=month,
+        events=items,
+    )
+    return response

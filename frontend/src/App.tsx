@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -11,6 +11,7 @@ import TasksDashboard from "./pages/TasksDashboard";
 import ClientProfilePage from "./pages/ClientProfilePage";
 import InternalProcessesPage from "./pages/InternalProcessesPage";
 import ProcessCoveragePage from "./pages/ProcessCoveragePage";
+import ControlEventsPage from "./pages/ControlEventsPage";
 
 const linkStyle = (isActive: boolean): React.CSSProperties => ({
   padding: "4px 10px",
@@ -19,8 +20,8 @@ const linkStyle = (isActive: boolean): React.CSSProperties => ({
   fontSize: 12,
   textDecoration: "none",
   marginLeft: 6,
-  backgroundColor: isActive ? "#111827" : "#ffffff", // active: almost black
-  color: isActive ? "#ffffff" : "#1f2933", // active: white text, always виден
+  backgroundColor: isActive ? "#111827" : "#ffffff",
+  color: isActive ? "#ffffff" : "#1f2933",
   display: "inline-block",
 });
 
@@ -68,18 +69,28 @@ const App: React.FC = () => {
               >
                 Tasks
               </NavLink>
+
+              <NavLink
+                to="/control-events"
+                style={({ isActive }) => linkStyle(isActive)}
+              >
+                Control events
+              </NavLink>
+
               <NavLink
                 to="/internal-processes"
                 style={({ isActive }) => linkStyle(isActive)}
               >
                 Internal processes
               </NavLink>
+
               <NavLink
                 to="/client-profile"
                 style={({ isActive }) => linkStyle(isActive)}
               >
                 Client profile
               </NavLink>
+
               <NavLink
                 to="/process-coverage"
                 style={({ isActive }) => linkStyle(isActive)}
@@ -100,22 +111,25 @@ const App: React.FC = () => {
           }}
         >
           <Routes>
-            {/* default */}
             <Route path="/" element={<Navigate to="/tasks" replace />} />
 
-            {/* main pages */}
             <Route path="/tasks" element={<TasksDashboard />} />
-            <Route path="/client-profile" element={<ClientProfilePage />} />
+
+            <Route path="/control-events" element={<ControlEventsPage />} />
+
             <Route
               path="/internal-processes"
               element={<InternalProcessesPage />}
             />
+
+            <Route path="/client-profile" element={<ClientProfilePage />} />
+
             <Route
               path="/process-coverage"
               element={<ProcessCoveragePage />}
             />
 
-            {/* legacy redirects */}
+            {/* legacy */}
             <Route
               path="/internal"
               element={<Navigate to="/internal-processes" replace />}
@@ -132,3 +146,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
