@@ -1,0 +1,36 @@
+name: ERPv2 Core Smoke Test
+on: { push: { branches: ["main"] }, pull_request: { branches: ["main"] } }
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - working-directory: ./backend
+        run: |
+          uvicorn main:app --host 0.0.0.0 --port 8000 &
+        shell: bash
+      - run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:8000/api/health; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - run: |
+          curl -f http://localhost:8000/api/health
+          curl -f http://localhost:8000/api/config
+          curl -f http://localhost:8000/openapi.json
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with: { name: smoke-artifacts, path: "./frontend/dist" }

@@ -1,0 +1,10 @@
+name: ERPv2 Auto Deploy (Placeholder)
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder deploy
+        run: echo "Deploy pipeline will be activated once server endpoints are defined."

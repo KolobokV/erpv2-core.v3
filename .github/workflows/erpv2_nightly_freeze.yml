@@ -1,0 +1,20 @@
+name: ERPv2 Nightly Freeze
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  freeze:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run freeze script
+        run: powershell -ExecutionPolicy Bypass -File "./freeze_core_simple.ps1"
+
+      - name: Upload freeze artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-freeze
+          path: ./_savepoints

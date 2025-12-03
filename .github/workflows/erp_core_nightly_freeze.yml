@@ -1,0 +1,11 @@
+name: ERPv2 Nightly Freeze (Placeholder)
+on:
+  schedule:
+    - cron: "0 2 * * *"
+jobs:
+  freeze:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder freeze script
+        run: echo "Freeze script will be implemented when Windows-compatible ERP freezer is ready."
