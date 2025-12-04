@@ -1,58 +1,98 @@
-﻿from __future__ import annotations
+﻿from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query
 
-from .control_events_service import control_events_service
+from .control_event_models import (
+    ControlEventsResponse,
+    ErrorResponse,
+    GenerateTasksResponse,
+)
+from .control_events_service import (
+    generate_tasks_for_client,
+    get_control_events_for_client,
+)
 
-router = APIRouter(prefix="/control-events", tags=["control-events"])
+
+router = APIRouter(
+    prefix="/api",
+    tags=["control-events"],
+)
 
 
-@router.get("/{client_id}")
-async def get_control_events_for_client(
+@router.get(
+    "/control-events/{client_id}",
+    response_model=ControlEventsResponse,
+    responses={
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+def get_control_events(
     client_id: str,
-    year: int | None = None,
-    month: int | None = None,
-):
-    if not client_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="client_id is required",
+    year: Optional[int] = Query(
+        default=None,
+        description="Optional year filter",
+    ),
+    month: Optional[int] = Query(
+        default=None,
+        description="Optional month filter, 1-12",
+        ge=1,
+        le=12,
+    ),
+) -> ControlEventsResponse:
+    try:
+        return get_control_events_for_client(
+            client_id=client_id,
+            year=year,
+            month=month,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error while fetching control events",
+        ) from exc
 
-    events = control_events_service.get_events_for_client(
-        client_id=client_id,
-        year=year,
-        month=month,
-    )
-    return {"client_id": client_id, "events": events}
 
-
-@router.post("/{client_id}/generate-tasks")
-async def generate_tasks_from_control_events(
+@router.post(
+    "/control-events/{client_id}/generate-tasks",
+    response_model=GenerateTasksResponse,
+    responses={
+        422: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
+)
+def generate_tasks(
     client_id: str,
-    year: int | None = None,
-    month: int | None = None,
-):
-    """
-    Build task payloads from control events for given client.
-
-    This endpoint does not persist tasks. It returns a list of
-    payloads compatible with TaskModel which can be sent to /api/tasks.
-    """
-    if not client_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="client_id is required",
+    year: Optional[int] = Query(
+        default=None,
+        description="Optional year filter",
+    ),
+    month: Optional[int] = Query(
+        default=None,
+        description="Optional month filter, 1-12",
+        ge=1,
+        le=12,
+    ),
+) -> GenerateTasksResponse:
+    try:
+        now = datetime.utcnow()
+        return generate_tasks_for_client(
+            client_id=client_id,
+            year=year,
+            month=month,
+            now=now,
         )
-
-    tasks = control_events_service.build_task_payloads_for_client(
-        client_id=client_id,
-        year=year,
-        month=month,
-    )
-
-    return {
-        "client_id": client_id,
-        "tasks_suggested": len(tasks),
-        "tasks": tasks,
-    }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error while generating tasks from control events",
+        ) from exc

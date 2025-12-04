@@ -1,153 +1,184 @@
-﻿from __future__ import annotations
+﻿from datetime import date, datetime
+from typing import Dict, List, Optional
 
-from dataclasses import dataclass
-from datetime import date, datetime
-from typing import List, Literal, Optional
-
-from .reglament_engine import generate_control_events_for_client
-
-
-StatusType = Literal["planned", "overdue", "completed"]
-
-
-@dataclass
-class ControlEvent:
-    id: str
-    client_id: str
-    date: date
-    title: str
-    category: str
-    status: StatusType
-    depends_on: List[str]
-    description: Optional[str] = None
-    tags: List[str] | None = None
-    source: str | None = None
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "client_id": self.client_id,
-            "date": self.date.isoformat(),
-            "title": self.title,
-            "category": self.category,
-            "status": self.status,
-            "depends_on": self.depends_on,
-            "description": self.description,
-            "tags": self.tags or [],
-            "source": self.source or "reglament",
-        }
+from .control_event_models import (
+    ControlEventModel,
+    ControlEventsResponse,
+    GeneratedTaskModel,
+    GenerateTasksResponse,
+)
 
 
-class ControlEventsService:
-    def __init__(self) -> None:
-        pass
+def _get_reglament_engine_func():
+    """
+    Lazy import of generate_control_events_for_client to avoid circular imports
+    and hard failures on application startup.
+    """
+    try:
+        # Normal absolute import when running as app package
+        from app.reglament_engine import generate_control_events_for_client
+    except ImportError:
+        # Relative import fallback when used inside the app package directly
+        from .reglament_engine import generate_control_events_for_client
+    return generate_control_events_for_client
 
-    @staticmethod
-    def _compute_status(event_date: date, completed: bool = False) -> StatusType:
-        today = date.today()
-        if completed:
-            return "completed"
+
+def _validate_year_month(year: Optional[int], month: Optional[int]) -> None:
+    if year is not None and (year < 2000 or year > 2100):
+        raise ValueError("Year must be between 2000 and 2100")
+    if month is not None and (month < 1 or month > 12):
+        raise ValueError("Month must be between 1 and 12")
+
+
+def _parse_event_date(raw: Dict) -> date:
+    value = raw.get("date")
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return date.fromisoformat(value)
+    raise ValueError("Event date is missing or has invalid format")
+
+
+def _normalize_event(raw: Dict, today: date) -> ControlEventModel:
+    event_date = _parse_event_date(raw)
+
+    raw_status = str(raw.get("status") or "").strip().lower()
+    if raw_status not in {"planned", "overdue", "completed"}:
         if event_date < today:
-            return "overdue"
-        return "planned"
+            raw_status = "overdue"
+        else:
+            raw_status = "planned"
 
-    def _events_for_client(
-        self,
-        client_id: str,
-        year: int | None = None,
-        month: int | None = None,
-    ) -> List[ControlEvent]:
-        today = date.today()
-        base_today = today
+    depends_raw = raw.get("depends_on") or []
+    if isinstance(depends_raw, str):
+        depends_list: List[str] = [depends_raw]
+    else:
+        depends_list = [str(x) for x in depends_raw]
 
-        if year is not None:
-            try:
-                base_today = date(year, today.month, today.day)
-            except ValueError:
-                base_today = date(year, 1, 1)
+    tags_raw = raw.get("tags") or []
+    if isinstance(tags_raw, str):
+        tags_list: List[str] = [tags_raw]
+    else:
+        tags_list = [str(x) for x in tags_raw]
 
-        base_events = generate_control_events_for_client(
-            client_id=client_id,
-            today=base_today,
-        )
+    return ControlEventModel(
+        id=str(raw.get("id") or f"event-{event_date.isoformat()}"),
+        client_id=str(raw.get("client_id") or ""),
+        date=event_date,
+        title=str(raw.get("title") or "Unnamed event"),
+        category=(raw.get("category") or None),
+        status=raw_status,
+        depends_on=depends_list,
+        description=(raw.get("description") or None),
+        tags=tags_list,
+        source=(raw.get("source") or "reglament"),
+    )
 
-        events: List[ControlEvent] = []
 
-        for base in base_events:
-            ev_date = base["date"]
-
-            if year is not None and ev_date.year != year:
-                continue
-
-            if month is not None and ev_date.month != month:
-                continue
-
-            status = self._compute_status(ev_date)
-
-            events.append(
-                ControlEvent(
-                    id=base["id"],
-                    client_id=base["client_id"],
-                    date=ev_date,
-                    title=base["title"],
-                    category=base["category"],
-                    status=status,
-                    depends_on=base.get("depends_on", []),
-                    description=base.get("description"),
-                    tags=base.get("tags") or [],
-                    source=base.get("source") or "reglament",
-                )
-            )
-
+def _filter_events_by_period(
+    events: List[Dict],
+    year: Optional[int],
+    month: Optional[int],
+) -> List[Dict]:
+    if year is None and month is None:
         return events
 
-    def get_events_for_client(
-        self,
-        client_id: str,
-        year: int | None = None,
-        month: int | None = None,
-    ) -> List[dict]:
-        events = self._events_for_client(
-            client_id=client_id,
-            year=year,
-            month=month,
+    filtered: List[Dict] = []
+    for raw in events:
+        try:
+            event_date = _parse_event_date(raw)
+        except Exception:
+            # Skip events with invalid date
+            continue
+
+        if year is not None and event_date.year != year:
+            continue
+        if month is not None and event_date.month != month:
+            continue
+
+        filtered.append(raw)
+
+    return filtered
+
+
+def get_control_events_for_client(
+    client_id: str,
+    year: Optional[int],
+    month: Optional[int],
+    today: Optional[date] = None,
+) -> ControlEventsResponse:
+    _validate_year_month(year, month)
+
+    effective_today = today or date.today()
+    generate_control_events_for_client = _get_reglament_engine_func()
+    raw_events = generate_control_events_for_client(
+        client_id=client_id,
+        today=effective_today,
+    )
+
+    filtered_raw = _filter_events_by_period(raw_events, year, month)
+    events: List[ControlEventModel] = [
+        _normalize_event(raw, effective_today) for raw in filtered_raw
+    ]
+
+    return ControlEventsResponse(
+        client_id=client_id,
+        year=year,
+        month=month,
+        events=events,
+    )
+
+
+def _build_task_id(event: ControlEventModel) -> str:
+    return f"task-{event.id}"
+
+
+def generate_tasks_for_client(
+    client_id: str,
+    year: Optional[int],
+    month: Optional[int],
+    now: Optional[datetime] = None,
+) -> GenerateTasksResponse:
+    _validate_year_month(year, month)
+
+    effective_now = now or datetime.utcnow()
+    effective_date = effective_now.date()
+
+    generate_control_events_for_client = _get_reglament_engine_func()
+    raw_events = generate_control_events_for_client(
+        client_id=client_id,
+        today=effective_date,
+    )
+    filtered_raw = _filter_events_by_period(raw_events, year, month)
+    events: List[ControlEventModel] = [
+        _normalize_event(raw, effective_date) for raw in filtered_raw
+    ]
+
+    tasks: List[GeneratedTaskModel] = []
+
+    for event in events:
+        due = event.date
+        status = event.status
+
+        task = GeneratedTaskModel(
+            id=_build_task_id(event),
+            client_id=event.client_id,
+            title=event.title,
+            description=event.description,
+            status=status,
+            assignee=None,
+            created_at=effective_now,
+            updated_at=None,
+            due_date=due,
+            source_event_id=event.id,
+            source="reglament",
         )
-        return [e.to_dict() for e in events]
+        tasks.append(task)
 
-    def build_task_payloads_for_client(
-        self,
-        client_id: str,
-        year: int | None = None,
-        month: int | None = None,
-    ) -> List[dict]:
-        """
-        Build task payloads (compatible with TaskModel) from control events
-        for given client. This endpoint does not persist tasks, it only
-        returns suggested payloads.
-        """
-        events = self.get_events_for_client(
-            client_id=client_id,
-            year=year,
-            month=month,
-        )
-        now_iso = datetime.utcnow().isoformat()
-
-        tasks: List[dict] = []
-        for ev in events:
-            tasks.append(
-                {
-                    "id": f"task-{ev['id']}",
-                    "title": ev["title"],
-                    "description": ev.get("description")
-                    or f"{ev['category']} event on {ev['date']}",
-                    "status": ev["status"],
-                    "assignee": None,
-                    "created_at": now_iso,
-                    "updated_at": None,
-                    "due_date": ev["date"],
-                }
-            )
-        return tasks
-
-
-control_events_service = ControlEventsService()
+    return GenerateTasksResponse(
+        client_id=client_id,
+        year=year,
+        month=month,
+        tasks_suggested=len(tasks),
+        tasks=tasks,
+    )

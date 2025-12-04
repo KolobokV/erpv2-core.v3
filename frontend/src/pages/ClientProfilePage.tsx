@@ -1,1185 +1,610 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 
-type Task = any;
-type ProcessDefinition = any;
-type ProcessInstance = any;
+type ClientProfileConfig = {
+  id: string;
+  label: string;
+  description: string;
+  taxSystem: string;
+  vat: string;
+  payroll: string;
+  employees: number;
+  touristFee: string;
+  coreProcesses: string[];
+  controlEventCategories: string[];
+};
 
-type LoadState = "idle" | "loading" | "ready" | "error";
-type TaskFilter = "all" | "done" | "in_progress" | "overdue";
-type TaskAction = "start" | "done" | "postpone";
+type ControlEvent = {
+  id: string;
+  client_id: string;
+  date: string;
+  title: string;
+  category: string;
+  status: string;
+  depends_on?: string[];
+  description?: string;
+  tags?: string[];
+  source?: string;
+};
 
-const CLIENT_PROFILE_FOCUS_KEY = "erpv2_client_profile_focus";
-const TASKS_FOCUS_KEY = "erpv2_tasks_focus";
+type GenerateTasksResponse = {
+  client_id: string;
+  tasks_suggested: number;
+  tasks: TaskPayload[];
+};
 
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
+type TaskPayload = {
+  id?: string;
+  title: string;
+  description?: string;
+  status?: string;
+  assignee?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  due_date?: string | null;
+};
 
-function endOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-}
+const CLIENT_PROFILES: ClientProfileConfig[] = [
+  {
+    id: "ip_usn_dr",
+    label: "IP USN DR",
+    description:
+      "Individual entrepreneur on simplified tax system (income minus expenses). Fixed contributions, USN advances, annual declaration, 1 percent control.",
+    taxSystem: "USN income minus expenses",
+    vat: "No VAT, standard USN regime.",
+    payroll: "No regular payroll in base scenario (can be extended later).",
+    employees: 0,
+    touristFee: "No tourist fee.",
+    coreProcesses: [
+      "process:bank_flow",
+      "process:docs_collect",
+      "process:usn_month_close",
+      "process:usn_quarter_close",
+      "process:usn_year_close"
+    ],
+    controlEventCategories: [
+      "bank",
+      "docs",
+      "tax_usn_book",
+      "tax_usn",
+      "tax_usn_decl"
+    ]
+  },
+  {
+    id: "ooo_osno_3_zp1025",
+    label: "OOO OSNO + VAT (3 employees, salary 10/25)",
+    description:
+      "Limited liability company on general tax system with VAT, three employees, payroll on 10 and 25 of each month.",
+    taxSystem: "OSNO with VAT",
+    vat: "Quarterly VAT declaration and payment.",
+    payroll: "Payroll twice a month (10 and 25), NDFL next day after each salary.",
+    employees: 3,
+    touristFee: "No tourist fee.",
+    coreProcesses: [
+      "process:bank_flow",
+      "process:docs_collect",
+      "process:payroll_cycle",
+      "process:payroll_close",
+      "process:payroll_reports",
+      "process:vat_quarter_close",
+      "process:year_close"
+    ],
+    controlEventCategories: [
+      "salary",
+      "tax_ndfl",
+      "insurance",
+      "bank",
+      "docs",
+      "tax_vat",
+      "tax_6ndfl",
+      "tax_rsv",
+      "annual_report",
+      "pension_report"
+    ]
+  },
+  {
+    id: "ooo_usn_dr_tour_zp520",
+    label: "OOO USN DR + tourist fee (2 employees, salary 5/20)",
+    description:
+      "Limited liability company on simplified tax system (income minus expenses) with tourist fee, two employees, payroll on 5 and 20.",
+    taxSystem: "USN income minus expenses + tourist fee",
+    vat: "No VAT, focus on USN and tourist fee.",
+    payroll: "Payroll twice a month (5 and 20), NDFL next day after each salary.",
+    employees: 2,
+    touristFee: "Monthly tourist fee based on guests statistics.",
+    coreProcesses: [
+      "process:bank_flow",
+      "process:docs_collect",
+      "process:payroll_cycle",
+      "process:payroll_close",
+      "process:tourist_fee_month",
+      "process:usn_quarter_close",
+      "process:usn_year_close",
+      "process:year_close"
+    ],
+    controlEventCategories: [
+      "salary",
+      "tax_ndfl",
+      "insurance",
+      "tax_tourist",
+      "bank",
+      "docs",
+      "tax_usn",
+      "tax_usn_decl",
+      "pension_report"
+    ]
+  }
+];
 
-function formatMonthInputValue(date: Date): string {
-  const year = date.getFullYear().toString();
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  return `${year}-${month}`;
-}
+const monthOptions = [
+  { value: 1, label: "Jan" },
+  { value: 2, label: "Feb" },
+  { value: 3, label: "Mar" },
+  { value: 4, label: "Apr" },
+  { value: 5, label: "May" },
+  { value: 6, label: "Jun" },
+  { value: 7, label: "Jul" },
+  { value: 8, label: "Aug" },
+  { value: 9, label: "Sep" },
+  { value: 10, label: "Oct" },
+  { value: 11, label: "Nov" },
+  { value: 12, label: "Dec" }
+];
 
-const STATUS_DONE = ["done", "completed", "closed", "finished"];
-const STATUS_IN_PROGRESS = ["in_progress", "in-progress", "progress", "started"];
+const now = new Date();
 
-export default function ClientProfilePage() {
-  const [clientId, setClientId] = useState<string>("client_demo_01");
-  const [baseDate, setBaseDate] = useState<Date>(() =>
-    startOfMonth(new Date())
-  );
+const ClientProfilePage: React.FC = () => {
+  const [clientId, setClientId] = useState<string>("ip_usn_dr");
+  const [year, setYear] = useState<number>(now.getFullYear());
+  const [month, setMonth] = useState<number>(now.getMonth() + 1);
+  const [events, setEvents] = useState<ControlEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [processDefinitions, setProcessDefinitions] = useState<
-    ProcessDefinition[]
-  >([]);
-  const [processInstances, setProcessInstances] = useState<ProcessInstance[]>(
-    []
-  );
-  const [state, setState] = useState<LoadState>("idle");
-  const [error, setError] = useState<string | null>(null);
-
-  const [selectedProcessId, setSelectedProcessId] = useState<string | null>(
+  const [isGeneratingTasks, setIsGeneratingTasks] = useState<boolean>(false);
+  const [generateResult, setGenerateResult] = useState<GenerateTasksResponse | null>(
     null
   );
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
-  const [actionLoadingTaskId, setActionLoadingTaskId] = useState<string | null>(
-    null
+  const profile = useMemo<ClientProfileConfig | undefined>(
+    () => CLIENT_PROFILES.find((p) => p.id === clientId),
+    [clientId]
   );
 
-  const periodStart = useMemo(() => startOfMonth(baseDate), [baseDate]);
-  const periodEnd = useMemo(() => endOfMonth(baseDate), [baseDate]);
+  const stats = useMemo(() => {
+    const total = events.length;
+    const overdue = events.filter((e) => e.status === "overdue").length;
+    const planned = events.filter((e) => e.status === "planned").length;
+    const completed = events.filter((e) => e.status === "completed").length;
 
-  // apply focus from Internal processes or Tasks (client + month)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+    let nextDeadline: string | null = null;
+    if (events.length > 0) {
+      const sorted = [...events].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const future = sorted.find((e) => e.date >= todayIso);
+      nextDeadline = future ? `${future.date} — ${future.title}` : null;
+    }
+
+    return { total, overdue, planned, completed, nextDeadline };
+  }, [events]);
+
+  const loadEvents = async () => {
+    setIsLoadingEvents(true);
+    setEventsError(null);
+    setEvents([]);
     try {
-      const raw = window.localStorage.getItem(CLIENT_PROFILE_FOCUS_KEY);
-      if (!raw) return;
-
-      const data = JSON.parse(raw);
-      if (data && typeof data === "object") {
-        const client =
-          typeof data.clientId === "string" ? data.clientId : undefined;
-        const month = typeof data.month === "string" ? data.month : undefined;
-
-        if (client) {
-          setClientId(client);
-        }
-
-        if (month) {
-          let parsed: Date | null = null;
-          if (/^\d{4}-\d{2}$/.test(month)) {
-            const [y, m] = month.split("-");
-            parsed = new Date(Number(y), Number(m) - 1, 1);
-          } else {
-            const d = new Date(month);
-            if (!Number.isNaN(d.getTime())) {
-              parsed = d;
-            }
-          }
-          if (parsed) {
-            setBaseDate(startOfMonth(parsed));
-          }
-        }
+      const params = new URLSearchParams();
+      if (year) {
+        params.append("year", String(year));
       }
-    } catch (e) {
-      console.error("Failed to apply focus from storage", e);
+      if (month) {
+        params.append("month", String(month));
+      }
+      const url = `/api/control-events/${encodeURIComponent(
+        clientId
+      )}?${params.toString()}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        throw new Error(`Control events request failed with status ${resp.status}`);
+      }
+      const data = await resp.json();
+      const eventsData = (data?.events ?? []) as ControlEvent[];
+      setEvents(eventsData);
+    } catch (err: any) {
+      setEventsError(err?.message ?? "Failed to load control events.");
     } finally {
-      try {
-        window.localStorage.removeItem(CLIENT_PROFILE_FOCUS_KEY);
-      } catch {
-        // ignore
-      }
+      setIsLoadingEvents(false);
     }
-  }, []);
+  };
 
-  async function loadData() {
-    setState("loading");
-    setError(null);
-
+  const handleGenerateTasks = async () => {
+    setIsGeneratingTasks(true);
+    setGenerateError(null);
+    setGenerateResult(null);
     try {
-      const [tasksRes, defsRes, instRes] = await Promise.all([
-        fetch("/api/tasks"),
-        fetch("/api/internal/process-definitions"),
-        fetch("/api/internal/process-instances"),
-      ]);
-
-      if (!tasksRes.ok || !defsRes.ok || !instRes.ok) {
-        throw new Error("Failed to load client profile data");
+      const params = new URLSearchParams();
+      if (year) {
+        params.append("year", String(year));
       }
-
-      const [tasksJson, defsJson, instJson] = await Promise.all([
-        tasksRes.json(),
-        defsRes.json(),
-        instRes.json(),
-      ]);
-
-      setTasks(Array.isArray(tasksJson) ? tasksJson : tasksJson?.items ?? []);
-      setProcessDefinitions(
-        Array.isArray(defsJson) ? defsJson : defsJson?.items ?? []
-      );
-      setProcessInstances(
-        Array.isArray(instJson) ? instJson : instJson?.items ?? []
-      );
-
-      setState("ready");
-    } catch (e: any) {
-      console.error("ClientProfilePage load error:", e);
-      setError(e?.message ?? "Unknown error");
-      setState("error");
-    }
-  }
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  function shiftMonth(delta: number) {
-    const d = new Date(baseDate);
-    d.setMonth(d.getMonth() + delta);
-    setBaseDate(startOfMonth(d));
-  }
-
-  function getTaskDueRaw(t: any): string | null {
-    const raw = t.due_date ?? t.dueDate ?? t.due ?? t.deadline ?? null;
-    return raw ?? null;
-  }
-
-  function getTaskStatus(t: any): string {
-    return (t.status ?? t.state ?? "unknown").toString();
-  }
-
-  function getTaskStatusNormalized(t: any): string {
-    return getTaskStatus(t).toLowerCase();
-  }
-
-  function isTaskOverdue(t: any): boolean {
-    const raw = getTaskDueRaw(t);
-    if (!raw) return false;
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return false;
-
-    const statusRaw = getTaskStatusNormalized(t);
-    if (STATUS_DONE.includes(statusRaw)) return false;
-
-    return d.getTime() < Date.now();
-  }
-
-  function getTaskId(t: any): string | null {
-    const raw = t.id ?? t.task_id ?? t.code ?? null;
-    if (raw === null || raw === undefined) return null;
-    return String(raw);
-  }
-
-  const filteredTasks = useMemo(() => {
-    if (!clientId.trim()) return [];
-
-    const startTs = periodStart.getTime();
-    const endTs = periodEnd.getTime();
-
-    return tasks.filter((t: any) => {
-      const tClientId = (t.client_id ?? t.clientId ?? "").toString();
-      if (!tClientId || tClientId !== clientId.trim()) {
-        return false;
+      if (month) {
+        params.append("month", String(month));
       }
+      const url = `/api/control-events/${encodeURIComponent(
+        clientId
+      )}/generate-tasks?${params.toString()}`;
 
-      const rawDue = getTaskDueRaw(t);
-      if (!rawDue) return false;
-
-      const ts = new Date(rawDue).getTime();
-      if (Number.isNaN(ts)) return false;
-
-      return ts >= startTs && ts <= endTs;
-    });
-  }, [clientId, periodStart, periodEnd, tasks]);
-
-  const tasksByProcess = useMemo(() => {
-    const map: Record<string, Task[]> = {};
-
-    for (const t of filteredTasks) {
-      const processId = (t.process_id ??
-        t.processId ??
-        t.process_definition_id ??
-        t.processDefinitionId ??
-        "") as string;
-
-      const pid = processId?.toString() || "unknown";
-      if (!map[pid]) {
-        map[pid] = [];
-      }
-      map[pid].push(t);
-    }
-
-    return map;
-  }, [filteredTasks]);
-
-  const definitionById = useMemo(() => {
-    const map: Record<string, ProcessDefinition> = {};
-    for (const d of processDefinitions) {
-      const id = (d.id ??
-        d.definition_id ??
-        d.process_definition_id ??
-        d.code ??
-        "")?.toString() ?? "";
-      if (!id) continue;
-      map[id] = d;
-    }
-    return map;
-  }, [processDefinitions]);
-
-  const instanceById = useMemo(() => {
-    const map: Record<string, ProcessInstance> = {};
-    for (const inst of processInstances) {
-      const id = (inst.id ??
-        inst.instance_id ??
-        inst.process_instance_id ??
-        inst.processId ??
-        "")?.toString() ?? "";
-      if (!id) continue;
-      map[id] = inst;
-    }
-    return map;
-  }, [processInstances]);
-
-  const processNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-
-    for (const inst of processInstances) {
-      const instanceId = (inst.id ??
-        inst.instance_id ??
-        inst.process_instance_id ??
-        inst.processId ??
-        "")?.toString() ?? "";
-      if (!instanceId) continue;
-
-      const defId = (inst.definition_id ??
-        inst.process_definition_id ??
-        inst.definitionId ??
-        "")?.toString() ?? "";
-      const def = defId ? definitionById[defId] : undefined;
-
-      const baseName = (
-        def?.name ??
-        def?.title ??
-        def?.process_name ??
-        "Process"
-      ).toString();
-
-      const period = (inst.period ?? inst.month ?? "").toString();
-      const client = (inst.client_id ?? inst.clientId ?? "").toString();
-
-      let name = baseName;
-      if (period) {
-        name += ` / ${period}`;
-      }
-      if (client) {
-        name += ` / ${client}`;
-      }
-
-      map[instanceId] = name;
-    }
-
-    return map;
-  }, [processInstances, definitionById]);
-
-  const processDescriptionById = useMemo(() => {
-    const map: Record<string, string> = {};
-
-    for (const inst of processInstances) {
-      const instanceId = (inst.id ??
-        inst.instance_id ??
-        inst.process_instance_id ??
-        inst.processId ??
-        "")?.toString() ?? "";
-      if (!instanceId) continue;
-
-      const status = (inst.status ?? inst.state ?? "").toString();
-      const notes = (inst.notes ?? inst.comment ?? "").toString();
-
-      const defId = (inst.definition_id ??
-        inst.process_definition_id ??
-        inst.definitionId ??
-        "")?.toString() ?? "";
-      const def = defId ? definitionById[defId] : undefined;
-      const defDesc = (def?.description ?? def?.notes ?? "").toString();
-
-      const parts: string[] = [];
-      if (status) {
-        parts.push(`Status: ${status}`);
-      }
-      if (defDesc) {
-        parts.push(defDesc);
-      }
-      if (notes) {
-        parts.push(notes);
-      }
-
-      if (parts.length > 0) {
-        map[instanceId] = parts.join(" · ");
-      }
-    }
-
-    return map;
-  }, [processInstances, definitionById]);
-
-  const matrix = useMemo(() => {
-    const rows: {
-      processId: string;
-      processName: string;
-      processDescription?: string;
-      total: number;
-      done: number;
-      inProgress: number;
-      overdue: number;
-      progress: number;
-      statusLabel: string;
-      statusDotClass: string;
-      statusTextClass: string;
-    }[] = [];
-
-    function getFallbackProcessName(
-      procId: string,
-      procTasks: Task[]
-    ): string {
-      for (const t of procTasks) {
-        const candidate = (t.process_name ??
-          t.processName ??
-          t.process ??
-          t.definition_name ??
-          t.definitionName ??
-          "") as string;
-        if (candidate) {
-          return candidate;
-        }
-      }
-      return `Process ${procId}`;
-    }
-
-    for (const [procId, procTasks] of Object.entries(tasksByProcess)) {
-      const total = procTasks.length;
-
-      let done = 0;
-      let inProgress = 0;
-      let overdue = 0;
-
-      for (const t of procTasks) {
-        const statusNorm = getTaskStatusNormalized(t);
-
-        if (STATUS_DONE.includes(statusNorm)) {
-          done += 1;
-        } else {
-          inProgress += 1;
-        }
-
-        if (isTaskOverdue(t)) {
-          overdue += 1;
-        }
-      }
-
-      const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-
-      const processName =
-        processNameById[procId] || getFallbackProcessName(procId, procTasks);
-
-      const processDescription = processDescriptionById[procId];
-
-      let statusLabel = "No tasks";
-      let statusDotClass = "bg-gray-300";
-      let statusTextClass = "text-gray-500";
-
-      if (total > 0) {
-        if (overdue > 0) {
-          statusLabel = "Critical";
-          statusDotClass = "bg-red-500";
-          statusTextClass = "text-red-700";
-        } else if (progress >= 80) {
-          statusLabel = "Good";
-          statusDotClass = "bg-emerald-500";
-          statusTextClass = "text-emerald-700";
-        } else {
-          statusLabel = "Warning";
-          statusDotClass = "bg-amber-500";
-          statusTextClass = "text-amber-700";
-        }
-      }
-
-      rows.push({
-        processId: procId,
-        processName,
-        processDescription,
-        total,
-        done,
-        inProgress,
-        overdue,
-        progress,
-        statusLabel,
-        statusDotClass,
-        statusTextClass,
+      const resp = await fetch(url, {
+        method: "POST"
       });
-    }
-
-    rows.sort((a, b) => {
-      if (a.overdue !== b.overdue) {
-        return b.overdue - a.overdue;
+      if (!resp.ok) {
+        throw new Error(
+          `Generate tasks request failed with status ${resp.status}`
+        );
       }
-      if (a.total !== b.total) {
-        return b.total - a.total;
+
+      const data = (await resp.json()) as GenerateTasksResponse;
+      setGenerateResult(data);
+
+      const tasks = data.tasks ?? [];
+      for (const t of tasks) {
+        const payload: TaskPayload = {
+          ...t
+        };
+        await fetch("/api/tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
       }
-      return a.processName.localeCompare(b.processName);
-    });
-
-    return rows;
-  }, [tasksByProcess, processNameById, processDescriptionById]);
-
-  const totals = useMemo(() => {
-    const total = filteredTasks.length;
-
-    const done = filteredTasks.filter((t: any) =>
-      STATUS_DONE.includes(getTaskStatusNormalized(t))
-    ).length;
-
-    const inProgress = total - done;
-
-    const overdue = filteredTasks.filter((t: any) => isTaskOverdue(t)).length;
-
-    const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-
-    return { total, done, inProgress, overdue, progress };
-  }, [filteredTasks]);
-
-  const selectedProcessRow = useMemo(() => {
-    if (!selectedProcessId) return null;
-    return matrix.find((row) => row.processId === selectedProcessId) ?? null;
-  }, [selectedProcessId, matrix]);
-
-  const tasksForSelectedProcessBase = useMemo(() => {
-    if (!selectedProcessId) return [];
-    const list = tasksByProcess[selectedProcessId] ?? [];
-    return [...list].sort((a: any, b: any) => {
-      const aDueRaw = getTaskDueRaw(a);
-      const bDueRaw = getTaskDueRaw(b);
-
-      const aDue = aDueRaw
-        ? new Date(aDueRaw).getTime()
-        : Number.POSITIVE_INFINITY;
-      const bDue = bDueRaw
-        ? new Date(bDueRaw).getTime()
-        : Number.POSITIVE_INFINITY;
-
-      if (Number.isNaN(aDue) && Number.isNaN(bDue)) return 0;
-      if (Number.isNaN(aDue)) return 1;
-      if (Number.isNaN(bDue)) return -1;
-
-      return aDue - bDue;
-    });
-  }, [selectedProcessId, tasksByProcess]);
-
-  const tasksForSelectedProcess = useMemo(() => {
-    if (taskFilter === "all") {
-      return tasksForSelectedProcessBase;
-    }
-
-    return tasksForSelectedProcessBase.filter((t: any) => {
-      const statusNorm = getTaskStatusNormalized(t);
-
-      if (taskFilter === "done") {
-        return STATUS_DONE.includes(statusNorm);
-      }
-      if (taskFilter === "in_progress") {
-        return !STATUS_DONE.includes(statusNorm);
-      }
-      if (taskFilter === "overdue") {
-        return isTaskOverdue(t);
-      }
-      return true;
-    });
-  }, [tasksForSelectedProcessBase, taskFilter]);
-
-  function getTaskTitle(t: any): string {
-    return (
-      t.title ??
-      t.name ??
-      t.summary ??
-      t.code ??
-      `Task #${t.id ?? ""}` ??
-      "Task"
-    ).toString();
-  }
-
-  function getTaskAssignee(t: any): string {
-    return (
-      t.assignee ??
-      t.executor ??
-      t.owner ??
-      t.assigned_to ??
-      t.assignedTo ??
-      ""
-    ).toString();
-  }
-
-  function getTaskDueFormatted(t: any): string {
-    const raw = getTaskDueRaw(t);
-    if (!raw) return "";
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString();
-  }
-
-  function getTaskProcessName(t: any): string {
-    const pid = (t.process_id ??
-      t.processId ??
-      t.process_definition_id ??
-      t.processDefinitionId ??
-      "")?.toString() ?? "";
-
-    if (pid && processNameById[pid]) {
-      return processNameById[pid];
-    }
-
-    return (t.process_name ?? t.processName ?? t.process ?? "").toString();
-  }
-
-  function renderTaskFilterButton(id: TaskFilter, label: string) {
-    const isActive = taskFilter === id;
-    return (
-      <button
-        key={id}
-        type="button"
-        onClick={() => setTaskFilter(id)}
-        className={
-          "px-2.5 py-1 text-xs rounded-full border " +
-          (isActive
-            ? "bg-blue-600 text-white border-blue-600"
-            : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50")
-        }
-      >
-        {label}
-      </button>
-    );
-  }
-
-  function getProcessStatusTextColor(label: string): string {
-    if (label === "Good") return "text-emerald-700";
-    if (label === "Critical") return "text-red-700";
-    if (label === "Warning") return "text-amber-700";
-    return "text-gray-600";
-  }
-
-  function getTaskStatusTextColor(t: any): string {
-    const statusNorm = getTaskStatusNormalized(t);
-    const overdue = isTaskOverdue(t);
-
-    if (STATUS_DONE.includes(statusNorm)) return "text-emerald-700";
-    if (overdue) return "text-red-700";
-    if (STATUS_IN_PROGRESS.includes(statusNorm)) return "text-blue-700";
-    return "text-gray-600";
-  }
-
-  async function performTaskActionById(
-    taskId: string,
-    action: TaskAction
-  ): Promise<void> {
-    const encodedId = encodeURIComponent(taskId);
-
-    const endpoint =
-      action === "done" ? "mark-done" : action === "postpone" ? "postpone" : "start";
-
-    const url = `/api/tasks/${encodedId}/${endpoint}`;
-
-    let options: RequestInit = { method: "POST" };
-
-    if (endpoint === "postpone") {
-      options = {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: 1 }),
-      };
-    }
-
-    const res = await fetch(url, options);
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `Action failed (${res.status}): ${text || "request not ok"}`
-      );
-    }
-  }
-
-  async function handleTaskAction(t: any, action: TaskAction) {
-    const id = getTaskId(t);
-    if (!id) {
-      console.warn("Task has no id, action skipped", t);
-      return;
-    }
-
-    try {
-      setActionLoadingTaskId(id);
-      await performTaskActionById(id, action);
-      await loadData();
-    } catch (err) {
-      console.error("Task action error:", err);
+    } catch (err: any) {
+      setGenerateError(err?.message ?? "Failed to generate tasks.");
     } finally {
-      setActionLoadingTaskId(null);
+      setIsGeneratingTasks(false);
     }
-  }
+  };
 
-  const periodLabel = `${periodStart.toLocaleDateString()} - ${periodEnd.toLocaleDateString()}`;
+  useEffect(() => {
+    loadEvents().catch(() => {
+      // error is already handled
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, year, month]);
+
+  const currentMonthLabel =
+    monthOptions.find((m) => m.value === month)?.label ?? String(month);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8 space-y-6">
-        {/* header */}
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Client profile
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Overview of internal processes and tasks for a single client for
-              the selected month.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  try {
-                    const monthKey = formatMonthInputValue(baseDate);
-                    const payload = {
-                      clientId: clientId.trim(),
-                      month: monthKey,
-                      mode: "all" as const,
-                    };
-                    window.localStorage.setItem(
-                      TASKS_FOCUS_KEY,
-                      JSON.stringify(payload)
-                    );
-                  } catch (e) {
-                    console.error("Failed to store tasks focus", e);
-                  }
+    <div className="p-4 md:p-6 space-y-4">
+      <h1 className="text-2xl font-semibold mb-2">Client Profile 2.0</h1>
 
-                  window.dispatchEvent(
-                    new CustomEvent("erpv2_navigate", {
-                      detail: { tab: "tasks" },
-                    })
-                  );
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50"
-            >
-              Go to tasks
-            </button>
-            {state === "loading" && (
-              <span className="inline-flex items-center text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">
-                Loading data.
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={loadData}
-              disabled={state === "loading"}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
-              {state === "loading" ? "Reloading data" : "Reload data"}
-            </button>
-          </div>
-        </header>
-
-        {/* error */}
-        {state === "error" && error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
-            <div className="font-semibold mb-0.5">Failed to load data</div>
-            <div>{error}</div>
-          </div>
-        )}
-
-        {/* 1. Filters + summary + matrix + tasks */}
-        <section className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-                1. Filters and summary
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="space-y-3 md:col-span-2">
+          <div className="border rounded-lg p-3 md:p-4 bg-white/5">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col">
+                <label className="text-xs font-medium opacity-70 mb-1">
+                  Client ID
+                </label>
+                <select
+                  className="border rounded px-2 py-1 text-sm bg-slate-900"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                >
+                  {CLIENT_PROFILES.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="text-[11px] text-gray-500">
-                Period: {periodLabel}
+
+              <div className="flex flex-col">
+                <label className="text-xs font-medium opacity-70 mb-1">
+                  Year
+                </label>
+                <input
+                  type="number"
+                  className="border rounded px-2 py-1 text-sm w-24 bg-slate-900"
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value) || year)}
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-xs font-medium opacity-70 mb-1">
+                  Month
+                </label>
+                <select
+                  className="border rounded px-2 py-1 text-sm bg-slate-900"
+                  value={month}
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                >
+                  {monthOptions.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-2 ml-auto flex-wrap">
+                <button
+                  className="px-3 py-1 rounded text-sm border border-sky-500 hover:bg-sky-500/10"
+                  onClick={loadEvents}
+                  disabled={isLoadingEvents}
+                >
+                  {isLoadingEvents ? "Loading..." : "Reload events"}
+                </button>
+                <button
+                  className="px-3 py-1 rounded text-sm border border-emerald-500 hover:bg-emerald-500/10"
+                  onClick={handleGenerateTasks}
+                  disabled={isGeneratingTasks}
+                >
+                  {isGeneratingTasks ? "Generating tasks..." : "Generate tasks"}
+                </button>
               </div>
             </div>
+          </div>
 
-            {/* filters */}
-            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-end">
-              <div className="space-y-1.5">
-                <div className="text-xs font-semibold text-gray-700">
-                  Filters
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] uppercase tracking-wide text-gray-500">
-                    Client ID
-                  </label>
-                  <input
-                    type="text"
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm font-mono"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder="client_id"
-                  />
-                  <p className="text-[11px] text-gray-500">
-                    Tasks are filtered by{" "}
-                    <span className="font-mono">client_id</span> field (with
-                    fallbacks).
+          {profile && (
+            <div className="border rounded-lg p-3 md:p-4 bg-white/5 space-y-3">
+              <div className="flex justify-between items-start gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold mb-1">
+                    {profile.label}
+                  </h2>
+                  <p className="text-xs md:text-sm opacity-80">
+                    {profile.description}
                   </p>
                 </div>
+                <div className="text-right text-xs md:text-sm">
+                  <div className="font-mono">
+                    {clientId} · {year}-{currentMonthLabel}
+                  </div>
+                  <div className="opacity-70">Control map snapshot</div>
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] uppercase tracking-wide text-gray-500">
-                    Month
-                  </label>
-                  <span className="text-[11px] text-gray-400">
-                    {periodLabel}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => shiftMonth(-1)}
-                    className="px-2 py-1 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50"
-                  >
-                    {"<"}
-                  </button>
-                  <input
-                    type="month"
-                    value={formatMonthInputValue(baseDate)}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (!value) return;
-                      const [y, m] = value.split("-");
-                      const d = new Date(Number(y), Number(m) - 1, 1);
-                      if (!Number.isNaN(d.getTime())) {
-                        setBaseDate(startOfMonth(d));
-                      }
-                    }}
-                    className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => shiftMonth(1)}
-                    className="px-2 py-1 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50"
-                  >
-                    {">"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* totals */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold tracking-wide text-gray-800 uppercase">
-                Summary for selected client and month
-              </h2>
-              <span className="text-[11px] text-gray-500">
-                Total progress:{" "}
-                <span className="font-semibold text-gray-900">
-                  {totals.progress}%
-                </span>
-              </span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5">
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">
-                  Total tasks
-                </div>
-                <div className="mt-1 text-lg font-semibold">
-                  {totals.total}
-                </div>
-              </div>
-              <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2.5">
-                <div className="text-[11px] uppercase tracking-wide text-emerald-700">
-                  Done
-                </div>
-                <div className="mt-1 text-lg font-semibold text-emerald-700">
-                  {totals.done}
-                </div>
-              </div>
-              <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5">
-                <div className="text-[11px] uppercase tracking-wide text-blue-700">
-                  In progress
-                </div>
-                <div className="mt-1 text-lg font-semibold text-blue-700">
-                  {totals.inProgress}
-                </div>
-              </div>
-              <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
-                <div className="text-[11px] uppercase tracking-wide text-red-700">
-                  Overdue
-                </div>
-                <div className="mt-1 text-lg font-semibold text-red-700">
-                  {totals.overdue}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* matrix + tasks */}
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-            {/* matrix */}
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-                2. Processes matrix
-              </div>
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div className="grid gap-3 md:grid-cols-3 text-xs md:text-sm">
+                <div className="space-y-1">
+                  <div className="font-semibold text-sm">Tax and VAT</div>
                   <div>
-                    <h2 className="text-sm font-semibold text-gray-800">
-                      Processes matrix
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      One row per process with statistics for the selected
-                      client and month.
-                    </p>
+                    <span className="font-medium">Tax system: </span>
+                    {profile.taxSystem}
                   </div>
-                  <div className="text-right">
-                    <div className="text-[11px] text-gray-500">
-                      Selected client:
-                    </div>
-                    <div className="text-xs font-medium text-gray-800">
-                      {clientId.trim() || "not set"}
-                    </div>
+                  <div>
+                    <span className="font-medium">VAT: </span>
+                    {profile.vat}
+                  </div>
+                  <div>
+                    <span className="font-medium">Tourist fee: </span>
+                    {profile.touristFee}
                   </div>
                 </div>
 
-                {clientId.trim() === "" ? (
-                  <div className="px-4 py-6 text-sm text-gray-500">
-                    Enter a <span className="font-mono">client_id</span> to see
-                    matrix data.
+                <div className="space-y-1">
+                  <div className="font-semibold text-sm">Payroll and staff</div>
+                  <div>
+                    <span className="font-medium">Employees: </span>
+                    {profile.employees}
                   </div>
-                ) : matrix.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-gray-500">
-                    No tasks found for this client and period.
+                  <div>
+                    <span className="font-medium">Payroll schedule: </span>
+                    {profile.payroll}
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="text-left px-4 py-2 font-medium text-xs text-gray-500 uppercase">
-                            Process
-                          </th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-gray-500 uppercase">
-                            Total
-                          </th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-gray-500 uppercase">
-                            Done
-                          </th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-gray-500 uppercase">
-                            In progress
-                          </th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-gray-500 uppercase">
-                            Overdue
-                          </th>
-                          <th className="text-right px-3 py-2 font-medium text-xs text-gray-500 uppercase">
-                            Progress
-                          </th>
-                          <th className="text-left px-3 py-2 font-medium text-xs text-gray-500 uppercase">
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matrix.map((row) => {
-                          const isSelected =
-                            selectedProcessId === row.processId;
-                          const statusTextClass = getProcessStatusTextColor(
-                            row.statusLabel
-                          );
+                </div>
 
-                          return (
-                            <tr
-                              key={row.processId}
-                              className={
-                                "border-b border-gray-100 cursor-pointer " +
-                                (isSelected
-                                  ? "bg-blue-50/60"
-                                  : "hover:bg-gray-50")
-                              }
-                              onClick={() =>
-                                setSelectedProcessId(row.processId)
-                              }
-                            >
-                              <td className="px-4 py-2.5">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {row.processName}
-                                </div>
-                                <div className="text-[11px] text-gray-500 mt-0.5">
-                                  <span className="font-mono">
-                                    {row.processId}
-                                  </span>
-                                  {row.processDescription && (
-                                    <>
-                                      {" "}
-                                      · {row.processDescription}
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-sm text-gray-800">
-                                {row.total}
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-sm text-emerald-700">
-                                {row.done}
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-sm text-blue-700">
-                                {row.inProgress}
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-sm text-red-700">
-                                {row.overdue}
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-sm text-gray-800">
-                                {row.progress}%
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <div className="inline-flex items-center gap-1.5 text-xs">
-                                  <span
-                                    className={
-                                      "inline-block w-2 h-2 rounded-full " +
-                                      row.statusDotClass
-                                    }
-                                  />
-                                  <span className={statusTextClass}>
-                                    {row.statusLabel}
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                <div className="space-y-1">
+                  <div className="font-semibold text-sm">Processes and events</div>
+                  <div>
+                    <span className="font-medium">Core processes:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {profile.coreProcesses.map((p) => (
+                      <span
+                        key={p}
+                        className="inline-flex px-2 py-0.5 rounded-full border text-[10px] md:text-xs"
+                      >
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-2">
+                    <span className="font-medium">Control event categories:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {profile.controlEventCategories.map((c) => (
+                      <span
+                        key={c}
+                        className="inline-flex px-2 py-0.5 rounded-full bg-slate-800 text-[10px] md:text-xs"
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="border rounded-lg p-3 md:p-4 bg-white/5">
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-semibold text-sm">Control events</div>
+              <div className="text-xs md:text-sm opacity-80">
+                Total: {stats.total} · Overdue: {stats.overdue} · Planned:{" "}
+                {stats.planned} · Completed: {stats.completed}
+              </div>
+            </div>
+
+            {eventsError && (
+              <div className="text-xs text-red-400 mb-2">
+                {eventsError}
+              </div>
+            )}
+
+            {stats.nextDeadline && (
+              <div className="text-xs mb-2">
+                <span className="font-medium">Next deadline: </span>
+                {stats.nextDeadline}
+              </div>
+            )}
+
+            <div className="overflow-auto max-h-80 border rounded">
+              <table className="min-w-full text-xs md:text-sm">
+                <thead className="bg-slate-900">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Date</th>
+                    <th className="px-2 py-1 text-left">Title</th>
+                    <th className="px-2 py-1 text-left">Category</th>
+                    <th className="px-2 py-1 text-left">Status</th>
+                    <th className="px-2 py-1 text-left">Depends on</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((e) => (
+                    <tr key={e.id} className="border-t border-slate-800">
+                      <td className="px-2 py-1 whitespace-nowrap font-mono text-[11px] md:text-xs">
+                        {e.date}
+                      </td>
+                      <td className="px-2 py-1">{e.title}</td>
+                      <td className="px-2 py-1">
+                        <span className="inline-flex px-2 py-0.5 rounded-full bg-slate-800 text-[10px] md:text-xs">
+                          {e.category}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1">
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded-full text-[10px] md:text-xs ${
+                            e.status === "overdue"
+                              ? "bg-red-900/60"
+                              : e.status === "completed"
+                              ? "bg-emerald-900/60"
+                              : "bg-sky-900/60"
+                          }`}
+                        >
+                          {e.status}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 text-[10px] md:text-xs">
+                        {e.depends_on && e.depends_on.length > 0
+                          ? e.depends_on.join(", ")
+                          : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                  {events.length === 0 && !isLoadingEvents && !eventsError && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-2 py-3 text-center text-xs opacity-70"
+                      >
+                        No events for selected period.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="border rounded-lg p-3 md:p-4 bg-white/5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-semibold text-sm">
+                Generated tasks from control events
+              </div>
+              {generateResult && (
+                <div className="text-xs md:text-sm opacity-80">
+                  Suggested: {generateResult.tasks_suggested} · Pushed to /api/tasks
+                </div>
+              )}
+            </div>
+            {generateError && (
+              <div className="text-xs text-red-400 mb-2">{generateError}</div>
+            )}
+            {!generateResult && !generateError && (
+              <div className="text-xs opacity-70">
+                Use "Generate tasks" above to create tasks based on current period
+                control events. They will be available in Tasks dashboard.
+              </div>
+            )}
+            {generateResult && (
+              <div className="text-xs md:text-sm space-y-1">
+                {generateResult.tasks.map((t, idx) => (
+                  <div
+                    key={idx}
+                    className="border border-slate-800 rounded px-2 py-1"
+                  >
+                    <div className="font-medium">{t.title}</div>
+                    {t.due_date && (
+                      <div className="font-mono text-[11px]">
+                        Due: {t.due_date}
+                      </div>
+                    )}
+                    {t.description && (
+                      <div className="opacity-80 text-[11px] mt-1">
+                        {t.description}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {generateResult.tasks.length === 0 && (
+                  <div className="opacity-70">
+                    No tasks in response. Check backend logic for task generation.
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* tasks for selected process */}
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-                3. Tasks for selected process
-              </div>
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col max-h-[540px]">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-800">
-                      {selectedProcessRow
-                        ? selectedProcessRow.processName
-                        : "Tasks for selected process"}
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Tasks for the selected process instance and period.
-                    </p>
-                    {selectedProcessRow && (
-                      <div className="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-3">
-                        <span>
-                          Total:{" "}
-                          <span className="font-semibold text-gray-900">
-                            {selectedProcessRow.total}
-                          </span>
-                        </span>
-                        <span>
-                          Done:{" "}
-                          <span className="font-semibold text-emerald-700">
-                            {selectedProcessRow.done}
-                          </span>
-                        </span>
-                        <span>
-                          In progress:{" "}
-                          <span className="font-semibold text-blue-700">
-                            {selectedProcessRow.inProgress}
-                          </span>
-                        </span>
-                        <span>
-                          Overdue:{" "}
-                          <span className="font-semibold text-red-700">
-                            {selectedProcessRow.overdue}
-                          </span>
-                        </span>
-                        <span>
-                          Progress:{" "}
-                          <span className="font-semibold text-gray-900">
-                            {selectedProcessRow.progress}%
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {selectedProcessRow && (
-                      <div className="text-[11px] text-gray-500">
-                        <span className="font-semibold">Process ID:</span>{" "}
-                        <span className="font-mono">
-                          {selectedProcessRow.processId}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1.5">
-                      {renderTaskFilterButton("all", "All")}
-                      {renderTaskFilterButton("done", "Done")}
-                      {renderTaskFilterButton("in_progress", "In progress")}
-                      {renderTaskFilterButton("overdue", "Overdue")}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto">
-                  {!selectedProcessId ? (
-                    <div className="px-4 py-6 text-sm text-gray-500">
-                      Select a process in the matrix to see its tasks.
-                    </div>
-                  ) : tasksForSelectedProcessBase.length === 0 ? (
-                    <div className="px-4 py-6 text-sm text-gray-500">
-                      No tasks found for the selected process.
-                    </div>
-                  ) : tasksForSelectedProcess.length === 0 ? (
-                    <div className="px-4 py-6 text-sm text-gray-500">
-                      No tasks match the selected status filter.
-                    </div>
-                  ) : (
-                    <ul className="divide-y divide-gray-100">
-                      {tasksForSelectedProcess.map((t: any) => {
-                        const title = getTaskTitle(t);
-                        const assignee = getTaskAssignee(t);
-                        const due = getTaskDueFormatted(t);
-                        const status = getTaskStatus(t);
-                        const overdue = isTaskOverdue(t);
-                        const statusColor = getTaskStatusTextColor(t);
-                        const taskId = getTaskId(t);
-                        const isLoading =
-                          taskId !== null && actionLoadingTaskId === taskId;
-
-                        return (
-                          <li
-                            key={String(
-                              t.id ?? `${t.process_id ?? ""}_${t.code ?? ""}`
-                            )}
-                          >
-                            <div className="px-4 py-3 space-y-1.5">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {title}
-                                  </div>
-                                  <div className="text-[11px] text-gray-500 mt-0.5">
-                                    <span className="font-mono">
-                                      #{t.id ?? "no-id"}
-                                    </span>{" "}
-                                    ·{" "}
-                                    <span className="font-mono">
-                                      {getTaskProcessName(t)}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span
-                                  className={
-                                    "text-xs font-medium px-2 py-0.5 rounded-full border " +
-                                    (overdue
-                                      ? "bg-red-50 border-red-200 text-red-700"
-                                      : STATUS_DONE.includes(
-                                          getTaskStatusNormalized(t)
-                                        )
-                                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                                      : STATUS_IN_PROGRESS.includes(
-                                          getTaskStatusNormalized(t)
-                                        )
-                                      ? "bg-blue-50 border-blue-200 text-blue-700"
-                                      : "bg-gray-50 border-gray-200 text-gray-700")
-                                  }
-                                >
-                                  {status}
-                                </span>
-                              </div>
-
-                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
-                                <div className="flex flex-wrap items-center gap-3">
-                                  <div>
-                                    <span className="text-gray-500">
-                                      Due:{" "}
-                                    </span>
-                                    <span
-                                      className={
-                                        overdue ? "text-red-700" : "text-gray-900"
-                                      }
-                                    >
-                                      {due || "no deadline"}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">
-                                      Assignee:{" "}
-                                    </span>
-                                    <span className="text-gray-900">
-                                      {assignee || "not set"}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={!taskId || isLoading}
-                                    onClick={() =>
-                                      handleTaskAction(t, "start")
-                                    }
-                                    className="px-2 py-0.5 text-[11px] rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
-                                  >
-                                    Start
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={!taskId || isLoading}
-                                    onClick={() =>
-                                      handleTaskAction(t, "postpone")
-                                    }
-                                    className="px-2 py-0.5 text-[11px] rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60"
-                                  >
-                                    +1 day
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={!taskId || isLoading}
-                                    onClick={() => handleTaskAction(t, "done")}
-                                    className="px-2 py-0.5 text-[11px] rounded border border-emerald-600 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60"
-                                  >
-                                    Done
-                                  </button>
-                                  {isLoading && (
-                                    <span className="ml-1 text-[10px] text-gray-400">
-                                      Updating...
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
-        </section>
+        </div>
+
+        <div className="space-y-3">
+          <div className="border rounded-lg p-3 md:p-4 bg-white/5 text-xs md:text-sm">
+            <div className="font-semibold text-sm mb-1">
+              How this page connects things
+            </div>
+            <ul className="list-disc ml-4 space-y-1">
+              <li>Client ID is shared with control events generator.</li>
+              <li>
+                Control events are loaded directly from
+                {" /api/control-events/{client_id}"} for selected period.
+              </li>
+              <li>
+                Tasks are generated via
+                {" /api/control-events/{client_id}/generate-tasks"}
+                and pushed to /api/tasks.
+              </li>
+              <li>
+                Core process tags (process:*) are aligned with internal processes
+                definitions.
+              </li>
+            </ul>
+          </div>
+
+          <div className="border rounded-lg p-3 md:p-4 bg-white/5 text-xs md:text-sm">
+            <div className="font-semibold text-sm mb-1">Quick notes</div>
+            <ul className="list-disc ml-4 space-y-1">
+              <li>
+                Use this page as entry point to see tax regime, payroll, tourist fee
+                and control map for a client.
+              </li>
+              <li>
+                Control events table gives exact operational calendar for the
+                period.
+              </li>
+              <li>
+                Tasks dashboard consumes tasks created here and on Control Events
+                page.
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default ClientProfilePage;

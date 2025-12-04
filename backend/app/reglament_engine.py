@@ -1,552 +1,465 @@
 ﻿from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Optional
 
 
-def _first_workday(year: int, month: int) -> date:
-    d = date(year, month, 1)
-    while d.weekday() >= 5:
-        d += timedelta(days=1)
-    return d
+@dataclass
+class ControlEvent:
+    id: str
+    client_id: str
+    date: date
+    title: str
+    category: str
+    status: str = "planned"
+    depends_on: Optional[List[str]] = None
+    description: str = ""
+    tags: Optional[List[str]] = None
+    source: str = "reglament"
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "client_id": self.client_id,
+            "date": self.date.isoformat(),
+            "title": self.title,
+            "category": self.category,
+            "status": self.status,
+            "depends_on": self.depends_on or [],
+            "description": self.description,
+            "tags": self.tags or [],
+            "source": self.source,
+        }
 
 
-def _event_base(
-    client_id: str,
-    event_date: date,
-    slug: str,
-    title: str,
-    category: str,
-    description: str = "",
-    depends_on: List[str] | None = None,
-    tags: List[str] | None = None,
-    source: str = "reglament",
-) -> Dict[str, Any]:
-    return {
-        "id": f"{client_id}-{slug}-{event_date.isoformat()}",
-        "client_id": client_id,
-        "date": event_date,
-        "title": title,
-        "category": category,
-        "depends_on": depends_on or [],
-        "description": description or None,
-        "tags": tags or [],
-        "source": source,
-    }
+def _period_from_today(today: Optional[date]) -> date:
+    if today is None:
+        return date.today().replace(day=1)
+    return today.replace(day=1)
 
 
-def _generate_ip_usn_dr(client_id: str, today: date) -> List[Dict[str, Any]]:
-    events: List[Dict[str, Any]] = []
-    year = today.year
+def _make_id(client_id: str, period: date, suffix: str) -> str:
+    return f"{client_id}-{period.year:04d}{period.month:02d}-{suffix}"
 
-    # monthly: bank statement + docs + insurance control
-    for month in range(1, 13):
-        # first workday: bank statement request
-        bank_date = _first_workday(year, month)
-        bank_ev = _event_base(
-            client_id=client_id,
-            event_date=bank_date,
-            slug="bank-statement",
-            title="Bank statement request",
-            category="bank",
-            description="Bank statement request for previous month.",
-            tags=["bank", "statement", "monthly"],
-        )
-        events.append(bank_ev)
 
-        # docs after bank statement
-        docs_ev = _event_base(
-            client_id=client_id,
-            event_date=bank_date,
-            slug="docs-request",
-            title="Primary documents request",
-            category="documents",
-            description="Request primary documents after bank statement is received.",
-            depends_on=[bank_ev["id"]],
-            tags=["docs", "monthly"],
-        )
-        events.append(docs_ev)
-
-        # insurance contributions control around 20th
-        ins_date = date(year, month, 20)
-        ins_ev = _event_base(
-            client_id=client_id,
-            event_date=ins_date,
-            slug="insurance-self-control",
-            title="Insurance contributions self-check",
-            category="insurance",
-            description="Control of personal insurance contributions for current month.",
-            tags=["insurance", "monthly"],
-        )
-        events.append(ins_ev)
-
-    # quarterly: USN advances (25 Apr, 25 Jul, 25 Oct)
-    quarters = [
-        (4, 25, "q1"),
-        (7, 25, "q2"),
-        (10, 25, "q3"),
-    ]
-    for month, day, qslug in quarters:
-        d = date(year, month, day)
-        ev = _event_base(
-            client_id=client_id,
-            event_date=d,
-            slug=f"usn-advance-{qslug}",
-            title="USN advance payment",
-            category="tax",
-            description="Quarterly USN advance payment.",
-            tags=["usn", "advance", "quarterly"],
-        )
-        events.append(ev)
-
-    # yearly: USN declaration and final contributions
-    usn_decl = date(year, 4, 30)
-    events.append(
-        _event_base(
-            client_id=client_id,
-            event_date=usn_decl,
-            slug="usn-declaration",
-            title="USN annual declaration",
-            category="tax",
-            description="Annual USN declaration.",
-            tags=["usn", "annual"],
-        )
+def _end_of_month(d: date) -> date:
+    if d.month == 12:
+        return d.replace(day=31)
+    first_next = d.replace(
+        year=d.year + (1 if d.month == 12 else 0),
+        month=1 if d.month == 12 else d.month + 1,
+        day=1,
     )
-
-    contrib_final = date(year, 7, 1)
-    events.append(
-        _event_base(
-            client_id=client_id,
-            event_date=contrib_final,
-            slug="insurance-final",
-            title="Insurance contributions final payment",
-            category="insurance",
-            description="Final payment of fixed contributions and 1 percent.",
-            tags=["insurance", "annual"],
-        )
-    )
-
-    return events
+    return first_next - timedelta(days=1)
 
 
-def _generate_ooo_osno_3_zp1025(client_id: str, today: date) -> List[Dict[str, Any]]:
-    events: List[Dict[str, Any]] = []
-    year = today.year
-
-    # monthly salary, ndfl, insurance, bank/docs
-    for month in range(1, 13):
-        # salary: advance and main
-        adv_date = date(year, month, 10)
-        main_date = date(year, month, 25)
-
-        adv_ev = _event_base(
-            client_id=client_id,
-            event_date=adv_date,
-            slug="salary-advance",
-            title="Salary advance payment",
-            category="salary",
-            description="Advance salary payment.",
-            tags=["salary", "monthly"],
-        )
-        events.append(adv_ev)
-
-        main_ev = _event_base(
-            client_id=client_id,
-            event_date=main_date,
-            slug="salary-main",
-            title="Salary main payment",
-            category="salary",
-            description="Main salary payment.",
-            tags=["salary", "monthly"],
-        )
-        events.append(main_ev)
-
-        # ndfl next day after salary
-        ndfl_adv = adv_date + timedelta(days=1)
-        ndfl_main = main_date + timedelta(days=1)
-
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=ndfl_adv,
-                slug="ndfl-advance",
-                title="NDFL payment after advance",
-                category="tax",
-                description="NDFL payment for salary advance.",
-                depends_on=[adv_ev["id"]],
-                tags=["ndfl", "monthly"],
-            )
-        )
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=ndfl_main,
-                slug="ndfl-main",
-                title="NDFL payment after salary",
-                category="tax",
-                description="NDFL payment for main salary.",
-                depends_on=[main_ev["id"]],
-                tags=["ndfl", "monthly"],
-            )
-        )
-
-        # insurance contributions (control around 15th)
-        ins_date = date(year, month, 15)
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=ins_date,
-                slug="insurance-control",
-                title="Insurance contributions control",
-                category="insurance",
-                description="Control of insurance contributions for previous month.",
-                tags=["insurance", "monthly"],
-            )
-        )
-
-        # monthly bank and docs
-        bank_date = _first_workday(year, month)
-        bank_ev = _event_base(
-            client_id=client_id,
-            event_date=bank_date,
-            slug="bank-statement",
-            title="Bank statement request",
-            category="bank",
-            description="Bank statement request for previous month.",
-            tags=["bank", "statement", "monthly"],
-        )
-        events.append(bank_ev)
-
-        docs_ev = _event_base(
-            client_id=client_id,
-            event_date=bank_date,
-            slug="docs-request",
-            title="Primary documents request",
-            category="documents",
-            description="Request primary documents after bank statement is received.",
-            depends_on=[bank_ev["id"]],
-            tags=["docs", "monthly"],
-        )
-        events.append(docs_ev)
-
-        # monthly 6-NDFL control (end of month)
-        # last day of month: simple approach
-        if month == 12:
-            last_day = date(year, 12, 31)
-        else:
-            last_day = date(year, month + 1, 1) - timedelta(days=1)
-
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=last_day,
-                slug="6-ndfl-monthly-control",
-                title="6-NDFL monthly control",
-                category="report",
-                description="Monthly control of 6-NDFL (section 1).",
-                tags=["6-ndfl", "monthly"],
-            )
-        )
-
-    # quarterly: VAT, 6-NDFL, RSV (reports)
-    # Q1, Q2, Q3 due: 25 Apr, 25 Jul, 25 Oct; Q4 report can be at 25 Jan next year
-    quarter_dates = [
-        (year, 4, 25, "q1"),
-        (year, 7, 25, "q2"),
-        (year, 10, 25, "q3"),
-        (year + 1, 1, 25, "q4"),
-    ]
-    for y, m, d, qslug in quarter_dates:
-        dt = date(y, m, d)
-        # VAT
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=dt,
-                slug=f"vat-declaration-{qslug}",
-                title="VAT declaration",
-                category="tax",
-                description="Quarterly VAT declaration.",
-                tags=["vat", "quarterly"],
-            )
-        )
-        # 6-NDFL + RSV
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=dt,
-                slug=f"6-ndfl-rsv-{qslug}",
-                title="6-NDFL and RSV reports",
-                category="report",
-                description="Quarterly 6-NDFL and RSV reports.",
-                tags=["6-ndfl", "rsv", "quarterly"],
-            )
-        )
-
-    # yearly: accounting reports, SZV-STAZH
-    szv_stazh = date(year, 3, 1)
-    events.append(
-        _event_base(
-            client_id=client_id,
-            event_date=szv_stazh,
-            slug="szv-stazh",
-            title="SZV-STAZH annual report",
-            category="report",
-            description="Annual SZV-STAZH report.",
-            tags=["pension", "annual"],
-        )
-    )
-
-    acc_report = date(year, 3, 31)
-    events.append(
-        _event_base(
-            client_id=client_id,
-            event_date=acc_report,
-            slug="annual-accounting",
-            title="Annual accounting report",
-            category="report",
-            description="Annual accounting report.",
-            tags=["accounting", "annual"],
-        )
-    )
-
-    return events
+def _add_overdue_flag(events: List[ControlEvent], today: date) -> None:
+    for ev in events:
+        if ev.date < today and ev.status == "planned":
+            ev.status = "overdue"
 
 
-def _generate_ooo_usn_dr_tour_zp520(client_id: str, today: date) -> List[Dict[str, Any]]:
-    events: List[Dict[str, Any]] = []
-    year = today.year
-
-    for month in range(1, 13):
-        # salary: advance and main
-        adv_date = date(year, month, 5)
-        main_date = date(year, month, 20)
-
-        adv_ev = _event_base(
-            client_id=client_id,
-            event_date=adv_date,
-            slug="salary-advance",
-            title="Salary advance payment",
-            category="salary",
-            description="Advance salary payment.",
-            tags=["salary", "monthly"],
-        )
-        events.append(adv_ev)
-
-        main_ev = _event_base(
-            client_id=client_id,
-            event_date=main_date,
-            slug="salary-main",
-            title="Salary main payment",
-            category="salary",
-            description="Main salary payment.",
-            tags=["salary", "monthly"],
-        )
-        events.append(main_ev)
-
-        # ndfl next day after salary
-        ndfl_adv = adv_date + timedelta(days=1)
-        ndfl_main = main_date + timedelta(days=1)
-
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=ndfl_adv,
-                slug="ndfl-advance",
-                title="NDFL payment after advance",
-                category="tax",
-                description="NDFL payment for salary advance.",
-                depends_on=[adv_ev["id"]],
-                tags=["ndfl", "monthly"],
-            )
-        )
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=ndfl_main,
-                slug="ndfl-main",
-                title="NDFL payment after salary",
-                category="tax",
-                description="NDFL payment for main salary.",
-                depends_on=[main_ev["id"]],
-                tags=["ndfl", "monthly"],
-            )
-        )
-
-        # insurance contributions (control around 15th)
-        ins_date = date(year, month, 15)
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=ins_date,
-                slug="insurance-control",
-                title="Insurance contributions control",
-                category="insurance",
-                description="Control of insurance contributions for previous month.",
-                tags=["insurance", "monthly"],
-            )
-        )
-
-        # monthly tourist tax (report + payment) - we place on 25th
-        # formally it is next month, but for test we keep same year/sequence
-        tour_date = date(year, month, 25)
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=tour_date,
-                slug="tourist-tax",
-                title="Tourist tax report and payment",
-                category="tax",
-                description="Monthly tourist tax report and payment.",
-                tags=["tourist-tax", "monthly"],
-            )
-        )
-
-        # bank statement + docs
-        bank_date = _first_workday(year, month)
-        bank_ev = _event_base(
-            client_id=client_id,
-            event_date=bank_date,
-            slug="bank-statement",
-            title="Bank statement request",
-            category="bank",
-            description="Bank statement request for previous month.",
-            tags=["bank", "statement", "monthly"],
-        )
-        events.append(bank_ev)
-
-        docs_ev = _event_base(
-            client_id=client_id,
-            event_date=bank_date,
-            slug="docs-request",
-            title="Primary documents request",
-            category="documents",
-            description="Request primary documents after bank statement is received.",
-            depends_on=[bank_ev["id"]],
-            tags=["docs", "monthly"],
-        )
-        events.append(docs_ev)
-
-    # quarterly: USN advances + 6-NDFL + RSV
-    quarter_dates = [
-        (year, 4, 25, "q1"),
-        (year, 7, 25, "q2"),
-        (year, 10, 25, "q3"),
-    ]
-    for y, m, d, qslug in quarter_dates:
-        dt = date(y, m, d)
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=dt,
-                slug=f"usn-advance-{qslug}",
-                title="USN advance payment",
-                category="tax",
-                description="Quarterly USN advance payment.",
-                tags=["usn", "advance", "quarterly"],
-            )
-        )
-        events.append(
-            _event_base(
-                client_id=client_id,
-                event_date=dt,
-                slug=f"6-ndfl-rsv-{qslug}",
-                title="6-NDFL and RSV reports",
-                category="report",
-                description="Quarterly 6-NDFL and RSV reports.",
-                tags=["6-ndfl", "rsv", "quarterly"],
-            )
-        )
-
-    # yearly: USN declaration and SZV-STAZH
-    szv_stazh = date(year, 3, 1)
-    events.append(
-        _event_base(
-            client_id=client_id,
-            event_date=szv_stazh,
-            slug="szv-stazh",
-            title="SZV-STAZH annual report",
-            category="report",
-            description="Annual SZV-STAZH report.",
-            tags=["pension", "annual"],
-        )
-    )
-
-    usn_decl = date(year, 3, 31)
-    events.append(
-        _event_base(
-            client_id=client_id,
-            event_date=usn_decl,
-            slug="usn-declaration",
-            title="USN annual declaration",
-            category="tax",
-            description="Annual USN declaration.",
-            tags=["usn", "annual"],
-        )
-    )
-
-    return events
+# === IP USN DR ===
 
 
-def _generate_default_demo(client_id: str, today: date) -> List[Dict[str, Any]]:
-    """Fallback simple chain for unknown client ids."""
-    events: List[Dict[str, Any]] = []
-    today_date = today
+def _events_ip_usn_dr(period: date) -> List[ControlEvent]:
+    events: List[ControlEvent] = []
 
-    bank_ev = _event_base(
+    client_id = "ip_usn_dr"
+    period_end = _end_of_month(period)
+
+    ev_stmt = ControlEvent(
+        id=_make_id(client_id, period, "bank-statement"),
         client_id=client_id,
-        event_date=today_date,
-        slug="bank-statement",
-        title="Bank statement request",
+        date=period_end - timedelta(days=5),
+        title="Request bank statement for the month",
         category="bank",
-        description="Bank statement request.",
-        tags=["bank", "demo"],
-        source="demo",
+        description=(
+            "Request full bank statement for the period for further document "
+            "request and USN control."
+        ),
+        tags=["bank", "statement", "ip", "usn_dr", "process:bank_flow"],
     )
-    events.append(bank_ev)
+    events.append(ev_stmt)
 
-    docs_ev = _event_base(
+    ev_docs = ControlEvent(
+        id=_make_id(client_id, period, "docs-request"),
         client_id=client_id,
-        event_date=today_date,
-        slug="docs-request",
-        title="Primary documents request",
-        category="documents",
-        description="Request primary documents after bank statement.",
-        depends_on=[bank_ev["id"]],
-        tags=["docs", "demo"],
-        source="demo",
+        date=period_end - timedelta(days=3),
+        title="Request primary documents for the month",
+        category="docs",
+        depends_on=[ev_stmt.id],
+        description=(
+            "Request all primary documents corresponding to the bank statement "
+            "operations."
+        ),
+        tags=["docs", "ip", "usn_dr", "process:docs_collect"],
     )
-    events.append(docs_ev)
+    events.append(ev_docs)
 
-    tax_ev = _event_base(
+    ev_book = ControlEvent(
+        id=_make_id(client_id, period, "usn-book"),
         client_id=client_id,
-        event_date=today_date + timedelta(days=10),
-        slug="tax-payment",
-        title="Tax payment deadline",
-        category="tax",
-        description="Demo tax payment deadline.",
-        depends_on=[docs_ev["id"]],
-        tags=["tax", "demo"],
-        source="demo",
+        date=period_end - timedelta(days=2),
+        title="Update USN book and cost register",
+        category="tax_usn_book",
+        depends_on=[ev_docs.id],
+        description="Update USN income and expense book, control tax base and 1 percent limit.",
+        tags=["ip", "usn_dr", "book", "process:usn_month_close"],
     )
-    events.append(tax_ev)
+    events.append(ev_book)
+
+    if period.month in (3, 6, 9, 12):
+        quarter_due = date(period.year, period.month, 25)
+        ev_usn_adv = ControlEvent(
+            id=_make_id(client_id, period, "usn-advance"),
+            client_id=client_id,
+            date=quarter_due,
+            title="USN advance payment for the quarter",
+            category="tax_usn",
+            depends_on=[ev_book.id],
+            description=(
+                "Calculate and pay USN advance for the quarter. "
+                "Control additional 1 percent tax if needed."
+            ),
+            tags=["ip", "usn_dr", "tax", "advance", "process:usn_quarter_close"],
+        )
+        events.append(ev_usn_adv)
+
+    if period.month == 12:
+        ev_decl = ControlEvent(
+            id=_make_id(client_id, period, "usn-annual-declaration"),
+            client_id=client_id,
+            date=date(period.year + 1, 4, 25),
+            title="USN annual declaration submission",
+            category="tax_usn_decl",
+            depends_on=[ev_book.id],
+            description="Prepare and submit USN annual declaration for the year.",
+            tags=["ip", "usn_dr", "declaration", "process:usn_year_close"],
+        )
+        events.append(ev_decl)
 
     return events
+
+
+# === OOO OSNO, 3 employees, salary 10/25 ===
+
+
+def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
+    events: List[ControlEvent] = []
+
+    client_id = "ooo_osno_3_zp1025"
+    period_end = _end_of_month(period)
+
+    pay_dates = []
+    for day in (10, 25):
+        try:
+            pay_dates.append(date(period.year, period.month, day))
+        except ValueError:
+            continue
+
+    salary_events: List[ControlEvent] = []
+    for idx, pay_date in enumerate(pay_dates, start=1):
+        ev_salary = ControlEvent(
+            id=_make_id(client_id, period, f"salary-{idx}"),
+            client_id=client_id,
+            date=pay_date,
+            title=f"Salary payment #{idx}",
+            category="salary",
+            description="Salary payment according to internal payroll schedule.",
+            tags=["ooo", "osno", "salary", "process:payroll_cycle"],
+        )
+        salary_events.append(ev_salary)
+        events.append(ev_salary)
+
+        ev_ndfl = ControlEvent(
+            id=_make_id(client_id, period, f"ndfl-{idx}"),
+            client_id=client_id,
+            date=pay_date + timedelta(days=1),
+            title=f"NDFL payment after salary #{idx}",
+            category="tax_ndfl",
+            depends_on=[ev_salary.id],
+            description="NDFL payment based on salary payment date.",
+            tags=["ooo", "osno", "ndfl", "process:payroll_cycle"],
+        )
+        events.append(ev_ndfl)
+
+    ev_ins = ControlEvent(
+        id=_make_id(client_id, period, "insurance"),
+        client_id=client_id,
+        date=period_end,
+        title="Insurance contributions payment for the month",
+        category="insurance",
+        depends_on=[e.id for e in salary_events] if salary_events else None,
+        description="Monthly social insurance contributions based on payroll.",
+        tags=["ooo", "osno", "insurance", "process:payroll_close"],
+    )
+    events.append(ev_ins)
+
+    ev_stmt = ControlEvent(
+        id=_make_id(client_id, period, "bank-statement"),
+        client_id=client_id,
+        date=period_end - timedelta(days=5),
+        title="Request bank statement for the month",
+        category="bank",
+        description="Request full bank statement including salary and tax payments.",
+        tags=["bank", "ooo", "osno", "process:bank_flow"],
+    )
+    events.append(ev_stmt)
+
+    ev_docs = ControlEvent(
+        id=_make_id(client_id, period, "docs-request"),
+        client_id=client_id,
+        date=period_end - timedelta(days=3),
+        title="Request primary documents for the month",
+        category="docs",
+        depends_on=[ev_stmt.id],
+        description=(
+            "Request all primary documents (acts, invoices, agreements) "
+            "for bookkeeping and VAT control."
+        ),
+        tags=["docs", "ooo", "osno", "process:docs_collect"],
+    )
+    events.append(ev_docs)
+
+    if period.month in (3, 6, 9, 12):
+        ev_vat = ControlEvent(
+            id=_make_id(client_id, period, "vat-decl"),
+            client_id=client_id,
+            date=date(period.year, period.month, 25),
+            title="VAT declaration and payment for the quarter",
+            category="tax_vat",
+            depends_on=[ev_docs.id],
+            description="Prepare and submit VAT declaration, pay VAT for the quarter.",
+            tags=["ooo", "osno", "vat", "process:vat_quarter_close"],
+        )
+        events.append(ev_vat)
+
+        ev_6ndfl = ControlEvent(
+            id=_make_id(client_id, period, "6-ndfl"),
+            client_id=client_id,
+            date=date(period.year, period.month, 30 if period.month in (6, 9) else 31),
+            title="6-NDFL reporting for the quarter",
+            category="tax_6ndfl",
+            depends_on=[e.id for e in salary_events] if salary_events else None,
+            description="Prepare and submit 6-NDFL report for the quarter.",
+            tags=["ooo", "osno", "6-ndfl", "process:payroll_reports"],
+        )
+        events.append(ev_6ndfl)
+
+        ev_rsv = ControlEvent(
+            id=_make_id(client_id, period, "rsv"),
+            client_id=client_id,
+            date=ev_6ndfl.date,
+            title="RSV reporting for the quarter",
+            category="tax_rsv",
+            depends_on=[ev_ins.id],
+            description="Prepare and submit RSV report for the quarter.",
+            tags=["ooo", "osno", "rsv", "process:payroll_reports"],
+        )
+        events.append(ev_rsv)
+
+    if period.month == 12:
+        ev_bal = ControlEvent(
+            id=_make_id(client_id, period, "annual-balance"),
+            client_id=client_id,
+            date=date(period.year + 1, 3, 31),
+            title="Annual accounting statements",
+            category="annual_report",
+            depends_on=[ev_docs.id],
+            description="Prepare and submit annual accounting statements.",
+            tags=["ooo", "osno", "annual", "process:year_close"],
+        )
+        events.append(ev_bal)
+
+        ev_szv = ControlEvent(
+            id=_make_id(client_id, period, "szv-stazh"),
+            client_id=client_id,
+            date=date(period.year + 1, 3, 1),
+            title="SZV-STAZH annual report",
+            category="pension_report",
+            depends_on=[ev_ins.id],
+            description="Prepare and submit SZV-STAZH for all employees.",
+            tags=["ooo", "osno", "szv-stazh", "process:year_close"],
+        )
+        events.append(ev_szv)
+
+    return events
+
+
+# === OOO USN DR + tourist tax, salary 5/20 ===
+
+
+def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
+    events: List[ControlEvent] = []
+
+    client_id = "ooo_usn_dr_tour_zp520"
+    period_end = _end_of_month(period)
+
+    pay_dates = []
+    for day in (5, 20):
+        try:
+            pay_dates.append(date(period.year, period.month, day))
+        except ValueError:
+            continue
+
+    salary_events: List[ControlEvent] = []
+    for idx, pay_date in enumerate(pay_dates, start=1):
+        ev_salary = ControlEvent(
+            id=_make_id(client_id, period, f"salary-{idx}"),
+            client_id=client_id,
+            date=pay_date,
+            title=f"Salary payment #{idx}",
+            category="salary",
+            description="Salary payment according to internal payroll schedule.",
+            tags=["ooo", "usn_dr", "tourist_fee", "salary", "process:payroll_cycle"],
+        )
+        salary_events.append(ev_salary)
+        events.append(ev_salary)
+
+        ev_ndfl = ControlEvent(
+            id=_make_id(client_id, period, f"ndfl-{idx}"),
+            client_id=client_id,
+            date=pay_date + timedelta(days=1),
+            title=f"NDFL payment after salary #{idx}",
+            category="tax_ndfl",
+            depends_on=[ev_salary.id],
+            description="NDFL payment based on salary payment date.",
+            tags=["ooo", "usn_dr", "ndfl", "process:payroll_cycle"],
+        )
+        events.append(ev_ndfl)
+
+    ev_ins = ControlEvent(
+        id=_make_id(client_id, period, "insurance"),
+        client_id=client_id,
+        date=period_end,
+        title="Insurance contributions payment for the month",
+        category="insurance",
+        depends_on=[e.id for e in salary_events] if salary_events else None,
+        description="Monthly social insurance contributions based on payroll.",
+        tags=["ooo", "usn_dr", "insurance", "process:payroll_close"],
+    )
+    events.append(ev_ins)
+
+    ev_tour = ControlEvent(
+        id=_make_id(client_id, period, "tourist-fee"),
+        client_id=client_id,
+        date=period_end - timedelta(days=3),
+        title="Tourist fee calculation and payment",
+        category="tax_tourist",
+        description=(
+            "Calculate and pay tourist fee for the month based on guests statistics."
+        ),
+        tags=["ooo", "usn_dr", "tourist_fee", "process:tourist_fee_month"],
+    )
+    events.append(ev_tour)
+
+    ev_stmt = ControlEvent(
+        id=_make_id(client_id, period, "bank-statement"),
+        client_id=client_id,
+        date=period_end - timedelta(days=5),
+        title="Request bank statement for the month",
+        category="bank",
+        description="Request bank statement including tourist fee and payroll operations.",
+        tags=["bank", "ooo", "usn_dr", "process:bank_flow"],
+    )
+    events.append(ev_stmt)
+
+    ev_docs = ControlEvent(
+        id=_make_id(client_id, period, "docs-request"),
+        client_id=client_id,
+        date=period_end - timedelta(days=3),
+        title="Request primary documents for the month",
+        category="docs",
+        depends_on=[ev_stmt.id],
+        description=(
+            "Request acts, invoices and hotel or hostel documents for "
+            "tourist fee and USN control."
+        ),
+        tags=["docs", "ooo", "usn_dr", "tourist_fee", "process:docs_collect"],
+    )
+    events.append(ev_docs)
+
+    if period.month in (3, 6, 9, 12):
+        ev_usn_adv = ControlEvent(
+            id=_make_id(client_id, period, "usn-advance"),
+            client_id=client_id,
+            date=date(period.year, period.month, 25),
+            title="USN advance payment for the quarter",
+            category="tax_usn",
+            depends_on=[ev_docs.id],
+            description="Calculate and pay USN advance for the quarter.",
+            tags=["ooo", "usn_dr", "tax", "advance", "process:usn_quarter_close"],
+        )
+        events.append(ev_usn_adv)
+
+    if period.month == 12:
+        ev_usn_decl = ControlEvent(
+            id=_make_id(client_id, period, "usn-annual-declaration"),
+            client_id=client_id,
+            date=date(period.year + 1, 3, 31),
+            title="USN annual declaration submission",
+            category="tax_usn_decl",
+            depends_on=[ev_docs.id],
+            description="Prepare and submit USN annual declaration.",
+            tags=["ooo", "usn_dr", "declaration", "process:usn_year_close"],
+        )
+        events.append(ev_usn_decl)
+
+        ev_szv = ControlEvent(
+            id=_make_id(client_id, period, "szv-stazh"),
+            client_id=client_id,
+            date=date(period.year + 1, 3, 1),
+            title="SZV-STAZH annual report",
+            category="pension_report",
+            depends_on=[ev_ins.id],
+            description="Prepare and submit SZV-STAZH for all employees.",
+            tags=["ooo", "usn_dr", "szv-stazh", "process:year_close"],
+        )
+        events.append(ev_szv)
+
+    return events
+
+
+def _events_fallback(client_id: str, period: date) -> List[ControlEvent]:
+    period_end = _end_of_month(period)
+    ev = ControlEvent(
+        id=_make_id(client_id, period, "generic-monthly-review"),
+        client_id=client_id,
+        date=period_end,
+        title="Generic monthly review",
+        category="generic",
+        description=(
+            "Generic monthly review event generated by reglament engine "
+            "for unknown client_id."
+        ),
+        tags=["generic", "process:generic_month"],
+    )
+    return [ev]
 
 
 def generate_control_events_for_client(
-    client_id: str, today: date | None = None
-) -> List[Dict[str, Any]]:
-    if today is None:
-        today = date.today()
+    client_id: str, today: Optional[date] = None
+) -> List[Dict]:
+    """
+    Main entry point used by control_events_service.
+
+    client_id: business key of the client
+    today: reference date; period is taken as the month of this date.
+    """
+    period = _period_from_today(today)
 
     if client_id == "ip_usn_dr":
-        return _generate_ip_usn_dr(client_id=client_id, today=today)
+        events = _events_ip_usn_dr(period)
+    elif client_id == "ooo_osno_3_zp1025":
+        events = _events_ooo_osno_3_zp1025(period)
+    elif client_id == "ooo_usn_dr_tour_zp520":
+        events = _events_ooo_usn_dr_tour_zp520(period)
+    else:
+        events = _events_fallback(client_id, period)
 
-    if client_id == "ooo_osno_3_zp1025":
-        return _generate_ooo_osno_3_zp1025(client_id=client_id, today=today)
+    reference_date = today or date.today()
+    _add_overdue_flag(events, reference_date)
 
-    if client_id == "ooo_usn_dr_tour_zp520":
-        return _generate_ooo_usn_dr_tour_zp520(client_id=client_id, today=today)
-
-    return _generate_default_demo(client_id=client_id, today=today)
+    return [e.to_dict() for e in events]
