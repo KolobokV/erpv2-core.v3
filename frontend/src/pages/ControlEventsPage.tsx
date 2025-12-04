@@ -36,12 +36,28 @@ interface GenerateTasksResponse {
 }
 
 const ControlEventsPage: React.FC = () => {
+  const now = new Date();
+
   const [clientId, setClientId] = useState<string>("demo-client-1");
+  const [year, setYear] = useState<number>(now.getFullYear());
+  const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [events, setEvents] = useState<ControlEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [generating, setGenerating] = useState<boolean>(false);
   const [generateMessage, setGenerateMessage] = useState<string>("");
+
+  const buildQueryUrl = (base: string) => {
+    const params = new URLSearchParams();
+    if (year) {
+      params.append("year", year.toString());
+    }
+    if (month) {
+      params.append("month", month.toString());
+    }
+    const query = params.toString();
+    return query ? `${base}?${query}` : base;
+  };
 
   const loadData = async () => {
     try {
@@ -49,7 +65,8 @@ const ControlEventsPage: React.FC = () => {
       setError("");
       setGenerateMessage("");
 
-      const response = await fetch(`/api/control-events/${clientId}`);
+      const url = buildQueryUrl(`/api/control-events/${clientId}`);
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error("API request failed");
@@ -65,9 +82,8 @@ const ControlEventsPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const statusColor = (status: string) => {
@@ -92,12 +108,13 @@ const ControlEventsPage: React.FC = () => {
       setError("");
       setGenerateMessage("");
 
-      const genResponse = await fetch(
-        `/api/control-events/${clientId}/generate-tasks`,
-        {
-          method: "POST",
-        }
+      const genUrl = buildQueryUrl(
+        `/api/control-events/${clientId}/generate-tasks`
       );
+
+      const genResponse = await fetch(genUrl, {
+        method: "POST",
+      });
 
       if (!genResponse.ok) {
         throw new Error("Failed to build task payloads");
@@ -135,25 +152,191 @@ const ControlEventsPage: React.FC = () => {
     }
   };
 
+  const monthOptions = [
+    { value: 1, label: "Jan" },
+    { value: 2, label: "Feb" },
+    { value: 3, label: "Mar" },
+    { value: 4, label: "Apr" },
+    { value: 5, label: "May" },
+    { value: 6, label: "Jun" },
+    { value: 7, label: "Jul" },
+    { value: 8, label: "Aug" },
+    { value: 9, label: "Sep" },
+    { value: 10, label: "Oct" },
+    { value: 11, label: "Nov" },
+    { value: 12, label: "Dec" },
+  ];
+
+  const currentMonthLabel =
+    monthOptions.find((m) => m.value === month)?.label ?? month.toString();
+
+  const statusDot = (color: string) => (
+    <span
+      style={{
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: 9999,
+        backgroundColor: color,
+      }}
+    />
+  );
+
   return (
     <div
       style={{
-        backgroundColor: "#ffffff",
+        backgroundColor: "#f9fafb",
         border: "1px solid #e5e7eb",
-        borderRadius: 8,
+        borderRadius: 12,
         padding: 16,
       }}
     >
-      <h2
+      <div
         style={{
-          fontSize: 18,
-          fontWeight: 600,
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
           marginBottom: 16,
-          color: "#111827",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
         }}
       >
-        Control events
-      </h2>
+        <div>
+          <h2
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              marginBottom: 4,
+              color: "#111827",
+            }}
+          >
+            Control events
+          </h2>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#6b7280",
+            }}
+          >
+            Period view for regulatory events and deadlines.
+          </div>
+        </div>
+
+        <div
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            backgroundColor: "#fff",
+            border: "1px solid #e5e7eb",
+            minWidth: 200,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 0.04,
+              color: "#9ca3af",
+              marginBottom: 2,
+            }}
+          >
+            Context
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#111827",
+            }}
+          >
+            Client: <span style={{ fontWeight: 600 }}>{clientId}</span>
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#4b5563",
+              marginTop: 2,
+            }}
+          >
+            Period: {currentMonthLabel} {year}
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              color: "#9ca3af",
+            }}
+          >
+            Events:{" "}
+            <span style={{ fontWeight: 600, color: "#4b5563" }}>
+              {events.length}
+            </span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            backgroundColor: "#fff",
+            border: "1px solid #e5e7eb",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 0.04,
+              color: "#9ca3af",
+            }}
+          >
+            Status legend
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+              fontSize: 12,
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                color: "#4b5563",
+              }}
+            >
+              {statusDot("#dc2626")} Overdue
+            </span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                color: "#4b5563",
+              }}
+            >
+              {statusDot("#2563eb")} Planned
+            </span>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                color: "#4b5563",
+              }}
+            >
+              {statusDot("#16a34a")} Completed
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div
         style={{
@@ -161,6 +344,7 @@ const ControlEventsPage: React.FC = () => {
           gap: 8,
           marginBottom: 16,
           alignItems: "center",
+          flexWrap: "wrap",
         }}
       >
         <input
@@ -173,9 +357,53 @@ const ControlEventsPage: React.FC = () => {
             border: "1px solid #d1d5db",
             borderRadius: 6,
             fontSize: 14,
-            width: 150,
+            width: 160,
+            backgroundColor: "#ffffff",
           }}
         />
+
+        <input
+          type="number"
+          value={year}
+          onChange={(e) => {
+            const value = parseInt(e.target.value, 10);
+            if (!Number.isNaN(value)) {
+              setYear(value);
+            }
+          }}
+          placeholder="Year"
+          style={{
+            padding: "6px 8px",
+            border: "1px solid #d1d5db",
+            borderRadius: 6,
+            fontSize: 14,
+            width: 90,
+            backgroundColor: "#ffffff",
+          }}
+        />
+
+        <select
+          value={month}
+          onChange={(e) => {
+            const value = parseInt(e.target.value, 10);
+            if (!Number.isNaN(value)) {
+              setMonth(value);
+            }
+          }}
+          style={{
+            padding: "6px 8px",
+            border: "1px solid #d1d5db",
+            borderRadius: 6,
+            fontSize: 14,
+            backgroundColor: "#ffffff",
+          }}
+        >
+          {monthOptions.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
 
         <button
           onClick={loadData}
@@ -233,152 +461,183 @@ const ControlEventsPage: React.FC = () => {
         </div>
       )}
 
-      <table
+      <div
         style={{
-          width: "100%",
-          borderCollapse: "collapse",
           marginTop: 12,
+          borderRadius: 10,
+          overflow: "hidden",
+          backgroundColor: "#ffffff",
+          border: "1px solid #e5e7eb",
         }}
       >
-        <thead>
-          <tr>
-            <th
-              style={{
-                textAlign: "left",
-                padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              Date
-            </th>
-            <th
-              style={{
-                textAlign: "left",
-                padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              Title
-            </th>
-            <th
-              style={{
-                textAlign: "left",
-                padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              Category
-            </th>
-            <th
-              style={{
-                textAlign: "left",
-                padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              Status
-            </th>
-            <th
-              style={{
-                textAlign: "left",
-                padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              Depends on
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {events.map((ev) => (
-            <tr key={ev.id}>
-              <td
-                style={{
-                  padding: "6px 8px",
-                  borderBottom: "1px solid #f3f4f6",
-                  fontSize: 13,
-                  color: "#111827",
-                }}
-              >
-                {ev.date}
-              </td>
-
-              <td
-                style={{
-                  padding: "6px 8px",
-                  borderBottom: "1px solid #f3f4f6",
-                  fontSize: 13,
-                  color: "#111827",
-                }}
-              >
-                {ev.title}
-              </td>
-
-              <td
-                style={{
-                  padding: "6px 8px",
-                  borderBottom: "1px solid #f3f4f6",
-                  fontSize: 13,
-                  color: "#374151",
-                }}
-              >
-                {ev.category}
-              </td>
-
-              <td
-                style={{
-                  padding: "6px 8px",
-                  borderBottom: "1px solid #f3f4f6",
-                  fontSize: 13,
-                  color: statusColor(ev.status),
-                  fontWeight: 600,
-                }}
-              >
-                {ev.status}
-              </td>
-
-              <td
-                style={{
-                  padding: "6px 8px",
-                  borderBottom: "1px solid #f3f4f6",
-                  fontSize: 13,
-                  color: "#6b7280",
-                }}
-              >
-                {ev.depends_on.length === 0
-                  ? "-"
-                  : ev.depends_on.join(", ")}
-              </td>
-            </tr>
-          ))}
-
-          {events.length === 0 && !loading && !error && (
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+          }}
+        >
+          <thead
+            style={{
+              backgroundColor: "#f3f4f6",
+            }}
+          >
             <tr>
-              <td
-                colSpan={5}
+              <th
                 style={{
-                  padding: "10px 8px",
-                  fontSize: 13,
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #e5e7eb",
+                  fontSize: 12,
                   color: "#6b7280",
                 }}
               >
-                No events found
-              </td>
+                Date
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  color: "#6b7280",
+                }}
+              >
+                Title
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  color: "#6b7280",
+                }}
+              >
+                Category
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  color: "#6b7280",
+                }}
+              >
+                Status
+              </th>
+              <th
+                style={{
+                  textAlign: "left",
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  color: "#6b7280",
+                }}
+              >
+                Depends on
+              </th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {events.map((ev) => (
+              <tr
+                key={ev.id}
+                style={{
+                  backgroundColor: "#ffffff",
+                }}
+              >
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    borderBottom: "1px solid #f3f4f6",
+                    fontSize: 13,
+                    color: "#111827",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {ev.date}
+                </td>
+
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    borderBottom: "1px solid #f3f4f6",
+                    fontSize: 13,
+                    color: "#111827",
+                  }}
+                >
+                  {ev.title}
+                </td>
+
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    borderBottom: "1px solid #f3f4f6",
+                    fontSize: 13,
+                    color: "#374151",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "2px 6px",
+                      borderRadius: 9999,
+                      backgroundColor: "#eff6ff",
+                      color: "#1d4ed8",
+                      fontSize: 11,
+                    }}
+                  >
+                    {ev.category}
+                  </span>
+                </td>
+
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    borderBottom: "1px solid #f3f4f6",
+                    fontSize: 13,
+                    color: statusColor(ev.status),
+                    fontWeight: 600,
+                  }}
+                >
+                  {ev.status}
+                </td>
+
+                <td
+                  style={{
+                    padding: "6px 8px",
+                    borderBottom: "1px solid #f3f4f6",
+                    fontSize: 13,
+                    color: "#6b7280",
+                  }}
+                >
+                  {ev.depends_on.length === 0
+                    ? "-"
+                    : ev.depends_on.join(", ")}
+                </td>
+              </tr>
+            ))}
+
+            {events.length === 0 && !loading && !error && (
+              <tr>
+                <td
+                  colSpan={5}
+                  style={{
+                    padding: "10px 8px",
+                    fontSize: 13,
+                    color: "#6b7280",
+                    textAlign: "center",
+                  }}
+                >
+                  No events found
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

@@ -1,8 +1,10 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta, datetime
+from datetime import date, datetime
 from typing import List, Literal, Optional
+
+from .reglament_engine import generate_control_events_for_client
 
 
 StatusType = Literal["planned", "overdue", "completed"]
@@ -32,7 +34,7 @@ class ControlEvent:
             "depends_on": self.depends_on,
             "description": self.description,
             "tags": self.tags or [],
-            "source": self.source or "demo",
+            "source": self.source or "reglament",
         }
 
 
@@ -49,71 +51,85 @@ class ControlEventsService:
             return "overdue"
         return "planned"
 
-    def _demo_events_for_client(self, client_id: str) -> List[ControlEvent]:
+    def _events_for_client(
+        self,
+        client_id: str,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> List[ControlEvent]:
         today = date.today()
+        base_today = today
+
+        if year is not None:
+            try:
+                base_today = date(year, today.month, today.day)
+            except ValueError:
+                base_today = date(year, 1, 1)
+
+        base_events = generate_control_events_for_client(
+            client_id=client_id,
+            today=base_today,
+        )
+
         events: List[ControlEvent] = []
 
-        # event 1: overdue
-        e1_date = today - timedelta(days=3)
-        e1 = ControlEvent(
-            id=f"{client_id}-bank-statement-{e1_date.isoformat()}",
-            client_id=client_id,
-            date=e1_date,
-            title="Bank statement request",
-            category="bank",
-            status=self._compute_status(e1_date),
-            depends_on=[],
-            description="Monthly bank statement request for previous month.",
-            tags=["bank", "statement", "monthly"],
-            source="demo",
-        )
-        events.append(e1)
+        for base in base_events:
+            ev_date = base["date"]
 
-        # event 2: today + dependency
-        e2_date = today
-        e2 = ControlEvent(
-            id=f"{client_id}-primary-docs-{e2_date.isoformat()}",
-            client_id=client_id,
-            date=e2_date,
-            title="Primary documents request",
-            category="documents",
-            status=self._compute_status(e2_date),
-            depends_on=[e1.id],
-            description="Request primary documents after bank statement is received.",
-            tags=["docs", "monthly"],
-            source="demo",
-        )
-        events.append(e2)
+            if year is not None and ev_date.year != year:
+                continue
 
-        # event 3: future
-        e3_date = today + timedelta(days=10)
-        e3 = ControlEvent(
-            id=f"{client_id}-tax-payment-{e3_date.isoformat()}",
-            client_id=client_id,
-            date=e3_date,
-            title="Tax payment deadline",
-            category="tax",
-            status=self._compute_status(e3_date),
-            depends_on=[e2.id],
-            description="Planned tax payment based on current reporting period.",
-            tags=["tax", "deadline"],
-            source="demo",
-        )
-        events.append(e3)
+            if month is not None and ev_date.month != month:
+                continue
+
+            status = self._compute_status(ev_date)
+
+            events.append(
+                ControlEvent(
+                    id=base["id"],
+                    client_id=base["client_id"],
+                    date=ev_date,
+                    title=base["title"],
+                    category=base["category"],
+                    status=status,
+                    depends_on=base.get("depends_on", []),
+                    description=base.get("description"),
+                    tags=base.get("tags") or [],
+                    source=base.get("source") or "reglament",
+                )
+            )
 
         return events
 
-    def get_events_for_client(self, client_id: str) -> List[dict]:
-        events = self._demo_events_for_client(client_id=client_id)
+    def get_events_for_client(
+        self,
+        client_id: str,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> List[dict]:
+        events = self._events_for_client(
+            client_id=client_id,
+            year=year,
+            month=month,
+        )
         return [e.to_dict() for e in events]
 
-    def build_task_payloads_for_client(self, client_id: str) -> List[dict]:
+    def build_task_payloads_for_client(
+        self,
+        client_id: str,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> List[dict]:
         """
         Build task payloads (compatible with TaskModel) from control events
         for given client. This endpoint does not persist tasks, it only
         returns suggested payloads.
         """
-        events = self.get_events_for_client(client_id=client_id)
+        events = self.get_events_for_client(
+            client_id=client_id,
+            year=year,
+            month=month,
+        )
         now_iso = datetime.utcnow().isoformat()
 
         tasks: List[dict] = []
