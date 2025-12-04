@@ -1,26 +1,25 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 
 interface ControlEvent {
   id: string;
   client_id: string;
   date: string;
-  event_type: string;
-  description: string;
-  month: number;
-  year: number;
+  title: string;
+  category: string;
+  status: "planned" | "overdue" | "completed";
+  depends_on: string[];
+  description?: string;
+  tags: string[];
+  source?: string;
 }
 
 interface ApiResponse {
   client_id: string;
-  year: number;
-  month: number;
   events: ControlEvent[];
 }
 
 const ControlEventsPage: React.FC = () => {
-  const [clientId, setClientId] = useState<string>("1");
-  const [year, setYear] = useState<number>(2025);
-  const [month, setMonth] = useState<number>(1);
+  const [clientId, setClientId] = useState<string>("demo-client-1");
   const [events, setEvents] = useState<ControlEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -30,9 +29,7 @@ const ControlEventsPage: React.FC = () => {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `/api/control-events/${clientId}?year=${year}&month=${month}`
-      );
+      const response = await fetch(`/api/control-events/${clientId}`);
 
       if (!response.ok) {
         throw new Error("API request failed");
@@ -41,6 +38,7 @@ const ControlEventsPage: React.FC = () => {
       const data: ApiResponse = await response.json();
       setEvents(data.events);
     } catch (err) {
+      console.error(err);
       setError("Failed to load control events");
     } finally {
       setLoading(false);
@@ -50,6 +48,17 @@ const ControlEventsPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case "overdue":
+        return "#dc2626"; 
+      case "completed":
+        return "#16a34a"; 
+      default:
+        return "#2563eb"; 
+    }
+  };
 
   return (
     <div
@@ -64,7 +73,7 @@ const ControlEventsPage: React.FC = () => {
         style={{
           fontSize: 18,
           fontWeight: 600,
-          marginBottom: 12,
+          marginBottom: 16,
           color: "#111827",
         }}
       >
@@ -89,35 +98,7 @@ const ControlEventsPage: React.FC = () => {
             border: "1px solid #d1d5db",
             borderRadius: 6,
             fontSize: 14,
-            width: 100,
-          }}
-        />
-
-        <input
-          type="number"
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-          style={{
-            padding: "6px 8px",
-            border: "1px solid #d1d5db",
-            borderRadius: 6,
-            fontSize: 14,
-            width: 90,
-          }}
-        />
-
-        <input
-          type="number"
-          value={month}
-          min={1}
-          max={12}
-          onChange={(e) => setMonth(Number(e.target.value))}
-          style={{
-            padding: "6px 8px",
-            border: "1px solid #d1d5db",
-            borderRadius: 6,
-            fontSize: 14,
-            width: 70,
+            width: 150,
           }}
         />
 
@@ -141,9 +122,7 @@ const ControlEventsPage: React.FC = () => {
         <div style={{ fontSize: 14, color: "#6b7280" }}>Loading...</div>
       )}
 
-      {error && (
-        <div style={{ fontSize: 14, color: "#b91c1c" }}>{error}</div>
-      )}
+      {error && <div style={{ fontSize: 14, color: "#b91c1c" }}>{error}</div>}
 
       <table
         style={{
@@ -154,17 +133,6 @@ const ControlEventsPage: React.FC = () => {
       >
         <thead>
           <tr>
-            <th
-              style={{
-                textAlign: "left",
-                padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              ID
-            </th>
             <th
               style={{
                 textAlign: "left",
@@ -185,7 +153,7 @@ const ControlEventsPage: React.FC = () => {
                 color: "#6b7280",
               }}
             >
-              Type
+              Title
             </th>
             <th
               style={{
@@ -196,7 +164,29 @@ const ControlEventsPage: React.FC = () => {
                 color: "#6b7280",
               }}
             >
-              Description
+              Category
+            </th>
+            <th
+              style={{
+                textAlign: "left",
+                padding: "6px 8px",
+                borderBottom: "1px solid #e5e7eb",
+                fontSize: 12,
+                color: "#6b7280",
+              }}
+            >
+              Status
+            </th>
+            <th
+              style={{
+                textAlign: "left",
+                padding: "6px 8px",
+                borderBottom: "1px solid #e5e7eb",
+                fontSize: 12,
+                color: "#6b7280",
+              }}
+            >
+              Depends on
             </th>
           </tr>
         </thead>
@@ -212,18 +202,9 @@ const ControlEventsPage: React.FC = () => {
                   color: "#111827",
                 }}
               >
-                {ev.id}
-              </td>
-              <td
-                style={{
-                  padding: "6px 8px",
-                  borderBottom: "1px solid #f3f4f6",
-                  fontSize: 13,
-                  color: "#111827",
-                }}
-              >
                 {ev.date}
               </td>
+
               <td
                 style={{
                   padding: "6px 8px",
@@ -232,8 +213,9 @@ const ControlEventsPage: React.FC = () => {
                   color: "#111827",
                 }}
               >
-                {ev.event_type}
+                {ev.title}
               </td>
+
               <td
                 style={{
                   padding: "6px 8px",
@@ -242,7 +224,32 @@ const ControlEventsPage: React.FC = () => {
                   color: "#374151",
                 }}
               >
-                {ev.description}
+                {ev.category}
+              </td>
+
+              <td
+                style={{
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #f3f4f6",
+                  fontSize: 13,
+                  color: statusColor(ev.status),
+                  fontWeight: 600,
+                }}
+              >
+                {ev.status}
+              </td>
+
+              <td
+                style={{
+                  padding: "6px 8px",
+                  borderBottom: "1px solid #f3f4f6",
+                  fontSize: 13,
+                  color: "#6b7280",
+                }}
+              >
+                {ev.depends_on.length === 0
+                  ? "-"
+                  : ev.depends_on.join(", ")}
               </td>
             </tr>
           ))}
@@ -250,7 +257,7 @@ const ControlEventsPage: React.FC = () => {
           {events.length === 0 && !loading && !error && (
             <tr>
               <td
-                colSpan={4}
+                colSpan={5}
                 style={{
                   padding: "10px 8px",
                   fontSize: 13,

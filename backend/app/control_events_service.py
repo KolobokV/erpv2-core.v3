@@ -1,111 +1,111 @@
 ﻿from __future__ import annotations
 
-from datetime import date
-from typing import Any, Dict, List
-import calendar
+from dataclasses import dataclass
+from datetime import date, timedelta
+from typing import List, Literal, Optional
 
 
-StatusType = str  # "planned" | "overdue" | "completed"
-SourceType = str  # "tax_calendar" | "internal" | "contractual"
+StatusType = Literal["planned", "overdue", "completed"]
 
 
-def _get_last_day_of_month(year: int, month: int) -> int:
-    _, last_day = calendar.monthrange(year, month)
-    return last_day
+@dataclass
+class ControlEvent:
+    id: str
+    client_id: str
+    date: date
+    title: str
+    category: str
+    status: StatusType
+    depends_on: List[str]
+    description: Optional[str] = None
+    tags: List[str] | None = None
+    source: str | None = None
 
-
-def generate_demo_events(client_id: str, year: int, month: int) -> List[Dict[str, Any]]:
-    period_key = f"{year:04d}-{month:02d}"
-    last_day = _get_last_day_of_month(year, month)
-
-    events: List[Dict[str, Any]] = []
-
-    events.append(
-        {
-            "id": f"evt_{period_key}_bank_statement",
-            "clientId": client_id,
-            "date": date(year, month, 1),
-            "kind": "bank_statement_request",
-            "title": "Request bank statement",
-            "description": (
-                "Request bank statement from client for the period "
-                f"{period_key}."
-            ),
-            "source": "internal",
-            "status": "planned",
-            "isCritical": True,
-            "relatedTaskId": None,
-            "tags": ["bank", "documents", "monthly"],
-            "meta": {
-                "period": period_key,
-                "lawRef": None,
-                "amountType": "unknown",
-            },
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "client_id": self.client_id,
+            "date": self.date.isoformat(),
+            "title": self.title,
+            "category": self.category,
+            "status": self.status,
+            "depends_on": self.depends_on,
+            "description": self.description,
+            "tags": self.tags or [],
+            "source": self.source or "demo",
         }
-    )
 
-    events.append(
-        {
-            "id": f"evt_{period_key}_primary_docs",
-            "clientId": client_id,
-            "date": date(year, month, 2),
-            "kind": "primary_documents_request",
-            "title": "Request primary documents",
-            "description": "Request primary accounting documents for the month.",
-            "source": "internal",
-            "status": "planned",
-            "isCritical": True,
-            "relatedTaskId": None,
-            "tags": ["documents", "monthly"],
-            "meta": {
-                "period": period_key,
-                "lawRef": None,
-                "amountType": "unknown",
-            },
-        }
-    )
 
-    salary_day = min(15, last_day)
-    events.append(
-        {
-            "id": f"evt_{period_key}_salary_payment",
-            "clientId": client_id,
-            "date": date(year, month, salary_day),
-            "kind": "salary_payment",
-            "title": "Salary payment",
-            "description": "Regular salary payment according to internal schedule.",
-            "source": "internal",
-            "status": "planned",
-            "isCritical": True,
-            "relatedTaskId": None,
-            "tags": ["salary", "payment"],
-            "meta": {
-                "period": period_key,
-                "lawRef": None,
-                "amountType": "unknown",
-            },
-        }
-    )
+class ControlEventsService:
+    def __init__(self) -> None:
+        pass
 
-    events.append(
-        {
-            "id": f"evt_{period_key}_tax_payment",
-            "clientId": client_id,
-            "date": date(year, month, last_day),
-            "kind": "tax_payment",
-            "title": "Tax payment",
-            "description": "Generic tax payment deadline for the period.",
-            "source": "tax_calendar",
-            "status": "planned",
-            "isCritical": True,
-            "relatedTaskId": None,
-            "tags": ["tax", "deadline"],
-            "meta": {
-                "period": period_key,
-                "lawRef": None,
-                "amountType": "unknown",
-            },
-        }
-    )
+    @staticmethod
+    def _compute_status(event_date: date, completed: bool = False) -> StatusType:
+        today = date.today()
+        if completed:
+            return "completed"
+        if event_date < today:
+            return "overdue"
+        return "planned"
 
-    return events
+    def _demo_events_for_client(self, client_id: str) -> List[ControlEvent]:
+        today = date.today()
+        events: List[ControlEvent] = []
+
+        # event 1: overdue
+        e1_date = today - timedelta(days=3)
+        e1 = ControlEvent(
+            id=f"{client_id}-bank-statement-{e1_date.isoformat()}",
+            client_id=client_id,
+            date=e1_date,
+            title="Bank statement request",
+            category="bank",
+            status=self._compute_status(e1_date),
+            depends_on=[],
+            description="Monthly bank statement request for previous month.",
+            tags=["bank", "statement", "monthly"],
+            source="demo",
+        )
+        events.append(e1)
+
+        # event 2: today + dependency
+        e2_date = today
+        e2 = ControlEvent(
+            id=f"{client_id}-primary-docs-{e2_date.isoformat()}",
+            client_id=client_id,
+            date=e2_date,
+            title="Primary documents request",
+            category="documents",
+            status=self._compute_status(e2_date),
+            depends_on=[e1.id],
+            description="Request primary documents after bank statement is received.",
+            tags=["docs", "monthly"],
+            source="demo",
+        )
+        events.append(e2)
+
+        # event 3: future
+        e3_date = today + timedelta(days=10)
+        e3 = ControlEvent(
+            id=f"{client_id}-tax-payment-{e3_date.isoformat()}",
+            client_id=client_id,
+            date=e3_date,
+            title="Tax payment deadline",
+            category="tax",
+            status=self._compute_status(e3_date),
+            depends_on=[e2.id],
+            description="Planned tax payment based on current reporting period.",
+            tags=["tax", "deadline"],
+            source="demo",
+        )
+        events.append(e3)
+
+        return events
+
+    def get_events_for_client(self, client_id: str) -> List[dict]:
+        events = self._demo_events_for_client(client_id=client_id)
+        return [e.to_dict() for e in events]
+
+
+control_events_service = ControlEventsService()
