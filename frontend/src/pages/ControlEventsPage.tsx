@@ -29,6 +29,12 @@ interface TaskPayload {
   due_date: string | null;
 }
 
+interface GenerateTasksResponse {
+  client_id: string;
+  tasks_suggested: number;
+  tasks: TaskPayload[];
+}
+
 const ControlEventsPage: React.FC = () => {
   const [clientId, setClientId] = useState<string>("demo-client-1");
   const [events, setEvents] = useState<ControlEvent[]>([]);
@@ -61,6 +67,7 @@ const ControlEventsPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const statusColor = (status: string) => {
@@ -85,28 +92,31 @@ const ControlEventsPage: React.FC = () => {
       setError("");
       setGenerateMessage("");
 
-      const now = new Date().toISOString();
+      const genResponse = await fetch(
+        `/api/control-events/${clientId}/generate-tasks`,
+        {
+          method: "POST",
+        }
+      );
 
-      for (const ev of events) {
-        const payload: TaskPayload = {
-          id: `task-${ev.id}`,
-          title: ev.title,
-          description:
-            ev.description ||
-            `${ev.category} event on ${ev.date}`,
-          status: ev.status,
-          assignee: null,
-          created_at: now,
-          updated_at: null,
-          due_date: ev.date,
-        };
+      if (!genResponse.ok) {
+        throw new Error("Failed to build task payloads");
+      }
 
+      const genData: GenerateTasksResponse = await genResponse.json();
+
+      if (!genData.tasks || genData.tasks.length === 0) {
+        setError("No tasks were suggested by backend");
+        return;
+      }
+
+      for (const task of genData.tasks) {
         const response = await fetch("/api/tasks", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(task),
         });
 
         if (!response.ok) {
@@ -114,7 +124,9 @@ const ControlEventsPage: React.FC = () => {
         }
       }
 
-      setGenerateMessage("Tasks generated from control events");
+      setGenerateMessage(
+        `Tasks generated from control events: ${genData.tasks.length}`
+      );
     } catch (err) {
       console.error(err);
       setError("Failed to generate tasks");
@@ -234,7 +246,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid "#e5e7eb",
+                borderBottom: "1px solid #e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
@@ -245,7 +257,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid "#e5e7eb",
+                borderBottom: "1px solid #e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
@@ -256,7 +268,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid "#e5e7eb",
+                borderBottom: "1px solid #e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
@@ -267,7 +279,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid "#e5e7eb",
+                borderBottom: "1px solid #e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}

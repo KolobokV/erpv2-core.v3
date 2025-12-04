@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from typing import List, Literal, Optional
 
 
@@ -106,6 +106,32 @@ class ControlEventsService:
     def get_events_for_client(self, client_id: str) -> List[dict]:
         events = self._demo_events_for_client(client_id=client_id)
         return [e.to_dict() for e in events]
+
+    def build_task_payloads_for_client(self, client_id: str) -> List[dict]:
+        """
+        Build task payloads (compatible with TaskModel) from control events
+        for given client. This endpoint does not persist tasks, it only
+        returns suggested payloads.
+        """
+        events = self.get_events_for_client(client_id=client_id)
+        now_iso = datetime.utcnow().isoformat()
+
+        tasks: List[dict] = []
+        for ev in events:
+            tasks.append(
+                {
+                    "id": f"task-{ev['id']}",
+                    "title": ev["title"],
+                    "description": ev.get("description")
+                    or f"{ev['category']} event on {ev['date']}",
+                    "status": ev["status"],
+                    "assignee": None,
+                    "created_at": now_iso,
+                    "updated_at": None,
+                    "due_date": ev["date"],
+                }
+            )
+        return tasks
 
 
 control_events_service = ControlEventsService()

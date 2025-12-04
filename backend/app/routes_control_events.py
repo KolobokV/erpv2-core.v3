@@ -17,3 +17,28 @@ async def get_control_events_for_client(client_id: str):
 
     events = control_events_service.get_events_for_client(client_id=client_id)
     return {"client_id": client_id, "events": events}
+
+
+@router.post("/{client_id}/generate-tasks")
+async def generate_tasks_from_control_events(client_id: str):
+    """
+    Build task payloads from control events for given client.
+
+    This endpoint does not persist tasks. It returns a list of
+    payloads compatible with TaskModel which can be sent to /api/tasks.
+    """
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="client_id is required",
+        )
+
+    tasks = control_events_service.build_task_payloads_for_client(
+        client_id=client_id
+    )
+
+    return {
+        "client_id": client_id,
+        "tasks_suggested": len(tasks),
+        "tasks": tasks,
+    }
