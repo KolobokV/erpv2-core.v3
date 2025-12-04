@@ -18,16 +18,30 @@ interface ApiResponse {
   events: ControlEvent[];
 }
 
+interface TaskPayload {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  assignee: string | null;
+  created_at: string;
+  updated_at: string | null;
+  due_date: string | null;
+}
+
 const ControlEventsPage: React.FC = () => {
   const [clientId, setClientId] = useState<string>("demo-client-1");
   const [events, setEvents] = useState<ControlEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [generating, setGenerating] = useState<boolean>(false);
+  const [generateMessage, setGenerateMessage] = useState<string>("");
 
   const loadData = async () => {
     try {
       setLoading(true);
       setError("");
+      setGenerateMessage("");
 
       const response = await fetch(`/api/control-events/${clientId}`);
 
@@ -52,11 +66,60 @@ const ControlEventsPage: React.FC = () => {
   const statusColor = (status: string) => {
     switch (status) {
       case "overdue":
-        return "#dc2626"; 
+        return "#dc2626";
       case "completed":
-        return "#16a34a"; 
+        return "#16a34a";
       default:
-        return "#2563eb"; 
+        return "#2563eb";
+    }
+  };
+
+  const generateTasks = async () => {
+    if (events.length === 0) {
+      setError("No events to generate tasks from");
+      return;
+    }
+
+    try {
+      setGenerating(true);
+      setError("");
+      setGenerateMessage("");
+
+      const now = new Date().toISOString();
+
+      for (const ev of events) {
+        const payload: TaskPayload = {
+          id: `task-${ev.id}`,
+          title: ev.title,
+          description:
+            ev.description ||
+            `${ev.category} event on ${ev.date}`,
+          status: ev.status,
+          assignee: null,
+          created_at: now,
+          updated_at: null,
+          due_date: ev.date,
+        };
+
+        const response = await fetch("/api/tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create task");
+        }
+      }
+
+      setGenerateMessage("Tasks generated from control events");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to generate tasks");
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -113,16 +176,50 @@ const ControlEventsPage: React.FC = () => {
             cursor: "pointer",
             fontSize: 14,
           }}
+          disabled={loading}
         >
-          Load
+          {loading ? "Loading..." : "Load"}
+        </button>
+
+        <button
+          onClick={generateTasks}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: "#2563eb",
+            color: "#ffffff",
+            borderRadius: 6,
+            border: "none",
+            cursor: events.length === 0 ? "not-allowed" : "pointer",
+            fontSize: 14,
+            opacity: events.length === 0 || generating ? 0.7 : 1,
+          }}
+          disabled={events.length === 0 || loading || generating}
+        >
+          {generating ? "Generating..." : "Generate tasks"}
         </button>
       </div>
 
       {loading && (
-        <div style={{ fontSize: 14, color: "#6b7280" }}>Loading...</div>
+        <div style={{ fontSize: 14, color: "#6b7280" }}>Loading events...</div>
       )}
 
-      {error && <div style={{ fontSize: 14, color: "#b91c1c" }}>{error}</div>}
+      {generating && !loading && (
+        <div style={{ fontSize: 14, color: "#6b7280" }}>
+          Generating tasks from events...
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontSize: 14, color: "#b91c1c", marginTop: 4 }}>
+          {error}
+        </div>
+      )}
+
+      {generateMessage && !error && (
+        <div style={{ fontSize: 14, color: "#16a34a", marginTop: 4 }}>
+          {generateMessage}
+        </div>
+      )}
 
       <table
         style={{
@@ -137,7 +234,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
+                borderBottom: "1px solid "#e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
@@ -148,7 +245,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
+                borderBottom: "1px solid "#e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
@@ -159,7 +256,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
+                borderBottom: "1px solid "#e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
@@ -170,7 +267,7 @@ const ControlEventsPage: React.FC = () => {
               style={{
                 textAlign: "left",
                 padding: "6px 8px",
-                borderBottom: "1px solid #e5e7eb",
+                borderBottom: "1px solid "#e5e7eb",
                 fontSize: 12,
                 color: "#6b7280",
               }}
