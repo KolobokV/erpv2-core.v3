@@ -1,585 +1,546 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 
+const CLIENT_PROFILE_FOCUS_KEY = "erpv2_client_profile_focus";
+
 type ControlEvent = {
-  id: string;
-  client_id: string;
-  date: string;
-  title: string;
-  category: string;
-  status: string;
-  depends_on?: string[];
-  description?: string;
-  tags?: string[];
-  source?: string;
-};
-
-type GenerateTasksResponse = {
-  client_id: string;
-  tasks_suggested: number;
-  tasks: TaskPayload[];
-};
-
-type TaskPayload = {
   id?: string;
-  title: string;
+  client_id?: string;
+  date?: string;
+  title?: string;
   description?: string;
   status?: string;
-  assignee?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  due_date?: string | null;
+  tags?: string[];
+  process_id?: string;
 };
 
-const DEMO_CLIENTS = [
-  { id: "ip_usn_dr", label: "IP USN DR" },
-  { id: "ooo_osno_3_zp1025", label: "OOO OSNO + VAT (3 emp, 10/25)" },
-  {
-    id: "ooo_usn_dr_tour_zp520",
-    label: "OOO USN DR + tourist fee (2 emp, 5/20)"
+type ControlEventsResponse = {
+  client_id: string;
+  year: number;
+  month: number;
+  events: ControlEvent[];
+};
+
+type SuggestedTask = {
+  title?: string;
+  description?: string;
+  status?: string;
+  due_date?: string | null;
+  client_id?: string | null;
+  process_id?: string | null;
+  tags?: string[];
+};
+
+type TasksSuggestionResponse = {
+  client_id: string;
+  tasks_suggested: number;
+  tasks: SuggestedTask[];
+  error?: string | null;
+};
+
+type EventsSummary = {
+  total: number;
+  planned: number;
+  overdue: number;
+  other: number;
+};
+
+const parsePeriod = (
+  period: string
+): { year?: number; month?: number } => {
+  const trimmed = period.trim();
+  if (!trimmed) {
+    return {};
   }
-];
 
-const monthOptions = [
-  { value: 1, label: "Jan" },
-  { value: 2, label: "Feb" },
-  { value: 3, label: "Mar" },
-  { value: 4, label: "Apr" },
-  { value: 5, label: "May" },
-  { value: 6, label: "Jun" },
-  { value: 7, label: "Jul" },
-  { value: 8, label: "Aug" },
-  { value: 9, label: "Sep" },
-  { value: 10, label: "Oct" },
-  { value: 11, label: "Nov" },
-  { value: 12, label: "Dec" }
-];
+  // expect "YYYY-MM"
+  const yStr = trimmed.slice(0, 4);
+  const mStr = trimmed.slice(5, 7);
 
-const now = new Date();
+  const y = Number.parseInt(yStr, 10);
+  const m = Number.parseInt(mStr, 10);
+
+  if (Number.isNaN(y) || Number.isNaN(m)) {
+    return {};
+  }
+
+  return { year: y, month: m };
+};
 
 const ControlEventsPage: React.FC = () => {
-  const [clientId, setClientId] = useState<string>("ip_usn_dr");
-  const [year, setYear] = useState<number>(now.getFullYear());
-  const [month, setMonth] = useState<number>(now.getMonth() + 1);
-
+  const [clientId, setClientId] = useState("");
+  const [period, setPeriod] = useState("");
   const [events, setEvents] = useState<ControlEvent[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [eventsMeta, setEventsMeta] = useState<{
+    client_id?: string;
+    year?: number;
+    month?: number;
+  }>({});
+  const [tasksResult, setTasksResult] =
+    useState<TasksSuggestionResponse | null>(null);
+
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [loadingTasks, setLoadingTasks] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isGeneratingTasks, setIsGeneratingTasks] = useState<boolean>(false);
-  const [generateResult, setGenerateResult] = useState<GenerateTasksResponse | null>(
-    null
-  );
-  const [generateError, setGenerateError] = useState<string | null>(null);
-
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [processFilter, setProcessFilter] = useState<string>("all");
-
-  const loadEvents = async () => {
-    setIsLoading(true);
-    setError(null);
-    setEvents([]);
+  useEffect(() => {
     try {
-      const params = new URLSearchParams();
-      if (year) params.append("year", String(year));
-      if (month) params.append("month", String(month));
-
-      const url = `/api/control-events/${encodeURIComponent(
-        clientId
-      )}?${params.toString()}`;
-
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        throw new Error(`Request failed with status ${resp.status}`);
+      const raw = window.localStorage.getItem(CLIENT_PROFILE_FOCUS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.clientId === "string" && parsed.clientId) {
+        setClientId(parsed.clientId);
       }
-      const data = await resp.json();
-      const eventsData = (data?.events ?? []) as ControlEvent[];
-      setEvents(eventsData);
-    } catch (err: any) {
-      setError(err?.message ?? "Failed to load control events.");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const summary: EventsSummary = useMemo(() => {
+    const total = events.length;
+    let planned = 0;
+    let overdue = 0;
+    let other = 0;
+
+    for (const ev of events) {
+      const status = (ev.status || "").toLowerCase();
+      if (!status || status === "planned") {
+        planned += 1;
+      } else if (status === "overdue" || status === "late") {
+        overdue += 1;
+      } else {
+        other += 1;
+      }
+    }
+
+    return { total, planned, overdue, other };
+  }, [events]);
+
+  const sortedEvents = useMemo(() => {
+    const copy = [...events];
+    copy.sort((a, b) => {
+      const aKey = (a.date || "") + (a.id || "");
+      const bKey = (b.date || "") + (b.id || "");
+      if (aKey < bKey) return -1;
+      if (aKey > bKey) return 1;
+      return 0;
+    });
+    return copy;
+  }, [events]);
+
+  const buildQueryString = () => {
+    const { year, month } = parsePeriod(period);
+    const params = new URLSearchParams();
+    if (year && Number.isFinite(year)) {
+      params.append("year", String(year));
+    }
+    if (month && Number.isFinite(month)) {
+      params.append("month", String(month));
+    }
+    const qs = params.toString();
+    return qs ? `?${qs}` : "";
+  };
+
+  const handleLoadEvents = async () => {
+    if (!clientId.trim()) {
+      setError("Client id is required");
+      return;
+    }
+
+    try {
+      setError(null);
+      setLoadingEvents(true);
+      setTasksResult(null);
+
+      const qs = buildQueryString();
+      const url = `/api/control-events/${encodeURIComponent(clientId.trim())}${qs}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Failed to load control events (HTTP ${res.status})`);
+      }
+
+      const json: ControlEventsResponse | any = await res.json();
+      const eventsList: ControlEvent[] = Array.isArray(json?.events)
+        ? json.events
+        : [];
+
+      setEvents(eventsList);
+      setEventsMeta({
+        client_id: json?.client_id ?? clientId.trim(),
+        year: json?.year,
+        month: json?.month,
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to load control events");
+      setEvents([]);
+      setEventsMeta({});
     } finally {
-      setIsLoading(false);
+      setLoadingEvents(false);
     }
   };
 
   const handleGenerateTasks = async () => {
-    setIsGeneratingTasks(true);
-    setGenerateError(null);
-    setGenerateResult(null);
+    if (!clientId.trim()) {
+      setError("Client id is required");
+      return;
+    }
+
     try {
-      const params = new URLSearchParams();
-      if (year) params.append("year", String(year));
-      if (month) params.append("month", String(month));
+      setError(null);
+      setLoadingTasks(true);
 
+      const qs = buildQueryString();
       const url = `/api/control-events/${encodeURIComponent(
-        clientId
-      )}/generate-tasks?${params.toString()}`;
+        clientId.trim()
+      )}/generate-tasks${qs}`;
 
-      const resp = await fetch(url, { method: "POST" });
-      if (!resp.ok) {
-        throw new Error(`Generate-tasks failed with status ${resp.status}`);
+      const res = await fetch(url, { method: "POST" });
+      if (!res.ok) {
+        throw new Error(`Failed to generate tasks (HTTP ${res.status})`);
       }
 
-      const data = (await resp.json()) as GenerateTasksResponse;
-      setGenerateResult(data);
+      const json: TasksSuggestionResponse | any = await res.json();
+      const tasks: SuggestedTask[] = Array.isArray(json?.tasks)
+        ? json.tasks
+        : [];
 
-      const tasks = data.tasks ?? [];
-      for (const t of tasks) {
-        const payload: TaskPayload = { ...t };
-        await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-      }
-    } catch (err: any) {
-      setGenerateError(err?.message ?? "Failed to generate tasks.");
+      setTasksResult({
+        client_id: json?.client_id ?? clientId.trim(),
+        tasks_suggested:
+          typeof json?.tasks_suggested === "number"
+            ? json.tasks_suggested
+            : tasks.length,
+        tasks,
+        error: typeof json?.error === "string" ? json.error : null,
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to generate tasks from control events");
+      setTasksResult(null);
     } finally {
-      setIsGeneratingTasks(false);
+      setLoadingTasks(false);
     }
   };
 
-  useEffect(() => {
-    loadEvents().catch(() => {
-      // error is handled in state
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, year, month]);
-
-  const currentMonthLabel =
-    monthOptions.find((m) => m.value === month)?.label ?? String(month);
-
-  const derived = useMemo(() => {
-    const uniqueCategories = new Set<string>();
-    const processTagSet = new Set<string>();
-    const todayIso = new Date().toISOString().slice(0, 10);
-
-    let total = 0;
-    let overdue = 0;
-    let planned = 0;
-    let completed = 0;
-
-    const perProcess: Record<
-      string,
-      { total: number; overdue: number; planned: number; completed: number }
-    > = {};
-
-    const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
-    let nextDeadline: string | null = null;
-
-    for (const e of sorted) {
-      total += 1;
-      if (e.status === "overdue") overdue += 1;
-      else if (e.status === "completed") completed += 1;
-      else if (e.status === "planned") planned += 1;
-
-      if (!nextDeadline && e.date >= todayIso) {
-        nextDeadline = `${e.date} — ${e.title}`;
-      }
-
-      if (e.category) {
-        uniqueCategories.add(e.category);
-      }
-
-      const tags = e.tags ?? [];
-      const processTags = tags.filter((t) => t.startsWith("process:"));
-      for (const pt of processTags) {
-        processTagSet.add(pt);
-        if (!perProcess[pt]) {
-          perProcess[pt] = { total: 0, overdue: 0, planned: 0, completed: 0 };
-        }
-        perProcess[pt].total += 1;
-        if (e.status === "overdue") perProcess[pt].overdue += 1;
-        else if (e.status === "completed") perProcess[pt].completed += 1;
-        else if (e.status === "planned") perProcess[pt].planned += 1;
-      }
-    }
-
-    const categories = Array.from(uniqueCategories).sort();
-    const processTags = Array.from(processTagSet).sort();
-
-    let filtered = [...sorted];
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((e) => e.status === statusFilter);
-    }
-    if (categoryFilter !== "all") {
-      filtered = filtered.filter((e) => e.category === categoryFilter);
-    }
-    if (processFilter !== "all") {
-      filtered = filtered.filter((e) =>
-        (e.tags ?? []).includes(processFilter)
-      );
-    }
-
-    return {
-      total,
-      overdue,
-      planned,
-      completed,
-      nextDeadline,
-      categories,
-      processTags,
-      perProcess,
-      filteredEvents: filtered
-    };
-  }, [events, statusFilter, categoryFilter, processFilter]);
+  const hasEvents = events.length > 0;
+  const hasTasksPreview = !!tasksResult && tasksResult.tasks.length > 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <h1 className="text-2xl font-semibold mb-2">Control Events</h1>
+    <div className="flex h-full flex-col gap-3 p-4">
+      <header className="border-b border-gray-200 pb-2">
+        <h1 className="text-base font-semibold text-gray-900">
+          Control events
+        </h1>
+        <p className="mt-1 text-xs text-gray-500">
+          Periodic control events for a single client and tasks suggested from
+          them.
+        </p>
+      </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="space-y-3 md:col-span-2">
-          <div className="border rounded-lg p-3 md:p-4 bg-white/5">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="flex flex-col">
-                <label className="text-xs font-medium opacity-70 mb-1">
-                  Client
-                </label>
-                <select
-                  className="border rounded px-2 py-1 text-sm bg-slate-900"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                >
-                  {DEMO_CLIENTS.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      {error && (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
 
-              <div className="flex flex-col">
-                <label className="text-xs font-medium opacity-70 mb-1">
-                  Year
-                </label>
-                <input
-                  type="number"
-                  className="border rounded px-2 py-1 text-sm w-24 bg-slate-900"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value) || year)}
-                />
-              </div>
+      <section className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-medium text-gray-700">
+            Client id
+          </label>
+          <input
+            type="text"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            placeholder="client_id (required)"
+            className="h-8 w-52 rounded border border-gray-300 px-2 text-xs"
+          />
+        </div>
 
-              <div className="flex flex-col">
-                <label className="text-xs font-medium opacity-70 mb-1">
-                  Month
-                </label>
-                <select
-                  className="border rounded px-2 py-1 text-sm bg-slate-900"
-                  value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                >
-                  {monthOptions.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-medium text-gray-700">
+            Period (optional)
+          </label>
+          <input
+            type="month"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="h-8 w-40 rounded border border-gray-300 px-2 text-xs"
+          />
+          <span className="text-[10px] text-gray-400">
+            Uses backend defaults if empty.
+          </span>
+        </div>
 
-              <div className="flex gap-2 ml-auto flex-wrap">
-                <button
-                  className="px-3 py-1 rounded text-sm border border-sky-500 hover:bg-sky-500/10"
-                  onClick={loadEvents}
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Loading..." : "Reload events"}
-                </button>
-                <button
-                  className="px-3 py-1 rounded text-sm border border-emerald-500 hover:bg-emerald-500/10"
-                  onClick={handleGenerateTasks}
-                  disabled={isGeneratingTasks}
-                >
-                  {isGeneratingTasks ? "Generating tasks..." : "Generate tasks"}
-                </button>
-              </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-gray-700">
+            Actions
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleLoadEvents}
+              disabled={loadingEvents || loadingTasks}
+              className="inline-flex h-8 items-center rounded border border-gray-300 bg-white px-3 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingEvents ? "Loading..." : "Load events"}
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateTasks}
+              disabled={loadingTasks || loadingEvents}
+              className="inline-flex h-8 items-center rounded border border-blue-500 bg-blue-600 px-3 text-[11px] font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingTasks ? "Generating..." : "Generate tasks"}
+            </button>
+          </div>
+        </div>
+
+        <div className="ml-auto flex flex-col items-end gap-1 text-[11px] text-gray-600">
+          <div>
+            Total events:{" "}
+            <span className="font-mono text-gray-900">
+              {summary.total}
+            </span>
+          </div>
+          <div className="flex gap-3">
+            <span>
+              Planned:{" "}
+              <span className="font-mono text-gray-900">
+                {summary.planned}
+              </span>
+            </span>
+            <span>
+              Overdue:{" "}
+              <span className="font-mono text-gray-900">
+                {summary.overdue}
+              </span>
+            </span>
+            <span>
+              Other:{" "}
+              <span className="font-mono text-gray-900">
+                {summary.other}
+              </span>
+            </span>
+          </div>
+          {eventsMeta.client_id && (
+            <div className="text-[10px] text-gray-400">
+              Loaded for {eventsMeta.client_id}
+              {eventsMeta.year && eventsMeta.month
+                ? ` @ ${eventsMeta.year}-${String(eventsMeta.month).padStart(
+                    2,
+                    "0"
+                  )}`
+                : ""}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(380px,1.2fr)_minmax(260px,0.9fr)] gap-3">
+        <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+          <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                Events
+              </h2>
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                Generated control events for the selected client and period.
+              </p>
             </div>
           </div>
 
-          <div className="border rounded-lg p-3 md:p-4 bg-white/5">
-            <div className="flex flex-wrap gap-3 items-center justify-between mb-2">
-              <div className="font-semibold text-sm">
-                Filters for control events
-              </div>
-              <div className="flex flex-wrap gap-2 text-xs md:text-sm">
-                <div className="flex items-center gap-1">
-                  <span className="opacity-70 text-xs">Status:</span>
-                  <select
-                    className="border rounded px-2 py-0.5 text-xs bg-slate-900"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All</option>
-                    <option value="planned">Planned</option>
-                    <option value="overdue">Overdue</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="opacity-70 text-xs">Category:</span>
-                  <select
-                    className="border rounded px-2 py-0.5 text-xs bg-slate-900"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                  >
-                    <option value="all">All</option>
-                    {derived.categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="opacity-70 text-xs">Process:</span>
-                  <select
-                    className="border rounded px-2 py-0.5 text-xs bg-slate-900"
-                    value={processFilter}
-                    onChange={(e) => setProcessFilter(e.target.value)}
-                  >
-                    <option value="all">All</option>
-                    {derived.processTags.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          {!hasEvents ? (
+            <div className="flex-1 px-2 py-4 text-xs text-gray-500">
+              No events loaded. Use{" "}
+              <span className="font-mono text-xs">Load events</span> above to
+              fetch them.
             </div>
-
-            {error && (
-              <div className="text-xs text-red-400 mb-2">{error}</div>
-            )}
-
-            {derived.nextDeadline && (
-              <div className="text-xs mb-2">
-                <span className="font-medium">Next deadline: </span>
-                {derived.nextDeadline}
-              </div>
-            )}
-
-            <div className="overflow-auto max-h-80 border rounded">
-              <table className="min-w-full text-xs md:text-sm">
-                <thead className="bg-slate-900">
+          ) : (
+            <div className="mt-2 max-h-[520px] overflow-auto pr-1">
+              <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
+                <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
                   <tr>
-                    <th className="px-2 py-1 text-left">Date</th>
-                    <th className="px-2 py-1 text-left">Title</th>
-                    <th className="px-2 py-1 text-left">Category</th>
-                    <th className="px-2 py-1 text-left">Status</th>
-                    <th className="px-2 py-1 text-left">Processes</th>
-                    <th className="px-2 py-1 text-left">Depends on</th>
+                    <th className="w-[90px] px-2 py-1 text-left font-medium">
+                      Date
+                    </th>
+                    <th className="px-2 py-1 text-left font-medium">
+                      Title
+                    </th>
+                    <th className="w-[90px] px-2 py-1 text-left font-medium">
+                      Status
+                    </th>
+                    <th className="w-[120px] px-2 py-1 text-left font-medium">
+                      Tags
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {derived.filteredEvents.map((e) => {
-                    const processTags = (e.tags ?? []).filter((t) =>
-                      t.startsWith("process:")
-                    );
+                  {sortedEvents.map((ev) => {
+                    const key = ev.id || `${ev.date || ""}_${ev.title || ""}`;
+
+                    const status = (ev.status || "").toLowerCase();
+                    let statusClasses =
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ";
+                    if (status === "overdue" || status === "late") {
+                      statusClasses +=
+                        "border-red-200 bg-red-50 text-red-700";
+                    } else if (status === "planned" || !status) {
+                      statusClasses +=
+                        "border-gray-200 bg-gray-50 text-gray-700";
+                    } else {
+                      statusClasses +=
+                        "border-blue-200 bg-blue-50 text-blue-700";
+                    }
+
+                    const tags = Array.isArray(ev.tags) ? ev.tags : [];
+
                     return (
-                      <tr key={e.id} className="border-t border-slate-800">
-                        <td className="px-2 py-1 whitespace-nowrap font-mono text-[11px] md:text-xs">
-                          {e.date}
-                        </td>
-                        <td className="px-2 py-1">{e.title}</td>
-                        <td className="px-2 py-1">
-                          <span className="inline-flex px-2 py-0.5 rounded-full bg-slate-800 text-[10px] md:text-xs">
-                            {e.category}
+                      <tr
+                        key={key}
+                        className="rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800 shadow-sm"
+                      >
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[11px] text-gray-900">
+                            {ev.date || "n/a"}
                           </span>
                         </td>
-                        <td className="px-2 py-1">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] md:text-xs ${
-                              e.status === "overdue"
-                                ? "bg-red-900/60"
-                                : e.status === "completed"
-                                ? "bg-emerald-900/60"
-                                : "bg-sky-900/60"
-                            }`}
-                          >
-                            {e.status}
+                        <td className="px-2 py-1 align-top">
+                          <div className="font-medium text-gray-900">
+                            {ev.title || "(no title)"}
+                          </div>
+                          {ev.description && (
+                            <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
+                              {ev.description}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span className={statusClasses}>
+                            {ev.status || "n/a"}
                           </span>
                         </td>
-                        <td className="px-2 py-1 text-[10px] md:text-xs">
-                          {processTags.length > 0 ? (
+                        <td className="px-2 py-1 align-top">
+                          {tags.length === 0 ? (
+                            <span className="text-[10px] text-gray-400">
+                              no tags
+                            </span>
+                          ) : (
                             <div className="flex flex-wrap gap-1">
-                              {processTags.map((t) => (
+                              {tags.map((t, idx) => (
                                 <span
-                                  key={t}
-                                  className="inline-flex px-2 py-0.5 rounded-full border border-slate-700"
+                                  key={`${t}_${idx}`}
+                                  className="inline-flex items-center rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-700"
                                 >
                                   {t}
                                 </span>
                               ))}
                             </div>
-                          ) : (
-                            "-"
                           )}
-                        </td>
-                        <td className="px-2 py-1 text-[10px] md:text-xs">
-                          {e.depends_on && e.depends_on.length > 0
-                            ? e.depends_on.join(", ")
-                            : "-"}
                         </td>
                       </tr>
                     );
                   })}
-                  {derived.filteredEvents.length === 0 &&
-                    !isLoading &&
-                    !error && (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="px-2 py-3 text-center text-xs opacity-70"
-                        >
-                          No events for selected period and filters.
-                        </td>
-                      </tr>
-                    )}
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+
+        <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+          <div className="border-b border-gray-100 pb-2">
+            <h2 className="text-sm font-semibold text-gray-800">
+              Suggested tasks
+            </h2>
+            <p className="mt-0.5 text-[11px] text-gray-500">
+              Preview of tasks generated from the events for this client.
+            </p>
           </div>
 
-          <div className="border rounded-lg p-3 md:p-4 bg-white/5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="font-semibold text-sm">
-                Generated tasks from control events
-              </div>
-              {generateResult && (
-                <div className="text-xs md:text-sm opacity-80">
-                  Suggested: {generateResult.tasks_suggested} · Pushed to /api/tasks
-                </div>
-              )}
+          {!tasksResult ? (
+            <div className="flex-1 px-2 py-4 text-xs text-gray-500">
+              No task suggestion yet. Use{" "}
+              <span className="font-mono text-xs">Generate tasks</span> above.
             </div>
-            {generateError && (
-              <div className="text-xs text-red-400 mb-2">{generateError}</div>
-            )}
-            {!generateResult && !generateError && (
-              <div className="text-xs opacity-70">
-                Use "Generate tasks" button above to create tasks based on current
-                period control events. Tasks will be available in Tasks dashboard.
-              </div>
-            )}
-            {generateResult && (
-              <div className="text-xs md:text-sm space-y-1">
-                {generateResult.tasks.map((t, idx) => (
-                  <div
-                    key={idx}
-                    className="border border-slate-800 rounded px-2 py-1"
-                  >
-                    <div className="font-medium">{t.title}</div>
-                    {t.due_date && (
-                      <div className="font-mono text-[11px]">
-                        Due: {t.due_date}
-                      </div>
-                    )}
-                    {t.description && (
-                      <div className="opacity-80 text-[11px] mt-1">
-                        {t.description}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {generateResult.tasks.length === 0 && (
-                  <div className="opacity-70">
-                    No tasks in response. Check backend logic for task generation.
+          ) : (
+            <div className="mt-2 flex-1 space-y-3">
+              <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-700">
+                <div>
+                  Client:{" "}
+                  <span className="font-mono text-gray-900">
+                    {tasksResult.client_id}
+                  </span>
+                </div>
+                <div>
+                  Suggested tasks:{" "}
+                  <span className="font-mono text-gray-900">
+                    {tasksResult.tasks_suggested}
+                  </span>
+                </div>
+                {tasksResult.error && (
+                  <div className="mt-1 text-[11px] text-red-600">
+                    Backend reported: {tasksResult.error}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
 
-        <div className="space-y-3">
-          <div className="border rounded-lg p-3 md:p-4 bg-white/5 text-xs md:text-sm">
-            <div className="font-semibold text-sm mb-1">
-              Summary for current period
-            </div>
-            <div className="space-y-1">
-              <div>
-                <span className="font-medium">Client:</span> {clientId}
-              </div>
-              <div>
-                <span className="font-medium">Period:</span> {year} -{" "}
-                {currentMonthLabel}
-              </div>
-              <div>
-                <span className="font-medium">Total events:</span> {derived.total}
-              </div>
-              <div>
-                <span className="font-medium">Overdue:</span> {derived.overdue}
-              </div>
-              <div>
-                <span className="font-medium">Planned:</span> {derived.planned}
-              </div>
-              <div>
-                <span className="font-medium">Completed:</span> {derived.completed}
-              </div>
-              {derived.nextDeadline && (
-                <div className="mt-1">
-                  <span className="font-medium">Next deadline:</span>{" "}
-                  {derived.nextDeadline}
+              {!hasTasksPreview ? (
+                <div className="px-2 py-2 text-xs text-gray-500">
+                  No detailed tasks payload returned.
+                </div>
+              ) : (
+                <div className="max-h-[420px] overflow-auto pr-1">
+                  <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
+                    <thead className="text-[11px] text-gray-500">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium">
+                          Title
+                        </th>
+                        <th className="w-[80px] px-2 py-1 text-left font-medium">
+                          Status
+                        </th>
+                        <th className="w-[90px] px-2 py-1 text-left font-medium">
+                          Due
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tasksResult.tasks.map((task, index) => {
+                        const key = `${task.title || "task"}_${index}`;
+                        return (
+                          <tr
+                            key={key}
+                            className="rounded-md border border-gray-100 bg-white text-[11px] text-gray-800 shadow-sm"
+                          >
+                            <td className="px-2 py-1 align-top">
+                              <div className="font-medium text-gray-900">
+                                {task.title || "(no title)"}
+                              </div>
+                              {task.description && (
+                                <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
+                                  {task.description}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-1 align-top">
+                              <span className="inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-[10px]">
+                                {task.status || "planned"}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1 align-top">
+                              <span className="font-mono text-[10px] text-gray-800">
+                                {task.due_date || "n/a"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="border rounded-lg p-3 md:p-4 bg-white/5 text-xs md:text-sm">
-            <div className="font-semibold text-sm mb-1">
-              Process coverage (process:* tags)
-            </div>
-            {derived.processTags.length === 0 && (
-              <div className="opacity-70">
-                No process tags on events for selected period.
-              </div>
-            )}
-            {derived.processTags.length > 0 && (
-              <div className="space-y-1">
-                {derived.processTags.map((p) => {
-                  const stats = derived.perProcess[p];
-                  return (
-                    <div
-                      key={p}
-                      className="border border-slate-800 rounded px-2 py-1"
-                    >
-                      <div className="font-mono text-[11px] mb-1">{p}</div>
-                      <div className="text-[11px] space-x-2">
-                        <span>Total: {stats.total}</span>
-                        <span>Overdue: {stats.overdue}</span>
-                        <span>Planned: {stats.planned}</span>
-                        <span>Completed: {stats.completed}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="border rounded-lg p-3 md:p-4 bg-white/5 text-xs md:text-sm">
-            <div className="font-semibold text-sm mb-1">
-              Link to internal processes
-            </div>
-            <ul className="list-disc ml-4 space-y-1">
-              <li>
-                process:* tags on events correspond to internal process codes in
-                definitions.
-              </li>
-              <li>
-                Process coverage above shows which processes are active and how many
-                events are overdue or planned.
-              </li>
-              <li>
-                Tasks generated here are consumed by Internal Processes and Tasks
-                dashboard as operational workload.
-              </li>
-            </ul>
-          </div>
-        </div>
+          )}
+        </section>
       </div>
     </div>
   );

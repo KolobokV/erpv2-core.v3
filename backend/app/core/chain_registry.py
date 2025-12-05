@@ -1,44 +1,66 @@
 ﻿from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, Union
 
-logger = logging.getLogger("app.chains.registry")
+logger = logging.getLogger(__name__)
 
-ChainHandler = Callable[[Dict[str, Any]], Awaitable[None] | None]
+ChainHandlerSync = Callable[[Optional[str], Dict[str, Any]], None]
+ChainHandlerAsync = Callable[[Optional[str], Dict[str, Any]], Awaitable[None]]
+ChainHandler = Union[ChainHandlerSync, ChainHandlerAsync]
 
 _chain_registry: Dict[str, ChainHandler] = {}
 
 
 def register_chain(chain_id: str, handler: ChainHandler) -> None:
     """
-    Register a handler for a given chain id.
+    Register a chain handler by id.
 
-    Handler signature:
-        handler(context: Dict[str, Any]) -> None | Awaitable[None]
+    Chain handler signature:
+        def handler(client_id: Optional[str], context: Dict[str, Any]) -> None | Awaitable[None]
     """
-    if not chain_id:
+    if not chain_id or not isinstance(chain_id, str):
         raise ValueError("chain_id must be a non-empty string")
 
+    logger.info("Registering chain handler: %s -> %s", chain_id, getattr(handler, "__name__", str(handler)))
     _chain_registry[chain_id] = handler
-    logger.info("Registered chain handler for chain_id=%s", chain_id)
 
 
 def get_chain_handler(chain_id: str) -> Optional[ChainHandler]:
-    """Return handler for a given chain id, or None if not registered."""
+    """
+    Get a previously registered chain handler by id.
+    """
     return _chain_registry.get(chain_id)
+
+
+def list_registered_chains() -> Dict[str, ChainHandler]:
+    """
+    Return a copy of all registered chain handlers.
+    """
+    return dict(_chain_registry)
 
 
 def register_builtin_chains() -> None:
     """
-    Register a small set of builtin chains.
+    Register builtin chains that are always available.
 
-    For now this only contains a debug chain that logs the context.
-    It is safe for use in any environment.
+    This function:
+    - Registers a simple debug logging chain ("debug.log")
+    - Imports reglament chains module so that it can self-register its chains
     """
-
-    async def debug_log_chain(context: Dict[str, Any]) -> None:
-        logger.info("Builtin debug.log chain executed with context=%r", context)
+    def debug_log_chain(client_id: Optional[str], context: Dict[str, Any]) -> None:
+        safe_context = context or {}
+        logger.info(
+            "Chain debug.log executed for client_id=%s with context=%s",
+            client_id,
+            safe_context,
+        )
 
     register_chain("debug.log", debug_log_chain)
+
+    try:
+        from . import reglament_chains  # noqa: F401
+
+        logger.info("Reglament chains module imported successfully")
+    except Exception as exc:
+        logger.warning("Failed to import reglament_chains: %s", exc)

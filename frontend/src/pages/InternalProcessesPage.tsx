@@ -51,6 +51,8 @@ const InternalProcessesPage: React.FC = () => {
   const [chainResult, setChainResult] = useState<string | null>(null);
   const [chainError, setChainError] = useState<string | null>(null);
 
+  const [chainOptions, setChainOptions] = useState<string[]>([]);
+
   const tasksSummary = useMemo<TasksSummary>(() => {
     const total = tasksForInstance.length;
     let completed = 0;
@@ -132,6 +134,36 @@ const InternalProcessesPage: React.FC = () => {
   useEffect(() => {
     loadAll();
   }, []);
+
+  // ===== LOAD REGISTERED CHAINS FOR DEBUG PANEL =====
+  useEffect(() => {
+    const loadChains = async () => {
+      try {
+        const res = await fetch("/api/internal/chains/registered");
+        if (!res.ok) {
+          return;
+        }
+        const json = await res.json();
+        const items = Array.isArray(json) ? json : json.items ?? [];
+        const ids: string[] = [];
+        for (const item of items) {
+          if (item && typeof item.id === "string") {
+            ids.push(item.id);
+          }
+        }
+        if (ids.length > 0) {
+          setChainOptions(ids);
+          if (!chainId) {
+            setChainId(ids[0]);
+          }
+        }
+      } catch {
+        // silent fail for debug helper
+      }
+    };
+
+    loadChains();
+  }, [chainId]);
 
   // ===== LIFECYCLE AUTOSYNC FROM TASKS =====
   useEffect(() => {
@@ -311,27 +343,24 @@ const InternalProcessesPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full gap-3 p-4">
-      {/* LEFT SIDE: main content */}
+    <div className="flex h-full p-4">
       <div className="flex min-h-0 flex-1 flex-col gap-3">
         <header className="border-b border-gray-200 pb-2">
           <h1 className="text-base font-semibold text-gray-900">
             Internal processes
           </h1>
           <p className="mt-1 text-xs text-gray-500">
-            Internal process instances on the left, related tasks on the right.
+            Internal process instances on the left, related tasks in the middle, chain debug on the right.
           </p>
         </header>
 
-        {/* ERRORS */}
         {err && (
           <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             {err}
           </div>
         )}
 
-        {/* MAIN GRID: instances + tasks */}
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(360px,420px)_1fr] gap-3">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(340px,380px)_minmax(0,1fr)_280px] gap-3">
           {/* Left column: process instances */}
           <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -352,7 +381,7 @@ const InternalProcessesPage: React.FC = () => {
                 them.
               </div>
             ) : (
-              <div className="mt-1 max-h-[480px] overflow-auto pr-1">
+              <div className="mt-1 min-h-0 flex-1 overflow-auto pr-1">
                 <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
                   <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
                     <tr>
@@ -458,7 +487,7 @@ const InternalProcessesPage: React.FC = () => {
             )}
           </section>
 
-          {/* Right column: tasks for selected instance */}
+          {/* Middle column: tasks for selected instance */}
           <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
               <div>
@@ -553,7 +582,7 @@ const InternalProcessesPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="mt-2 max-h-[480px] overflow-auto pr-1">
+              <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1">
                 <table className="min-w-full border-separate border-spacing-y-1 text-xs">
                   <thead className="text-[11px] text-gray-500">
                     <tr>
@@ -619,72 +648,94 @@ const InternalProcessesPage: React.FC = () => {
               </div>
             )}
           </section>
+
+          {/* Right column: chain debug panel */}
+          <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+            <div className="mb-2">
+              <div className="text-[11px] font-semibold text-gray-700">
+                Chain debug
+              </div>
+              <p className="mt-0.5 text-[11px] text-gray-500">
+                Trigger chains with instance context.
+              </p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              <div className="mb-2">
+                <label className="mb-1 block text-[11px] text-gray-600">
+                  Chain id
+                </label>
+                {chainOptions.length > 0 ? (
+                  <select
+                    value={chainId}
+                    onChange={(e) => setChainId(e.target.value)}
+                    className="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] bg-white"
+                  >
+                    {chainOptions.map((id) => (
+                      <option key={id} value={id}>
+                        {id}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={chainId}
+                    placeholder="chain_id"
+                    onChange={(e) => setChainId(e.target.value)}
+                    className="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+                  />
+                )}
+              </div>
+
+              <div className="mb-2">
+                <label className="mb-1 block text-[11px] text-gray-600">
+                  Client id (optional)
+                </label>
+                <input
+                  type="text"
+                  value={chainClient}
+                  placeholder="client_id (optional)"
+                  onChange={(e) => setChainClient(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+                />
+              </div>
+
+              <div className="mb-2">
+                <label className="mb-1 block text-[11px] text-gray-600">
+                  Context JSON
+                </label>
+                <textarea
+                  value={chainContext}
+                  placeholder="context JSON"
+                  onChange={(e) => setChainContext(e.target.value)}
+                  className="h-32 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] font-mono"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleChainDebug}
+                className="inline-flex w-full items-center justify-center rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Run chain
+              </button>
+
+              {chainError && (
+                <div className="mt-2 text-[11px] text-red-600 break-words">
+                  {chainError}
+                </div>
+              )}
+
+              {chainResult && (
+                <pre className="mt-2 max-h-40 overflow-auto rounded border border-gray-200 bg-gray-50 p-1 text-[11px] text-gray-700">
+                  {chainResult}
+                </pre>
+              )}
+            </div>
+          </section>
         </div>
       </div>
-
-      {/* RIGHT SIDE: chain debug panel */}
-      <aside className="flex w-64 shrink-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
-        <div className="mb-2">
-          <div className="text-[11px] font-semibold text-gray-700">
-            Chain debug
-          </div>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            Trigger chains with instance context.
-          </p>
-        </div>
-
-        <label className="mb-1 block text-[11px] text-gray-600">
-          Chain id
-        </label>
-        <input
-          type="text"
-          value={chainId}
-          placeholder="chain_id"
-          onChange={(e) => setChainId(e.target.value)}
-          className="mb-2 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
-        />
-
-        <label className="mb-1 block text-[11px] text-gray-600">
-          Client id (optional)
-        </label>
-        <input
-          type="text"
-          value={chainClient}
-          placeholder="client_id (optional)"
-          onChange={(e) => setChainClient(e.target.value)}
-          className="mb-2 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
-        />
-
-        <label className="mb-1 block text-[11px] text-gray-600">
-          Context JSON
-        </label>
-        <textarea
-          value={chainContext}
-          placeholder="context JSON"
-          onChange={(e) => setChainContext(e.target.value)}
-          className="mb-2 h-32 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] font-mono"
-        />
-
-        <button
-          type="button"
-          onClick={handleChainDebug}
-          className="inline-flex items-center justify-center rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
-        >
-          Run chain
-        </button>
-
-        {chainError && (
-          <div className="mt-2 text-[11px] text-red-600 break-words">
-            {chainError}
-          </div>
-        )}
-
-        {chainResult && (
-          <pre className="mt-2 max-h-40 overflow-auto rounded border border-gray-200 bg-gray-50 p-1 text-[11px] text-gray-700">
-            {chainResult}
-          </pre>
-        )}
-      </aside>
     </div>
   );
 };

@@ -1,68 +1,67 @@
 ﻿from __future__ import annotations
 
-import asyncio
+import inspect
 import logging
 from typing import Any, Dict, Optional
 
-from app.core.events import get_event_system
-from app.core.chain_registry import get_chain_handler
+from .chain_registry import ChainHandler, get_chain_handler
 
-logger = logging.getLogger("app.chains")
+logger = logging.getLogger(__name__)
 
 
 class ChainExecutor:
     """
-    Core entry point for chain execution.
+    Simple executor for running registered chains.
 
-    Later this class will:
-    - load chain definitions from storage,
-    - evaluate conditions,
-    - execute steps (tasks, notifications, waits),
-    - emit events about progress.
-
-    For now it delegates to a simple in-memory registry of chain handlers.
+    It resolves a handler by chain_id from chain_registry and executes it with:
+        client_id: Optional[str]
+        context: Dict[str, Any]
     """
-
-    def __init__(self) -> None:
-        self.events = get_event_system()
 
     async def run_chain(
         self,
         chain_id: str,
-        client_id: Optional[str] = None,
+        client_id: Optional[str],
         context: Optional[Dict[str, Any]] = None,
     ) -> None:
-        ctx: Dict[str, Any] = dict(context or {})
-        if client_id is not None:
-            ctx.setdefault("client_id", client_id)
-        ctx.setdefault("chain_id", chain_id)
+        if not chain_id:
+            logger.warning("Attempt to run chain with empty id")
+            return
 
-        logger.info(
-            "ChainExecutor: starting chain chain_id=%s client_id=%s context=%r",
-            chain_id,
-            client_id,
-            ctx,
-        )
-
-        handler = get_chain_handler(chain_id)
+        handler: Optional[ChainHandler] = get_chain_handler(chain_id)
         if handler is None:
-            logger.info("No handler registered for chain_id=%s; nothing to execute", chain_id)
             logger.info(
-                "ChainExecutor: finished chain chain_id=%s client_id=%s",
+                "No handler registered for chain_id=%s; nothing to execute",
                 chain_id,
-                client_id,
             )
             return
 
+        ctx: Dict[str, Any] = context or {}
+        logger.info(
+            "Starting chain execution: chain_id=%s, client_id=%s, context_keys=%s",
+            chain_id,
+            client_id,
+            list(ctx.keys()),
+        )
+
         try:
-            result = handler(ctx)
-            if asyncio.iscoroutine(result):
-                await result
-        except Exception:
-            logger.exception("Error while executing chain_id=%s", chain_id)
+            if inspect.iscoroutinefunction(handler):
+                await handler(client_id, ctx)
+            else:
+                result = handler(client_id, ctx)
+                if inspect.isawaitable(result):
+                    await result  # type: ignore[func-returns-value]
+        except Exception as exc:
+            logger.exception(
+                "Error while executing chain %s for client_id=%s: %s",
+                chain_id,
+                client_id,
+                exc,
+            )
+            return
 
         logger.info(
-            "ChainExecutor: finished chain chain_id=%s client_id=%s",
+            "Finished chain execution: chain_id=%s, client_id=%s",
             chain_id,
             client_id,
         )

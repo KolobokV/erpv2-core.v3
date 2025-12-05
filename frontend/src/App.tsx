@@ -13,6 +13,8 @@ import InternalProcessesPage from "./pages/InternalProcessesPage";
 import ProcessCoveragePage from "./pages/ProcessCoveragePage";
 import ControlEventsPage from "./pages/ControlEventsPage";
 
+import InternalControlEventsPage from "./pages/InternalControlEventsPage";
+
 const linkStyle = (isActive: boolean): React.CSSProperties => ({
   padding: "4px 10px",
   borderRadius: 6,
@@ -62,11 +64,9 @@ const App: React.FC = () => {
             >
               ERPv2 Control Panel
             </div>
+
             <nav style={{ display: "flex", alignItems: "center" }}>
-              <NavLink
-                to="/tasks"
-                style={({ isActive }) => linkStyle(isActive)}
-              >
+              <NavLink to="/tasks" style={({ isActive }) => linkStyle(isActive)}>
                 Tasks
               </NavLink>
 
@@ -75,6 +75,13 @@ const App: React.FC = () => {
                 style={({ isActive }) => linkStyle(isActive)}
               >
                 Control events
+              </NavLink>
+
+              <NavLink
+                to="/internal-control-events-store"
+                style={({ isActive }) => linkStyle(isActive)}
+              >
+                Control events store
               </NavLink>
 
               <NavLink
@@ -118,6 +125,11 @@ const App: React.FC = () => {
             <Route path="/control-events" element={<ControlEventsPage />} />
 
             <Route
+              path="/internal-control-events-store"
+              element={<InternalControlEventsPage />}
+            />
+
+            <Route
               path="/internal-processes"
               element={<InternalProcessesPage />}
             />
@@ -146,4 +158,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-

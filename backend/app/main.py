@@ -2,114 +2,97 @@
 
 import logging
 import pkgutil
-from typing import List
+from importlib import import_module
+from typing import Any, Iterable, Optional
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.routing import APIRouter
 
 from app.startup_events import init_app_events
+from app.core.scheduler_reglament import start_reglament_scheduler
 
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("app")
-
-
-def discover_api_routers() -> List[APIRouter]:
-    """
-    Discover APIRouter instances in common app packages.
-
-    We look for attributes named `api_router` or `router`
-    inside modules under:
-      - app.*
-      - app.api.*
-      - app.routes.*
-      - app.routers.*
-    """
-    routers: List[APIRouter] = []
-
-    base_packages = ["app", "app.api", "app.routes", "app.routers"]
-
-    seen_ids = set()
-
-    for base_name in base_packages:
-        try:
-            base_module = __import__(base_name, fromlist=["__path__"])
-        except ImportError:
-            continue
-        except Exception:
-            logger.exception("Error importing base package %s", base_name)
-            continue
-
-        module_path = getattr(base_module, "__path__", None)
-        if module_path is None:
-            # Not a package with a __path__, skip
-            continue
-
-        prefix = base_module.__name__ + "."
-
-        for finder, name, ispkg in pkgutil.walk_packages(module_path, prefix):
-            try:
-                module = __import__(name, fromlist=["api_router", "router"])
-            except ImportError:
-                continue
-            except Exception:
-                logger.exception("Error importing module %s", name)
-                continue
-
-            for attr_name in ("api_router", "router"):
-                candidate = getattr(module, attr_name, None)
-                if isinstance(candidate, APIRouter):
-                    cid = id(candidate)
-                    if cid not in seen_ids:
-                        seen_ids.add(cid)
-                        routers.append(candidate)
-                        logger.info(
-                            "Discovered %s in module %s as attribute %s",
-                            candidate,
-                            name,
-                            attr_name,
-                        )
-
-    if not routers:
-        logger.warning("No APIRouter instances discovered")
-    else:
-        logger.info("Total discovered APIRouter instances: %d", len(routers))
-
-    return routers
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(
-        title="ERPv2 Backend",
-        version="1.0.0",
-    )
+    app = FastAPI(title="ERPv2 backend")
 
-    # CORS config
+    # Basic CORS setup for local dev and docker.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # Discover and include all routers
-    for router in discover_api_routers():
-        app.include_router(router)
+    _include_all_routers(app)
 
-    # Simple health endpoint so the app is never completely empty
-    @app.get("/health", tags=["health"])
-    async def health_check() -> dict:
-        return {"status": "ok"}
-
-    # Startup events
     @app.on_event("startup")
-    async def on_startup() -> None:
+    async def _on_startup() -> None:  # type: ignore[no-redef]
+        logger.info("APP_STARTUP: initializing events and reglement scheduler")
         await init_app_events(app)
-        logger.info("Application startup complete")
+        start_reglament_scheduler()
 
     return app
+
+
+def _iter_modules(package_name: str) -> Iterable[Any]:
+    """
+    Yield imported modules for a given top-level package name.
+    """
+    try:
+        base = import_module(package_name)
+    except Exception as exc:
+        logger.warning("Failed to import package %s: %s", package_name, exc)
+        return []
+
+    if not hasattr(base, "__path__"):
+        return [base]
+
+    modules = []
+    for module_info in pkgutil.walk_packages(base.__path__, base.__name__ + "."):
+        try:
+            module = import_module(module_info.name)
+            modules.append(module)
+        except Exception as exc:
+            logger.warning("Failed to import module %s: %s", module_info.name, exc)
+    return modules
+
+
+def _extract_router(module: Any) -> Optional[APIRouter]:
+    """
+    Try to extract APIRouter instance from module.
+    Supported attribute names: router, api_router.
+    """
+    for attr_name in ("router", "api_router"):
+        router = getattr(module, attr_name, None)
+        if isinstance(router, APIRouter):
+            return router
+    return None
+
+
+def _include_all_routers(app: FastAPI) -> None:
+    """
+    Automatically include all APIRouter instances from app.* and app.api.* modules.
+    """
+    logger.info("Including routers from app.* and app.api.*")
+
+    for package_name in ("app", "app.api"):
+        for module in _iter_modules(package_name):
+            router = _extract_router(module)
+            if router is not None:
+                logger.info(
+                    "Including router from module %s with prefix %s",
+                    getattr(module, "__name__", "<unknown>"),
+                    "".join(getattr(router, "prefix", "") or ""),
+                )
+                app.include_router(router)
 
 
 app = create_app()
