@@ -1,6 +1,4 @@
-﻿// InternalProcessesPage.tsx — internal process instances + tasks + lifecycle autosync
-
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const CLIENT_PROFILE_FOCUS_KEY = "erpv2_client_profile_focus";
@@ -36,17 +34,22 @@ const InternalProcessesPage: React.FC = () => {
 
   const [defs, setDefs] = useState<ProcessDefinition[]>([]);
   const [instances, setInstances] = useState<ProcessInstance[]>([]);
-  const [selectedInstance, setSelectedInstance] = useState<
-    ProcessInstance | null
-  >(null);
-  const [tasksForInstance, setTasksForInstance] = useState<any[]>([]);
-  const [lifecycleSyncInProgress, setLifecycleSyncInProgress] = useState(false);
-  const [lifecycleSyncError, setLifecycleSyncError] = useState<string | null>(
+  const [selectedInstance, setSelectedInstance] = useState<ProcessInstance | null>(
     null
   );
+  const [tasksForInstance, setTasksForInstance] = useState<any[]>([]);
+  const [lifecycleSyncInProgress, setLifecycleSyncInProgress] = useState(false);
+  const [lifecycleSyncError, setLifecycleSyncError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // ===== CHAIN DEBUG TRIGGER STATE =====
+  const [chainId, setChainId] = useState("debug.log");
+  const [chainClient, setChainClient] = useState("");
+  const [chainContext, setChainContext] = useState("{}");
+  const [chainResult, setChainResult] = useState<string | null>(null);
+  const [chainError, setChainError] = useState<string | null>(null);
 
   const tasksSummary = useMemo<TasksSummary>(() => {
     const total = tasksForInstance.length;
@@ -96,9 +99,7 @@ const InternalProcessesPage: React.FC = () => {
   }, [tasksForInstance]);
 
   const selectedInstanceLive: ProcessInstance | null = useMemo(() => {
-    if (!selectedInstance) {
-      return null;
-    }
+    if (!selectedInstance) return null;
     const found = instances.find((inst) => inst.id === selectedInstance.id);
     return found || selectedInstance;
   }, [selectedInstance, instances]);
@@ -113,12 +114,8 @@ const InternalProcessesPage: React.FC = () => {
         fetch("/api/internal/process-instances"),
       ]);
 
-      if (!defsRes.ok) {
-        throw new Error("Failed to load process definitions");
-      }
-      if (!instRes.ok) {
-        throw new Error("Failed to load process instances");
-      }
+      if (!defsRes.ok) throw new Error("Failed to load process definitions");
+      if (!instRes.ok) throw new Error("Failed to load process instances");
 
       const defsJson = await defsRes.json();
       const instJson = await instRes.json();
@@ -136,17 +133,11 @@ const InternalProcessesPage: React.FC = () => {
     loadAll();
   }, []);
 
-  // Lifecycle autosync: when tasksSummary says "completed-by-tasks",
-  // we call backend lifecycle endpoint to set instance.status = "completed".
+  // ===== LIFECYCLE AUTOSYNC FROM TASKS =====
   useEffect(() => {
-    if (!selectedInstance) {
-      return;
-    }
-
+    if (!selectedInstance) return;
     const live = instances.find((inst) => inst.id === selectedInstance.id);
-    if (!live) {
-      return;
-    }
+    if (!live) return;
 
     if (
       tasksSummary.derivedStatus !== "completed-by-tasks" ||
@@ -176,46 +167,35 @@ const InternalProcessesPage: React.FC = () => {
         );
 
         if (!res.ok) {
-          throw new Error(
-            `Lifecycle sync failed with status ${res.status}`
-          );
+          throw new Error(`Lifecycle sync failed with status ${res.status}`);
         }
 
         await res.json();
         await loadAll();
       } catch (error: any) {
-        if (error?.name === "AbortError") {
-          return;
-        }
-        setLifecycleSyncError(
-          error?.message || "Failed to sync lifecycle from tasks."
-        );
+        if (error?.name === "AbortError") return;
+        setLifecycleSyncError(error?.message || "Failed to sync lifecycle from tasks.");
       } finally {
         setLifecycleSyncInProgress(false);
       }
     };
 
     doSync();
+    return () => controller.abort();
+  }, [selectedInstance, instances, tasksSummary.derivedStatus, lifecycleSyncInProgress]);
 
-    return () => {
-      controller.abort();
-    };
-  }, [selectedInstance, instances, tasksSummary.derivedStatus]);
-
+  // ===== RUN INSTANCE =====
   const handleRun = async (inst: ProcessInstance) => {
     try {
       setLoading(true);
       setErr(null);
 
       const res = await fetch(
-        `/api/internal/process-instances/${encodeURIComponent(
-          inst.id
-        )}/generate-tasks`,
+        `/api/internal/process-instances/${encodeURIComponent(inst.id)}/generate-tasks`,
         { method: "POST" }
       );
-      if (!res.ok) {
-        throw new Error("Failed to generate tasks for instance");
-      }
+
+      if (!res.ok) throw new Error("Failed to generate tasks for instance");
 
       await loadAll();
       await handleViewTasks(inst);
@@ -226,20 +206,34 @@ const InternalProcessesPage: React.FC = () => {
     }
   };
 
+  // ===== VIEW TASKS + AUTOFILL CHAIN DEBUG CONTEXT =====
   const handleViewTasks = async (inst: ProcessInstance) => {
     try {
       setLoading(true);
       setErr(null);
 
       setSelectedInstance(inst);
+
+      const autofillClientId = inst.client_id || "";
+      setChainClient(autofillClientId);
+
+      const contextPayload = {
+        process_instance_id: inst.id,
+        process_definition_id: inst.definition_id,
+        process_name: inst.definition_name || inst.definition_id,
+        month: inst.month,
+        client_id: autofillClientId,
+        status: inst.status,
+      };
+
+      setChainContext(JSON.stringify(contextPayload, null, 2));
+
       const res = await fetch(
-        `/api/internal/process-instances/${encodeURIComponent(
-          inst.id
-        )}/tasks`
+        `/api/internal/process-instances/${encodeURIComponent(inst.id)}/tasks`
       );
-      if (!res.ok) {
-        throw new Error("Failed to load tasks for instance");
-      }
+
+      if (!res.ok) throw new Error("Failed to load tasks for instance");
+
       const json = await res.json();
       const items = Array.isArray(json) ? json : json.items ?? [];
       setTasksForInstance(items);
@@ -250,6 +244,7 @@ const InternalProcessesPage: React.FC = () => {
     }
   };
 
+  // ===== NAVIGATION =====
   const handleOpenClientProfile = (inst: ProcessInstance) => {
     try {
       const payload = {
@@ -257,14 +252,8 @@ const InternalProcessesPage: React.FC = () => {
         processId: inst.definition_id,
         instanceId: inst.id,
       };
-      window.localStorage.setItem(
-        CLIENT_PROFILE_FOCUS_KEY,
-        JSON.stringify(payload)
-      );
-    } catch {
-      // ignore storage errors
-    }
-
+      window.localStorage.setItem(CLIENT_PROFILE_FOCUS_KEY, JSON.stringify(payload));
+    } catch {}
     navigate("/client-profile");
   };
 
@@ -275,339 +264,427 @@ const InternalProcessesPage: React.FC = () => {
         processId: inst.definition_id,
         instanceId: inst.id,
       };
-      window.localStorage.setItem(
-        TASKS_FOCUS_KEY,
-        JSON.stringify(payload)
-      );
-    } catch {
-      // ignore storage errors
-    }
-
+      window.localStorage.setItem(TASKS_FOCUS_KEY, JSON.stringify(payload));
+    } catch {}
     navigate("/tasks");
   };
 
   const hasInstances = instances.length > 0;
 
+  // ===== CHAIN DEBUG TRIGGER ACTION =====
+  const handleChainDebug = async () => {
+    try {
+      setChainError(null);
+      setChainResult(null);
+
+      let parsedContext: any = {};
+
+      try {
+        parsedContext =
+          chainContext.trim() === "" ? {} : JSON.parse(chainContext.trim());
+      } catch (e: any) {
+        setChainError("Context is not valid JSON");
+        return;
+      }
+
+      const payload = {
+        chain_id: chainId,
+        client_id: chainClient || null,
+        context: parsedContext,
+      };
+
+      const res = await fetch("/api/internal/chains/debug-trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      setChainResult(JSON.stringify(json, null, 2));
+    } catch (e: any) {
+      setChainError(e.message || "Failed to trigger chain");
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
-      <header className="flex items-center justify-between gap-3 border-b border-gray-200 pb-2">
-        <div>
+    <div className="flex h-full gap-3 p-4">
+      {/* LEFT SIDE: main content */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <header className="border-b border-gray-200 pb-2">
           <h1 className="text-base font-semibold text-gray-900">
             Internal processes
           </h1>
           <p className="mt-1 text-xs text-gray-500">
             Internal process instances on the left, related tasks on the right.
           </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <button
-            type="button"
-            onClick={loadAll}
-            className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-          >
-            Refresh
-          </button>
-          {loading && (
-            <span className="text-[11px] text-gray-500">Loading...</span>
-          )}
-        </div>
-      </header>
+        </header>
 
-      {err && (
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {err}
-        </div>
-      )}
-
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(360px,420px)_1fr] gap-3">
-        {/* Left column: instances as table */}
-        <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <h2 className="text-sm font-semibold text-gray-800">
-              Process instances
-            </h2>
-            <span className="text-[11px] text-gray-500">
-              Total:{" "}
-              <span className="font-semibold text-gray-900">
-                {instances.length}
-              </span>
-            </span>
+        {/* ERRORS */}
+        {err && (
+          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {err}
           </div>
+        )}
 
-          {!hasInstances ? (
-            <div className="mt-2 text-xs text-gray-500">
-              No instances found. Use backend scheduler or demo data to create
-              them.
-            </div>
-          ) : (
-            <div className="mt-1 max-h-[480px] overflow-auto pr-1">
-              <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
-                <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
-                  <tr>
-                    <th className="px-2 py-1 text-left font-medium w-[110px]">
-                      Client
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium w-[70px]">
-                      Month
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Process
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium w-[80px]">
-                      Status
-                    </th>
-                    <th className="px-2 py-1 text-right font-medium w-[130px]">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {instances.map((inst) => {
-                    const isSelected =
-                      selectedInstance && selectedInstance.id === inst.id;
-
-                    return (
-                      <tr
-                        key={inst.id}
-                        className={
-                          "cursor-pointer rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800 shadow-sm hover:border-blue-300 hover:bg-blue-50" +
-                          (isSelected ? " bg-blue-50 border-blue-300" : "")
-                        }
-                        onClick={() => handleViewTasks(inst)}
-                      >
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[11px] text-gray-900">
-                            {inst.client_id || "no-client"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[11px] text-gray-800">
-                            {inst.month}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <div className="text-[11px] text-gray-900">
-                            {inst.definition_name || inst.definition_id}
-                          </div>
-                          {inst.last_run_result && (
-                            <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-1">
-                              {inst.last_run_result}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span
-                            className={
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium " +
-                              (inst.status === "completed"
-                                ? "bg-green-100 text-green-800 border border-green-200"
-                                : inst.status === "ready"
-                                ? "bg-gray-100 text-gray-800 border border-gray-200"
-                                : "bg-yellow-100 text-yellow-800 border border-yellow-200")
-                            }
-                          >
-                            {inst.status}
-                          </span>
-                        </td>
-                        <td
-                          className="px-2 py-1 align-top"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex flex-col items-end gap-1">
-                            <button
-                              type="button"
-                              className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-700 hover:bg-gray-50"
-                              onClick={() => handleRun(inst)}
-                            >
-                              Run
-                            </button>
-                            <div className="flex gap-1">
-                              <button
-                                type="button"
-                                className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
-                                onClick={() => handleOpenClientProfile(inst)}
-                              >
-                                Client
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
-                                onClick={() => handleOpenTasksDashboard(inst)}
-                              >
-                                Tasks
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        {/* Right column: tasks for selected instance */}
-        <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
-            <div>
+        {/* MAIN GRID: instances + tasks */}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(360px,420px)_1fr] gap-3">
+          {/* Left column: process instances */}
+          <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-gray-800">
-                Tasks for selected instance
+                Process instances
               </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Auto-generated tasks linked to internal process instance.
-              </p>
-              {selectedInstance && (
-                <>
-                  <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap gap-3">
-                    <span>
-                      Client:{" "}
-                      <span className="font-mono text-gray-900">
-                        {selectedInstance.client_id || "no client"}
-                      </span>
-                    </span>
-                    <span>
-                      Process:{" "}
-                      <span className="font-mono text-gray-900">
-                        {selectedInstance.definition_name ||
-                          selectedInstance.definition_id}
-                      </span>
-                    </span>
-                    <span>
-                      Month:{" "}
-                      <span className="font-mono text-gray-900">
-                        {selectedInstance.month || "n/a"}
-                      </span>
-                    </span>
-                    <span>
-                      Status:{" "}
-                      <span className="font-semibold text-gray-900">
-                        {selectedInstanceLive?.status ?? selectedInstance.status}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap gap-3">
-                    <span>
-                      Tasks:{" "}
-                      <span className="font-mono text-gray-900">
-                        {tasksSummary.completed} / {tasksSummary.total} completed
-                      </span>
-                    </span>
-                    <span>
-                      Overdue:{" "}
-                      <span className="font-mono text-gray-900">
-                        {tasksSummary.overdue}
-                      </span>
-                    </span>
-                    <span>
-                      Derived:{" "}
-                      <span className="font-mono text-gray-900">
-                        {tasksSummary.derivedStatus}
-                      </span>
-                    </span>
-                    {tasksSummary.derivedStatus === "completed-by-tasks" && (
+              <span className="text-[11px] text-gray-500">
+                Total:{" "}
+                <span className="font-semibold text-gray-900">
+                  {instances.length}
+                </span>
+              </span>
+            </div>
+
+            {!hasInstances ? (
+              <div className="mt-2 text-xs text-gray-500">
+                No instances found. Use backend scheduler or demo data to create
+                them.
+              </div>
+            ) : (
+              <div className="mt-1 max-h-[480px] overflow-auto pr-1">
+                <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
+                  <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
+                    <tr>
+                      <th className="w-[110px] px-2 py-1 text-left font-medium">
+                        Client
+                      </th>
+                      <th className="w-[70px] px-2 py-1 text-left font-medium">
+                        Month
+                      </th>
+                      <th className="px-2 py-1 text-left font-medium">Process</th>
+                      <th className="w-[80px] px-2 py-1 text-left font-medium">
+                        Status
+                      </th>
+                      <th className="w-[130px] px-2 py-1 text-right font-medium">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {instances.map((inst) => {
+                      const isSelected =
+                        selectedInstance && selectedInstance.id === inst.id;
+
+                      return (
+                        <tr
+                          key={inst.id}
+                          className={
+                            "cursor-pointer rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800 shadow-sm hover:border-blue-300 hover:bg-blue-50" +
+                            (isSelected ? " bg-blue-50 border-blue-300" : "")
+                          }
+                          onClick={() => handleViewTasks(inst)}
+                        >
+                          <td className="px-2 py-1 align-top">
+                            <span className="font-mono text-[11px] text-gray-900">
+                              {inst.client_id || "no-client"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <span className="font-mono text-[11px] text-gray-800">
+                              {inst.month}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <div className="text-[11px] text-gray-900">
+                              {inst.definition_name || inst.definition_id}
+                            </div>
+                            {inst.last_run_result && (
+                              <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-1">
+                                {inst.last_run_result}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <span
+                              className={
+                                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium " +
+                                (inst.status === "completed"
+                                  ? "bg-green-100 text-green-800 border border-green-200"
+                                  : inst.status === "ready"
+                                  ? "bg-gray-100 text-gray-800 border border-gray-200"
+                                  : "bg-yellow-100 text-yellow-800 border border-yellow-200")
+                              }
+                            >
+                              {inst.status}
+                            </span>
+                          </td>
+                          <td
+                            className="px-2 py-1 align-top"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex flex-col items-end gap-1">
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-700 hover:bg-gray-50"
+                                onClick={() => handleRun(inst)}
+                              >
+                                Run
+                              </button>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+                                  onClick={() => handleOpenClientProfile(inst)}
+                                >
+                                  Client
+                                </button>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+                                  onClick={() => handleOpenTasksDashboard(inst)}
+                                >
+                                  Tasks
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Right column: tasks for selected instance */}
+          <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-800">
+                  Tasks for selected instance
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Auto-generated tasks linked to internal process instance.
+                </p>
+                {selectedInstance && (
+                  <>
+                    <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-600">
                       <span>
-                        Lifecycle:{" "}
+                        Client:{" "}
                         <span className="font-mono text-gray-900">
-                          auto-sync to "completed"
-                          {lifecycleSyncInProgress ? " (syncing...)" : ""}
+                          {selectedInstance.client_id || "no client"}
                         </span>
                       </span>
-                    )}
-                    {lifecycleSyncError && (
-                      <span className="text-red-600">
-                        Lifecycle sync error: {lifecycleSyncError}
+                      <span>
+                        Process:{" "}
+                        <span className="font-mono text-gray-900">
+                          {selectedInstance.definition_name ||
+                            selectedInstance.definition_id}
+                        </span>
                       </span>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+                      <span>
+                        Month:{" "}
+                        <span className="font-mono text-gray-900">
+                          {selectedInstance.month || "n/a"}
+                        </span>
+                      </span>
+                      <span>
+                        Status:{" "}
+                        <span className="font-semibold text-gray-900">
+                          {selectedInstanceLive?.status ?? selectedInstance.status}
+                        </span>
+                      </span>
+                    </div>
 
-          {!selectedInstance ? (
-            <div className="flex-1 px-4 py-6 text-xs text-gray-500">
-              Select an instance on the left to see related tasks.
-            </div>
-          ) : tasksForInstance.length === 0 ? (
-            <div className="flex-1 px-4 py-6 text-xs text-gray-500 space-y-2">
-              <div>No tasks for this instance.</div>
-              <div>
-                Use <span className="font-mono text-xs">Run</span> on the
-                instance in the left panel to generate tasks.
+                    <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-600">
+                      <span>
+                        Tasks:{" "}
+                        <span className="font-mono text-gray-900">
+                          {tasksSummary.completed} / {tasksSummary.total} completed
+                        </span>
+                      </span>
+                      <span>
+                        Overdue:{" "}
+                        <span className="font-mono text-gray-900">
+                          {tasksSummary.overdue}
+                        </span>
+                      </span>
+                      <span>
+                        Derived:{" "}
+                        <span className="font-mono text-gray-900">
+                          {tasksSummary.derivedStatus}
+                        </span>
+                      </span>
+                      {tasksSummary.derivedStatus === "completed-by-tasks" && (
+                        <span>
+                          Lifecycle:{" "}
+                          <span className="font-mono text-gray-900">
+                            auto-sync to "completed"
+                            {lifecycleSyncInProgress ? " (syncing...)" : ""}
+                          </span>
+                        </span>
+                      )}
+                      {lifecycleSyncError && (
+                        <span className="text-red-600">
+                          Lifecycle sync error: {lifecycleSyncError}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
-          ) : (
-            <div className="mt-2 max-h-[480px] overflow-auto pr-1">
-              <table className="min-w-full border-separate border-spacing-y-1 text-xs">
-                <thead className="text-[11px] text-gray-500">
-                  <tr>
-                    <th className="px-2 py-1 text-left font-medium">Title</th>
-                    <th className="px-2 py-1 text-left font-medium">Status</th>
-                    <th className="px-2 py-1 text-left font-medium">Due</th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Assignee
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasksForInstance.map((task, index) => {
-                    const baseKey =
-                      (task.id as string) ||
-                      (task.internal_id as string) ||
-                      "task";
-                    const rowKey = `${baseKey}_${index}`;
 
-                    return (
-                      <tr
-                        key={rowKey}
-                        className="rounded-md bg-gray-50 text-[11px] text-gray-800"
-                      >
-                        <td className="px-2 py-1 align-top">
-                          <div className="font-medium text-gray-900">
-                            {task.title || "(no title)"}
-                          </div>
-                          {task.description && (
-                            <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
-                              {task.description}
+            {!selectedInstance ? (
+              <div className="flex-1 px-4 py-6 text-xs text-gray-500">
+                Select an instance on the left to see related tasks.
+              </div>
+            ) : tasksForInstance.length === 0 ? (
+              <div className="flex-1 space-y-2 px-4 py-6 text-xs text-gray-500">
+                <div>No tasks for this instance.</div>
+                <div>
+                  Use{" "}
+                  <span className="font-mono text-xs">
+                    Run
+                  </span>{" "}
+                  on the instance in the left panel to generate tasks.
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 max-h-[480px] overflow-auto pr-1">
+                <table className="min-w-full border-separate border-spacing-y-1 text-xs">
+                  <thead className="text-[11px] text-gray-500">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-medium">Title</th>
+                      <th className="px-2 py-1 text-left font-medium">Status</th>
+                      <th className="px-2 py-1 text-left font-medium">Due</th>
+                      <th className="px-2 py-1 text-left font-medium">Assignee</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tasksForInstance.map((task, index) => {
+                      const baseKey =
+                        (task.id as string) ||
+                        (task.internal_id as string) ||
+                        "task";
+                      const rowKey = `${baseKey}_${index}`;
+
+                      return (
+                        <tr
+                          key={rowKey}
+                          className="rounded-md bg-gray-50 text-[11px] text-gray-800"
+                        >
+                          <td className="px-2 py-1 align-top">
+                            <div className="font-medium text-gray-900">
+                              {task.title || "(no title)"}
                             </div>
-                          )}
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-[10px]">
-                            {task.status || "n/a"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <div className="flex flex-col gap-0.5 text-[10px]">
-                            <span>
-                              {task.due_date ||
-                                task.deadline ||
-                                task.planned_date ||
-                                "n/a"}
-                            </span>
-                            {task.is_overdue && (
-                              <span className="text-[10px] font-semibold text-red-600">
-                                Overdue
-                              </span>
+                            {task.description && (
+                              <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
+                                {task.description}
+                              </div>
                             )}
-                          </div>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[10px] text-gray-700">
-                            {task.assignee || "unassigned"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <span className="inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-[10px]">
+                              {task.status || "n/a"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <div className="flex flex-col gap-0.5 text-[10px]">
+                              <span>
+                                {task.due_date ||
+                                  task.deadline ||
+                                  task.planned_date ||
+                                  "n/a"}
+                              </span>
+                              {task.is_overdue && (
+                                <span className="text-[10px] font-semibold text-red-600">
+                                  Overdue
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-2 py-1 align-top">
+                            <span className="font-mono text-[10px] text-gray-700">
+                              {task.assignee || "unassigned"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
       </div>
+
+      {/* RIGHT SIDE: chain debug panel */}
+      <aside className="flex w-64 shrink-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+        <div className="mb-2">
+          <div className="text-[11px] font-semibold text-gray-700">
+            Chain debug
+          </div>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Trigger chains with instance context.
+          </p>
+        </div>
+
+        <label className="mb-1 block text-[11px] text-gray-600">
+          Chain id
+        </label>
+        <input
+          type="text"
+          value={chainId}
+          placeholder="chain_id"
+          onChange={(e) => setChainId(e.target.value)}
+          className="mb-2 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+        />
+
+        <label className="mb-1 block text-[11px] text-gray-600">
+          Client id (optional)
+        </label>
+        <input
+          type="text"
+          value={chainClient}
+          placeholder="client_id (optional)"
+          onChange={(e) => setChainClient(e.target.value)}
+          className="mb-2 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+        />
+
+        <label className="mb-1 block text-[11px] text-gray-600">
+          Context JSON
+        </label>
+        <textarea
+          value={chainContext}
+          placeholder="context JSON"
+          onChange={(e) => setChainContext(e.target.value)}
+          className="mb-2 h-32 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] font-mono"
+        />
+
+        <button
+          type="button"
+          onClick={handleChainDebug}
+          className="inline-flex items-center justify-center rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
+        >
+          Run chain
+        </button>
+
+        {chainError && (
+          <div className="mt-2 text-[11px] text-red-600 break-words">
+            {chainError}
+          </div>
+        )}
+
+        {chainResult && (
+          <pre className="mt-2 max-h-40 overflow-auto rounded border border-gray-200 bg-gray-50 p-1 text-[11px] text-gray-700">
+            {chainResult}
+          </pre>
+        )}
+      </aside>
     </div>
   );
 };
