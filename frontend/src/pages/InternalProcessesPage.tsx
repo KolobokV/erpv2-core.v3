@@ -1,7 +1,6 @@
-// InternalProcessesPage.tsx — navigation to Tasks Dashboard and Client Profile
-// + monthly scheduler UI
+﻿// InternalProcessesPage.tsx — internal process instances + tasks + lifecycle autosync
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const CLIENT_PROFILE_FOCUS_KEY = "erpv2_client_profile_focus";
@@ -24,16 +23,12 @@ type ProcessInstance = {
   client_id?: string;
 };
 
-type SchedulerResult = {
-  status?: string;
-  target_period?: string;
-  definitions_considered?: number;
-  clients_considered?: number;
-  instances_created?: number;
-  instances_skipped_existing?: number;
-  generate_tasks?: boolean;
-  tasks_generated?: number;
-  [key: string]: any;
+type TasksSummary = {
+  total: number;
+  completed: number;
+  overdue: number;
+  planned: number;
+  derivedStatus: string;
 };
 
 const InternalProcessesPage: React.FC = () => {
@@ -45,13 +40,68 @@ const InternalProcessesPage: React.FC = () => {
     ProcessInstance | null
   >(null);
   const [tasksForInstance, setTasksForInstance] = useState<any[]>([]);
+  const [lifecycleSyncInProgress, setLifecycleSyncInProgress] = useState(false);
+  const [lifecycleSyncError, setLifecycleSyncError] = useState<string | null>(
+    null
+  );
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [schedulerLoading, setSchedulerLoading] = useState(false);
-  const [schedulerResult, setSchedulerResult] = useState<
-    SchedulerResult | null
-  >(null);
+  const tasksSummary = useMemo<TasksSummary>(() => {
+    const total = tasksForInstance.length;
+    let completed = 0;
+    let overdue = 0;
+    let planned = 0;
+
+    const completedStatuses = ["done", "completed", "closed", "finished"];
+
+    for (const raw of tasksForInstance) {
+      const statusValue = (raw?.status ?? "").toString().toLowerCase();
+
+      if (!statusValue || statusValue === "planned" || statusValue === "new") {
+        planned += 1;
+        continue;
+      }
+
+      if (statusValue === "overdue" || statusValue === "late") {
+        overdue += 1;
+        continue;
+      }
+
+      if (completedStatuses.includes(statusValue)) {
+        completed += 1;
+      } else {
+        planned += 1;
+      }
+    }
+
+    let derivedStatus = "in-progress";
+
+    if (total === 0) {
+      derivedStatus = "no-tasks";
+    } else if (completed === total && overdue === 0) {
+      derivedStatus = "completed-by-tasks";
+    } else if (overdue > 0) {
+      derivedStatus = "has-overdue-tasks";
+    }
+
+    return {
+      total,
+      completed,
+      overdue,
+      planned,
+      derivedStatus,
+    };
+  }, [tasksForInstance]);
+
+  const selectedInstanceLive: ProcessInstance | null = useMemo(() => {
+    if (!selectedInstance) {
+      return null;
+    }
+    const found = instances.find((inst) => inst.id === selectedInstance.id);
+    return found || selectedInstance;
+  }, [selectedInstance, instances]);
 
   const loadAll = async () => {
     try {
@@ -63,8 +113,12 @@ const InternalProcessesPage: React.FC = () => {
         fetch("/api/internal/process-instances"),
       ]);
 
-      if (!defsRes.ok) throw new Error("Failed to load process definitions");
-      if (!instRes.ok) throw new Error("Failed to load process instances");
+      if (!defsRes.ok) {
+        throw new Error("Failed to load process definitions");
+      }
+      if (!instRes.ok) {
+        throw new Error("Failed to load process instances");
+      }
 
       const defsJson = await defsRes.json();
       const instJson = await instRes.json();
@@ -82,17 +136,86 @@ const InternalProcessesPage: React.FC = () => {
     loadAll();
   }, []);
 
+  // Lifecycle autosync: when tasksSummary says "completed-by-tasks",
+  // we call backend lifecycle endpoint to set instance.status = "completed".
+  useEffect(() => {
+    if (!selectedInstance) {
+      return;
+    }
+
+    const live = instances.find((inst) => inst.id === selectedInstance.id);
+    if (!live) {
+      return;
+    }
+
+    if (
+      tasksSummary.derivedStatus !== "completed-by-tasks" ||
+      live.status === "completed" ||
+      lifecycleSyncInProgress
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const doSync = async () => {
+      try {
+        setLifecycleSyncInProgress(true);
+        setLifecycleSyncError(null);
+
+        const res = await fetch(
+          `/api/internal/process-instances/${encodeURIComponent(
+            live.id
+          )}/lifecycle/sync-from-tasks`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ derived_status: tasksSummary.derivedStatus }),
+            signal: controller.signal,
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(
+            `Lifecycle sync failed with status ${res.status}`
+          );
+        }
+
+        await res.json();
+        await loadAll();
+      } catch (error: any) {
+        if (error?.name === "AbortError") {
+          return;
+        }
+        setLifecycleSyncError(
+          error?.message || "Failed to sync lifecycle from tasks."
+        );
+      } finally {
+        setLifecycleSyncInProgress(false);
+      }
+    };
+
+    doSync();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedInstance, instances, tasksSummary.derivedStatus]);
+
   const handleRun = async (inst: ProcessInstance) => {
     try {
       setLoading(true);
       setErr(null);
 
-      // backend endpoint is /generate-tasks, not /run
       const res = await fetch(
-        `/api/internal/process-instances/${inst.id}/generate-tasks`,
+        `/api/internal/process-instances/${encodeURIComponent(
+          inst.id
+        )}/generate-tasks`,
         { method: "POST" }
       );
-      if (!res.ok) throw new Error("Failed to generate tasks for instance");
+      if (!res.ok) {
+        throw new Error("Failed to generate tasks for instance");
+      }
 
       await loadAll();
       await handleViewTasks(inst);
@@ -110,9 +233,13 @@ const InternalProcessesPage: React.FC = () => {
 
       setSelectedInstance(inst);
       const res = await fetch(
-        `/api/internal/process-instances/${inst.id}/tasks`
+        `/api/internal/process-instances/${encodeURIComponent(
+          inst.id
+        )}/tasks`
       );
-      if (!res.ok) throw new Error("Failed to load tasks for instance");
+      if (!res.ok) {
+        throw new Error("Failed to load tasks for instance");
+      }
       const json = await res.json();
       const items = Array.isArray(json) ? json : json.items ?? [];
       setTasksForInstance(items);
@@ -123,31 +250,12 @@ const InternalProcessesPage: React.FC = () => {
     }
   };
 
-  const openTasksDashboard = (inst: ProcessInstance) => {
-    if (typeof window === "undefined") return;
-
+  const handleOpenClientProfile = (inst: ProcessInstance) => {
     try {
       const payload = {
         clientId: inst.client_id || "",
         processId: inst.definition_id,
         instanceId: inst.id,
-      };
-      window.localStorage.setItem(TASKS_FOCUS_KEY, JSON.stringify(payload));
-    } catch {
-      // ignore storage errors
-    }
-
-    // navigate to tasks page
-    navigate("/tasks");
-  };
-
-  const openClientProfile = (inst: ProcessInstance) => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const payload = {
-        clientId: inst.client_id || "",
-        month: inst.month || "",
       };
       window.localStorage.setItem(
         CLIENT_PROFILE_FOCUS_KEY,
@@ -157,340 +265,178 @@ const InternalProcessesPage: React.FC = () => {
       // ignore storage errors
     }
 
-    // navigate to client profile page
     navigate("/client-profile");
   };
 
-  const runScheduler = async (withTasks: boolean) => {
+  const handleOpenTasksDashboard = (inst: ProcessInstance) => {
     try {
-      setSchedulerLoading(true);
-      setErr(null);
-
-      const body = JSON.stringify({
-        generate_tasks: withTasks,
-      });
-
-      const res = await fetch("/api/internal/scheduler/run-monthly", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body,
-      });
-
-      if (!res.ok) {
-        throw new Error(`Scheduler failed: ${res.status}`);
-      }
-
-      const json = await res.json();
-      setSchedulerResult(json);
-      await loadAll();
-    } catch (e: any) {
-      setErr(e.message || "Failed to run monthly scheduler");
-    } finally {
-      setSchedulerLoading(false);
+      const payload = {
+        clientId: inst.client_id || "",
+        processId: inst.definition_id,
+        instanceId: inst.id,
+      };
+      window.localStorage.setItem(
+        TASKS_FOCUS_KEY,
+        JSON.stringify(payload)
+      );
+    } catch {
+      // ignore storage errors
     }
+
+    navigate("/tasks");
   };
 
-  const renderSchedulerSummary = () => {
-    if (!schedulerResult) return null;
-
-    const root: any = schedulerResult;
-    const nested = root.result ?? {};
-
-    const status: string =
-      root.status ?? nested.status ?? "unknown";
-
-    const targetPeriod: string =
-      root.target_period ??
-      nested.target_period ??
-      nested.period ??
-      nested.target_month ??
-      "n/a";
-
-    const definitionsConsidered: number =
-      root.definitions_considered ??
-      nested.definitions_considered ??
-      0;
-
-    const clientsConsidered: number =
-      root.clients_considered ??
-      nested.clients_considered ??
-      0;
-
-    const instancesCreated: number =
-      root.instances_created ??
-      nested.instances_created ??
-      (Array.isArray(nested.created)
-        ? nested.created.length
-        : nested.count ?? 0);
-
-    const instancesSkipped: number =
-      root.instances_skipped_existing ??
-      nested.instances_skipped_existing ??
-      0;
-
-    const generateTasksFlag: boolean =
-      root.generate_tasks ??
-      nested.generate_tasks ??
-      false;
-
-    const tasksGenerated: number =
-      root.tasks_generated ??
-      nested.tasks_generated ??
-      0;
-
-    return (
-      <div className="mt-3 text-xs text-gray-700 space-y-1">
-        <div className="font-semibold text-gray-800">
-          Last run: status {status}
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <span>
-            Period:{" "}
-            <span className="font-mono font-semibold">
-              {targetPeriod}
-            </span>
-          </span>
-          <span>
-            Definitions:{" "}
-            <span className="font-semibold">
-              {definitionsConsidered}
-            </span>
-          </span>
-          <span>
-            Clients:{" "}
-            <span className="font-semibold">
-              {clientsConsidered}
-            </span>
-          </span>
-          <span>
-            Instances created:{" "}
-            <span className="font-semibold">
-              {instancesCreated}
-            </span>
-          </span>
-          <span>
-            Instances skipped:{" "}
-            <span className="font-semibold">
-              {instancesSkipped}
-            </span>
-          </span>
-          <span>
-            Generate tasks:{" "}
-            <span className="font-semibold">
-              {generateTasksFlag ? "yes" : "no"}
-            </span>
-          </span>
-          <span>
-            Tasks generated:{" "}
-            <span className="font-semibold">
-              {tasksGenerated}
-            </span>
-          </span>
-        </div>
-      </div>
-    );
-  };
+  const hasInstances = instances.length > 0;
 
   return (
-    <div className="space-y-4">
-      <header className="flex items-center justify-between">
+    <div className="flex h-full flex-col gap-3 p-4">
+      <header className="flex items-center justify-between gap-3 border-b border-gray-200 pb-2">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">
+          <h1 className="text-base font-semibold text-gray-900">
             Internal processes
           </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            Definitions, instances, auto-generated tasks and monthly scheduler.
+          <p className="mt-1 text-xs text-gray-500">
+            Internal process instances on the left, related tasks on the right.
           </p>
         </div>
-        {loading && (
-          <div className="text-xs text-gray-500">Loading data...</div>
-        )}
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={loadAll}
+            className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            Refresh
+          </button>
+          {loading && (
+            <span className="text-[11px] text-gray-500">Loading...</span>
+          )}
+        </div>
       </header>
 
       {err && (
-        <div className="border border-red-300 bg-red-50 text-red-800 text-xs px-3 py-2 rounded-md">
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
           {err}
         </div>
       )}
 
-      <section className="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-800">
-              Monthly scheduler
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Creates process instances for the target month based on
-              definitions. Optionally generates tasks.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 justify-end">
-            <button
-              type="button"
-              disabled={schedulerLoading}
-              onClick={() => runScheduler(false)}
-              className={
-                "px-3 py-1.5 rounded-md border text-xs " +
-                (schedulerLoading
-                  ? "bg-gray-100 text-gray-400 border-gray-200"
-                  : "bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200")
-              }
-            >
-              {schedulerLoading
-                ? "Running..."
-                : "Run scheduler (instances only)"}
-            </button>
-            <button
-              type="button"
-              disabled={schedulerLoading}
-              onClick={() => runScheduler(true)}
-              className={
-                "px-3 py-1.5 rounded-md border text-xs " +
-                (schedulerLoading
-                  ? "bg-blue-300 text-white border-blue-300"
-                  : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700")
-              }
-            >
-              {schedulerLoading
-                ? "Running with tasks..."
-                : "Run scheduler + generate tasks"}
-            </button>
-          </div>
-        </div>
-        {renderSchedulerSummary()}
-      </section>
-
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col max-h-[540px]">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-800">
-                Process instances
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                One row per client / month / process definition.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => loadAll()}
-              className="px-2 py-1 rounded-md border border-gray-300 bg-white text-xs hover:bg-gray-50"
-            >
-              Reload
-            </button>
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(360px,420px)_1fr] gap-3">
+        {/* Left column: instances as table */}
+        <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h2 className="text-sm font-semibold text-gray-800">
+              Process instances
+            </h2>
+            <span className="text-[11px] text-gray-500">
+              Total:{" "}
+              <span className="font-semibold text-gray-900">
+                {instances.length}
+              </span>
+            </span>
           </div>
 
-          <div className="flex-1 overflow-auto">
-            {instances.length === 0 ? (
-              <div className="px-4 py-6 text-xs text-gray-500">
-                No process instances found yet. Use monthly scheduler or create
-                instances manually.
-              </div>
-            ) : (
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-[11px] text-gray-500">
-                    <th className="px-3 py-2 text-left">Client</th>
-                    <th className="px-3 py-2 text-left">Process</th>
-                    <th className="px-3 py-2 text-left">Month</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Created</th>
-                    <th className="px-3 py-2 text-left">Actions</th>
+          {!hasInstances ? (
+            <div className="mt-2 text-xs text-gray-500">
+              No instances found. Use backend scheduler or demo data to create
+              them.
+            </div>
+          ) : (
+            <div className="mt-1 max-h-[480px] overflow-auto pr-1">
+              <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
+                <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium w-[110px]">
+                      Client
+                    </th>
+                    <th className="px-2 py-1 text-left font-medium w-[70px]">
+                      Month
+                    </th>
+                    <th className="px-2 py-1 text-left font-medium">
+                      Process
+                    </th>
+                    <th className="px-2 py-1 text-left font-medium w-[80px]">
+                      Status
+                    </th>
+                    <th className="px-2 py-1 text-right font-medium w-[130px]">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {instances.map((inst) => {
-                    const def = defs.find((d) => d.id === inst.definition_id);
-                    const processName =
-                      def?.name || inst.definition_name || inst.definition_id;
-                    const clientLabel = inst.client_id || "no client";
-                    const monthLabel = inst.month || "n/a";
+                    const isSelected =
+                      selectedInstance && selectedInstance.id === inst.id;
 
                     return (
                       <tr
                         key={inst.id}
                         className={
-                          "border-b border-gray-100 hover:bg-gray-50 cursor-pointer" +
-                          (selectedInstance && selectedInstance.id === inst.id
-                            ? " bg-blue-50"
-                            : "")
+                          "cursor-pointer rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800 shadow-sm hover:border-blue-300 hover:bg-blue-50" +
+                          (isSelected ? " bg-blue-50 border-blue-300" : "")
                         }
-                        onClick={() => setSelectedInstance(inst)}
+                        onClick={() => handleViewTasks(inst)}
                       >
-                        <td className="px-3 py-2 align-top">
-                          <div className="text-xs font-medium text-gray-900">
-                            {clientLabel}
-                          </div>
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[11px] text-gray-900">
+                            {inst.client_id || "no-client"}
+                          </span>
                         </td>
-                        <td className="px-3 py-2 align-top">
-                          <div className="text-xs text-gray-800">
-                            {processName}
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[11px] text-gray-800">
+                            {inst.month}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <div className="text-[11px] text-gray-900">
+                            {inst.definition_name || inst.definition_id}
                           </div>
                           {inst.last_run_result && (
-                            <div className="mt-0.5 text-[10px] text-gray-500 truncate max-w-[200px]">
-                              Last run: {inst.last_run_result}
+                            <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-1">
+                              {inst.last_run_result}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2 align-top">
-                          <span className="font-mono text-xs text-gray-800">
-                            {monthLabel}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-gray-300 text-[11px] text-gray-700">
+                        <td className="px-2 py-1 align-top">
+                          <span
+                            className={
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium " +
+                              (inst.status === "completed"
+                                ? "bg-green-100 text-green-800 border border-green-200"
+                                : inst.status === "ready"
+                                ? "bg-gray-100 text-gray-800 border border-gray-200"
+                                : "bg-yellow-100 text-yellow-800 border border-yellow-200")
+                            }
+                          >
                             {inst.status}
                           </span>
                         </td>
-                        <td className="px-3 py-2 align-top">
-                          <div className="text-[10px] text-gray-500">
-                            {inst.created_at || ""}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          <div className="flex flex-col gap-1">
+                        <td
+                          className="px-2 py-1 align-top"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex flex-col items-end gap-1">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRun(inst);
-                              }}
-                              className="px-2 py-0.5 rounded border border-gray-300 bg-white text-[11px] hover:bg-gray-50"
+                              className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-700 hover:bg-gray-50"
+                              onClick={() => handleRun(inst)}
                             >
                               Run
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleViewTasks(inst);
-                              }}
-                              className="px-2 py-0.5 rounded border border-gray-300 bg-white text-[11px] hover:bg-gray-50"
-                            >
-                              View tasks
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openTasksDashboard(inst);
-                              }}
-                              className="px-2 py-0.5 rounded border border-gray-300 bg-white text-[11px] hover:bg-gray-50"
-                            >
-                              Open in Tasks
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openClientProfile(inst);
-                              }}
-                              className="px-2 py-0.5 rounded border border-gray-300 bg-white text-[11px] hover:bg-gray-50"
-                            >
-                              Open client profile
-                            </button>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+                                onClick={() => handleOpenClientProfile(inst)}
+                              >
+                                Client
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+                                onClick={() => handleOpenTasksDashboard(inst)}
+                              >
+                                Tasks
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -498,123 +444,170 @@ const InternalProcessesPage: React.FC = () => {
                   })}
                 </tbody>
               </table>
-            )}
+            </div>
+          )}
+        </section>
+
+        {/* Right column: tasks for selected instance */}
+        <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                Tasks for selected instance
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Auto-generated tasks linked to internal process instance.
+              </p>
+              {selectedInstance && (
+                <>
+                  <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap gap-3">
+                    <span>
+                      Client:{" "}
+                      <span className="font-mono text-gray-900">
+                        {selectedInstance.client_id || "no client"}
+                      </span>
+                    </span>
+                    <span>
+                      Process:{" "}
+                      <span className="font-mono text-gray-900">
+                        {selectedInstance.definition_name ||
+                          selectedInstance.definition_id}
+                      </span>
+                    </span>
+                    <span>
+                      Month:{" "}
+                      <span className="font-mono text-gray-900">
+                        {selectedInstance.month || "n/a"}
+                      </span>
+                    </span>
+                    <span>
+                      Status:{" "}
+                      <span className="font-semibold text-gray-900">
+                        {selectedInstanceLive?.status ?? selectedInstance.status}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap gap-3">
+                    <span>
+                      Tasks:{" "}
+                      <span className="font-mono text-gray-900">
+                        {tasksSummary.completed} / {tasksSummary.total} completed
+                      </span>
+                    </span>
+                    <span>
+                      Overdue:{" "}
+                      <span className="font-mono text-gray-900">
+                        {tasksSummary.overdue}
+                      </span>
+                    </span>
+                    <span>
+                      Derived:{" "}
+                      <span className="font-mono text-gray-900">
+                        {tasksSummary.derivedStatus}
+                      </span>
+                    </span>
+                    {tasksSummary.derivedStatus === "completed-by-tasks" && (
+                      <span>
+                        Lifecycle:{" "}
+                        <span className="font-mono text-gray-900">
+                          auto-sync to "completed"
+                          {lifecycleSyncInProgress ? " (syncing...)" : ""}
+                        </span>
+                      </span>
+                    )}
+                    {lifecycleSyncError && (
+                      <span className="text-red-600">
+                        Lifecycle sync error: {lifecycleSyncError}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm flex flex-col max-h-[540px]">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-800">
-              Tasks for selected instance
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Auto-generated tasks linked to internal process instance.
-            </p>
-            {selectedInstance && (
-              <div className="mt-1 text-[11px] text-gray-600 flex flex-wrap gap-3">
-                <span>
-                  Client:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedInstance.client_id || "no client"}
-                  </span>
-                </span>
-                <span>
-                  Process:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedInstance.definition_name ||
-                      selectedInstance.definition_id}
-                  </span>
-                </span>
-                <span>
-                  Month:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedInstance.month || "n/a"}
-                  </span>
-                </span>
-                <span>
-                  Status:{" "}
-                  <span className="font-semibold text-gray-900">
-                    {selectedInstance.status}
-                  </span>
-                </span>
+          {!selectedInstance ? (
+            <div className="flex-1 px-4 py-6 text-xs text-gray-500">
+              Select an instance on the left to see related tasks.
+            </div>
+          ) : tasksForInstance.length === 0 ? (
+            <div className="flex-1 px-4 py-6 text-xs text-gray-500 space-y-2">
+              <div>No tasks for this instance.</div>
+              <div>
+                Use <span className="font-mono text-xs">Run</span> on the
+                instance in the left panel to generate tasks.
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="mt-2 max-h-[480px] overflow-auto pr-1">
+              <table className="min-w-full border-separate border-spacing-y-1 text-xs">
+                <thead className="text-[11px] text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium">Title</th>
+                    <th className="px-2 py-1 text-left font-medium">Status</th>
+                    <th className="px-2 py-1 text-left font-medium">Due</th>
+                    <th className="px-2 py-1 text-left font-medium">
+                      Assignee
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasksForInstance.map((task, index) => {
+                    const baseKey =
+                      (task.id as string) ||
+                      (task.internal_id as string) ||
+                      "task";
+                    const rowKey = `${baseKey}_${index}`;
 
-          <div className="flex-1 overflow-auto">
-            {!selectedInstance ? (
-              <div className="px-4 py-6 text-xs text-gray-500">
-                Select an instance on the left to see related tasks.
-              </div>
-            ) : tasksForInstance.length === 0 ? (
-              <div className="px-4 py-6 text-xs text-gray-500">
-                No tasks found for this instance yet.
-              </div>
-            ) : (
-              <ul className="divide-y divide-gray-100 text-xs">
-                {tasksForInstance.map((t: any) => {
-                  const title = t.title ?? t.name ?? "(no title)";
-                  const status = (t.status ?? "unknown").toString();
-                  const deadline = t.deadline ?? t.due_date ?? null;
-                  const isDone =
-                    status.toLowerCase() === "done" ||
-                    status.toLowerCase() === "completed";
-
-                  return (
-                    <li key={t.id ?? Math.random()} className="px-4 py-2.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-xs font-semibold text-gray-900">
-                            {title}
+                    return (
+                      <tr
+                        key={rowKey}
+                        className="rounded-md bg-gray-50 text-[11px] text-gray-800"
+                      >
+                        <td className="px-2 py-1 align-top">
+                          <div className="font-medium text-gray-900">
+                            {task.title || "(no title)"}
                           </div>
-                          {t.description && (
-                            <div className="mt-0.5 text-[11px] text-gray-600">
-                              {t.description}
+                          {task.description && (
+                            <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
+                              {task.description}
                             </div>
                           )}
-                          <div className="mt-0.5 text-[11px] text-gray-500 flex flex-wrap gap-3">
-                            {t.id && (
-                              <span className="font-mono text-gray-500">
-                                id: {t.id}
-                              </span>
-                            )}
-                            {deadline && (
-                              <span>
-                                Deadline:{" "}
-                                <span className="font-mono text-gray-800">
-                                  {deadline}
-                                </span>
-                              </span>
-                            )}
-                            {t.assigned_to && (
-                              <span>
-                                Assignee:{" "}
-                                <span className="font-medium text-gray-800">
-                                  {t.assigned_to}
-                                </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span className="inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-[10px]">
+                            {task.status || "n/a"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <div className="flex flex-col gap-0.5 text-[10px]">
+                            <span>
+                              {task.due_date ||
+                                task.deadline ||
+                                task.planned_date ||
+                                "n/a"}
+                            </span>
+                            {task.is_overdue && (
+                              <span className="text-[10px] font-semibold text-red-600">
+                                Overdue
                               </span>
                             )}
                           </div>
-                        </div>
-                        <span
-                          className={
-                            "inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] " +
-                            (isDone
-                              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                              : "bg-gray-50 border-gray-200 text-gray-700")
-                          }
-                        >
-                          {status}
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-      </section>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[10px] text-gray-700">
+                            {task.assignee || "unassigned"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 from datetime import datetime
 from typing import List, Dict, Any
@@ -17,7 +17,13 @@ def _load_json(path: str):
         return []
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            text = f.read()
+        # Remove UTF-8 BOM if present
+        if text.startswith("\ufeff"):
+            text = text.lstrip("\ufeff")
+        if not text.strip():
+            return []
+        return json.loads(text)
     except Exception:
         return []
 
@@ -47,6 +53,27 @@ def get_internal_instances() -> List[Dict[str, Any]]:
 
 def save_instances(instances: List[Dict[str, Any]]):
     _save_json(INSTANCES_PATH, instances)
+
+
+def update_instance_status(instance_id: str, new_status: str) -> Dict[str, Any]:
+    """
+    Update status for a single process instance and persist it.
+
+    This function is used by lifecycle sync from tasks:
+      - for example, when derived_status == "completed-by-tasks"
+        we set instance.status = "completed".
+    """
+    instances = get_internal_instances()
+
+    for inst in instances:
+        if inst.get("id") == instance_id:
+            inst["status"] = new_status
+            # keep existing created_at; just bump updated_at for traceability
+            inst["updated_at"] = datetime.utcnow().isoformat()
+            save_instances(instances)
+            return inst
+
+    return {"error": "instance not found"}
 
 
 # ------------------------------

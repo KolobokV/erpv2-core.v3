@@ -1,82 +1,43 @@
-from fastapi import APIRouter, HTTPException
+﻿from fastapi import APIRouter, HTTPException
 
-from .internal_processes_store import (
-    get_internal_definitions,
-    get_internal_instances,
-    run_instance,
-    generate_tasks_for_instance,
-)
+from .internal_processes_store import get_internal_instances, update_instance_status
 
-router = APIRouter(tags=["internal-processes"])
+router = APIRouter(prefix="/api/internal", tags=["internal-processes"])
 
 
-# --------------------------
-# Definitions
-# --------------------------
-
-@router.get("/process-definitions")
-def api_get_process_definitions():
+@router.post("/process-instances/{instance_id}/lifecycle/sync-from-tasks")
+def api_sync_instance_lifecycle_from_tasks(instance_id: str, payload: dict):
     """
-    Main endpoint used by smoke tests and frontend:
-    GET /api/internal/process-definitions
+    Called by frontend when derivedStatus for a process instance
+    has been recalculated based on related tasks.
+
+    Expected body:
+      {
+        "derived_status": "completed-by-tasks"
+      }
+
+    Rules:
+      - if derived_status == "completed-by-tasks":
+            instance.status is set to "completed"
+      - other values are currently ignored and instance is returned as is
     """
-    return {"items": get_internal_definitions()}
+    derived_status = payload.get("derived_status")
+    if not derived_status:
+        raise HTTPException(status_code=400, detail="derived_status is required")
 
+    # Only one lifecycle rule for now:
+    # "completed-by-tasks" -> "completed"
+    if derived_status == "completed-by-tasks":
+        updated = update_instance_status(instance_id, "completed")
+        if "error" in updated:
+            raise HTTPException(status_code=404, detail=updated["error"])
+        return {"instance": updated}
 
-@router.get("/definitions")
-def api_get_definitions_alias():
-    """
-    Backward-compatible alias:
-    GET /api/internal/definitions
-    """
-    return {"items": get_internal_definitions()}
+    # For other derived statuses we do not change lifecycle yet.
+    # Just return current instance if it exists.
+    instances = get_internal_instances()
+    for inst in instances:
+        if inst.get("id") == instance_id:
+            return {"instance": inst}
 
-
-# --------------------------
-# Instances
-# --------------------------
-
-@router.get("/process-instances")
-def api_get_process_instances():
-    """
-    Main endpoint for instances:
-    GET /api/internal/process-instances
-    """
-    return {"items": get_internal_instances()}
-
-
-@router.get("/instances")
-def api_get_instances_alias():
-    """
-    Backward-compatible alias:
-    GET /api/internal/instances
-    """
-    return {"items": get_internal_instances()}
-
-
-@router.post("/process-instances/{instance_id}/run")
-def api_run_instance(instance_id: str):
-    result = run_instance(instance_id)
-    if "error" in result:
-        raise HTTPException(status_code=404, detail=result["error"])
-    return {"result": result}
-
-
-@router.post("/process-instances/{instance_id}/generate-tasks")
-def api_generate_tasks(instance_id: str):
-    tasks = generate_tasks_for_instance(instance_id)
-    return {"tasks": tasks}
-
-
-@router.get("/process-instances/{instance_id}/tasks")
-def api_get_tasks_for_instance(instance_id: str):
-    """
-    Temporary stub endpoint for tasks of a process instance.
-
-    Frontend calls:
-      GET /api/internal/process-instances/{instance_id}/tasks
-
-    Until we have a real link between tasks and instances,
-    we always return an empty list instead of 404.
-    """
-    return {"items": []}
+    raise HTTPException(status_code=404, detail="instance not found")

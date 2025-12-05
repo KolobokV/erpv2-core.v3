@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routes_tasks import router as tasks_router
 from .routes_internal import router as internal_router
 from .routes_control_events import router as control_events_router
+from .routes_internal_processes import router as internal_processes_router
 
 app = FastAPI(title="ERPv2 backend (demo)")
 
@@ -39,3 +40,4 @@ async def api_config():
 app.include_router(tasks_router)
 app.include_router(internal_router)
 app.include_router(control_events_router)
+app.include_router(internal_processes_router)
