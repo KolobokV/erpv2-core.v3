@@ -74,13 +74,14 @@ const monthOptions = [
 
 const now = new Date();
 
+function normalizeStatus(status?: string | null): string {
+  if (!status) return "open";
+  const s = status.toString().trim().toLowerCase();
+  return s || "open";
+}
+
 function getDisplayStatus(inst: ProcessInstance): string {
-  const s =
-    (inst.computed_status || inst.status || "open")
-      .toString()
-      .trim()
-      .toLowerCase() || "open";
-  return s;
+  return normalizeStatus(inst.computed_status || inst.status || "open");
 }
 
 function summarizeInstancesForClientPeriod(
@@ -124,7 +125,6 @@ const ProcessCoveragePage: React.FC = () => {
 
   const [year, setYear] = useState<number>(now.getFullYear());
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
-
   const [coverage, setCoverage] = useState<Record<string, ClientCoverage>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
@@ -176,8 +176,9 @@ const ProcessCoveragePage: React.FC = () => {
 
           for (const e of events) {
             total += 1;
-            const status = (e.status ?? "").toString().toLowerCase();
-            if (!status || status === "planned") {
+            const status = normalizeStatus(e.status);
+
+            if (!e.status || status === "planned") {
               planned += 1;
             } else if (status === "overdue" || status === "late") {
               overdue += 1;
@@ -202,7 +203,7 @@ const ProcessCoveragePage: React.FC = () => {
                 perProcess[pt].overdue += 1;
               } else if (status === "completed") {
                 perProcess[pt].completed += 1;
-              } else if (!status || status === "planned") {
+              } else if (!e.status || status === "planned") {
                 perProcess[pt].planned += 1;
               }
             }
@@ -279,32 +280,34 @@ const ProcessCoveragePage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3 mb-2">
+    <div className="flex h-full flex-col gap-4 p-4 md:p-6">
+      <header className="mb-1 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <h1 className="text-2xl font-semibold mb-1">Process coverage</h1>
-          <p className="text-xs md:text-sm opacity-80">
-            View how control events for demo clients are distributed over
-            processes (process:* tags) for selected period, and whether process
-            instances exist in the internal JSON store.
+          <h1 className="text-lg md:text-xl font-semibold">Process coverage</h1>
+          <p className="text-xs md:text-sm opacity-80 max-w-2xl">
+            Radar for three demo clients: how control events are distributed over
+            processes (process:* tags) for the selected period and whether live
+            process instances exist in the JSON store.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-wrap items-end gap-3 text-xs">
           <div className="flex flex-col">
-            <label className="text-xs font-medium opacity-70 mb-1">Year</label>
+            <label className="mb-1 text-[11px] font-medium opacity-80">
+              Year
+            </label>
             <input
               type="number"
-              className="border rounded px-2 py-1 text-sm w-24 bg-slate-900"
+              className="h-8 w-24 rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-900"
               value={year}
               onChange={(e) => setYear(Number(e.target.value) || year)}
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-xs font-medium opacity-70 mb-1">
+            <label className="mb-1 text-[11px] font-medium opacity-80">
               Month
             </label>
             <select
-              className="border rounded px-2 py-1 text-sm bg-slate-900"
+              className="h-8 rounded-md border border-slate-300 bg-white px-2 text-[11px]"
               value={month}
               onChange={(e) => setMonth(Number(e.target.value))}
             >
@@ -316,7 +319,7 @@ const ProcessCoveragePage: React.FC = () => {
             </select>
           </div>
           <button
-            className="px-3 py-1 rounded text-sm border border-sky-500 hover:bg-sky-500/10"
+            className="inline-flex h-8 items-center rounded-md border border-sky-500 px-3 text-[11px] font-medium text-sky-900 hover:bg-sky-50 disabled:opacity-60"
             onClick={loadCoverage}
             disabled={loading}
           >
@@ -326,12 +329,15 @@ const ProcessCoveragePage: React.FC = () => {
       </header>
 
       {err && (
-        <div className="text-xs md:text-sm text-red-400 mb-2">{err}</div>
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          {err}
+        </div>
       )}
 
-      <section className="border rounded-lg bg-white/5 overflow-auto">
-        <table className="min-w-full text-xs md:text-sm">
-          <thead className="bg-slate-900 text-slate-100">
+      {/* Table */}
+      <section className="overflow-auto rounded-xl border border-slate-200 bg-white text-xs shadow-sm">
+        <table className="min-w-full">
+          <thead className="bg-slate-50 text-[11px] font-medium text-slate-600">
             <tr>
               <th className="px-3 py-2 text-left">Client</th>
               <th className="px-3 py-2 text-left">Period</th>
@@ -346,42 +352,52 @@ const ProcessCoveragePage: React.FC = () => {
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.clientId} className="border-t border-slate-800">
+              <tr
+                key={c.clientId}
+                className="border-t border-slate-100 bg-white"
+              >
                 <td className="px-3 py-2 align-top">
-                  <div className="font-medium text-xs md:text-sm">
+                  <div className="font-semibold text-slate-900">
                     {c.label}
                   </div>
-                  <div className="font-mono text-[11px] opacity-80">
+                  <div className="font-mono text-[11px] text-slate-500">
                     {c.clientId}
                   </div>
                 </td>
-                <td className="px-3 py-2 align-top text-[11px] md:text-xs">
+                <td className="px-3 py-2 align-top text-[11px] text-slate-600">
                   {year} - {currentMonthLabel}
                 </td>
-                <td className="px-3 py-2 align-top">{c.total}</td>
+                <td className="px-3 py-2 align-top font-mono text-[11px] text-slate-900">
+                  {c.total}
+                </td>
                 <td className="px-3 py-2 align-top">
                   {c.overdue > 0 ? (
-                    <span className="inline-flex px-2 py-0.5 rounded-full bg-red-900/50 text-[11px]">
+                    <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 font-mono text-[11px] text-rose-700">
                       {c.overdue}
                     </span>
                   ) : (
-                    c.overdue
-                  )}
-                </td>
-                <td className="px-3 py-2 align-top">{c.planned}</td>
-                <td className="px-3 py-2 align-top">{c.completed}</td>
-                <td className="px-3 py-2 align-top">
-                  {c.processTags.length === 0 && (
-                    <span className="text-[11px] opacity-70">
-                      No process tags for this period.
+                    <span className="font-mono text-[11px] text-slate-800">
+                      {c.overdue}
                     </span>
                   )}
-                  {c.processTags.length > 0 && (
+                </td>
+                <td className="px-3 py-2 align-top font-mono text-[11px] text-slate-800">
+                  {c.planned}
+                </td>
+                <td className="px-3 py-2 align-top font-mono text-[11px] text-slate-800">
+                  {c.completed}
+                </td>
+                <td className="px-3 py-2 align-top">
+                  {c.processTags.length === 0 ? (
+                    <span className="text-[11px] text-slate-400">
+                      No process tags for this period.
+                    </span>
+                  ) : (
                     <div className="flex flex-wrap gap-1">
                       {c.processTags.map((p) => (
                         <span
                           key={p}
-                          className="inline-flex px-2 py-0.5 rounded-full border border-slate-700 text-[10px] md:text-xs"
+                          className="inline-flex rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-700"
                         >
                           {p}
                         </span>
@@ -391,36 +407,34 @@ const ProcessCoveragePage: React.FC = () => {
                 </td>
                 <td className="px-3 py-2 align-top">
                   {c.processInstances ? (
-                    <div className="text-[11px] md:text-xs space-y-0.5">
+                    <div className="space-y-1 text-[11px] text-slate-700">
                       <div>
-                        total:{" "}
+                        total:&nbsp;
                         <span className="font-mono">
                           {c.processInstances.total}
                         </span>
                       </div>
-                      <div className="space-x-1">
-                        <span>
-                          open:{" "}
+                      <div className="flex flex-wrap gap-2">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-sky-500" />
                           <span className="font-mono">
                             {c.processInstances.open}
                           </span>
                         </span>
-                        <span>
-                          wait:{" "}
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-amber-500" />
                           <span className="font-mono">
                             {c.processInstances.waiting}
                           </span>
                         </span>
-                      </div>
-                      <div className="space-x-1">
-                        <span>
-                          completed:{" "}
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" />
                           <span className="font-mono">
                             {c.processInstances.completed}
                           </span>
                         </span>
-                        <span>
-                          error:{" "}
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-2 w-2 rounded-full bg-rose-500" />
                           <span className="font-mono">
                             {c.processInstances.error}
                           </span>
@@ -428,23 +442,23 @@ const ProcessCoveragePage: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <span className="text-[11px] opacity-70">
+                    <span className="text-[11px] text-slate-400">
                       No process instances for this period.
                     </span>
                   )}
                 </td>
                 <td className="px-3 py-2 align-top">
-                  <div className="flex flex-col gap-1 text-[11px] md:text-xs">
+                  <div className="flex flex-col gap-1 text-[11px]">
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center rounded border border-slate-600 px-2 py-0.5 hover:bg-slate-800/60"
+                      className="inline-flex items-center justify-center rounded-md border border-slate-400 px-2 py-0.5 text-slate-800 hover:bg-slate-50"
                       onClick={() => handleOpenClientProfile(c.clientId)}
                     >
                       Profile
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center rounded border border-sky-600 px-2 py-0.5 hover:bg-sky-800/60"
+                      className="inline-flex items-center justify-center rounded-md border border-sky-500 px-2 py-0.5 text-sky-900 hover:bg-sky-50"
                       onClick={() => handleOpenClientOverview(c.clientId)}
                     >
                       Overview
@@ -457,7 +471,7 @@ const ProcessCoveragePage: React.FC = () => {
               <tr>
                 <td
                   colSpan={9}
-                  className="px-3 py-4 text-center text-xs opacity-70"
+                  className="px-3 py-4 text-center text-xs text-slate-500"
                 >
                   No data for selected period.
                 </td>
@@ -467,26 +481,30 @@ const ProcessCoveragePage: React.FC = () => {
         </table>
       </section>
 
+      {/* Cards */}
       <section className="grid gap-3 md:grid-cols-2">
         {rows.map((c) => (
           <div
             key={c.clientId}
-            className="border rounded-lg p-3 md:p-4 bg-white/5 text-xs md:text-sm space-y-2"
+            className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-sm"
           >
-            <div className="flex justify-between items-start">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <div className="font-semibold">{c.label}</div>
-                <div className="font-mono text-[11px] opacity-80">
+                <div className="text-sm font-semibold text-slate-900">
+                  {c.label}
+                </div>
+                <div className="font-mono text-[11px] text-slate-500">
                   {c.clientId}
                 </div>
               </div>
-              <div className="text-[11px] opacity-80 text-right">
+              <div className="text-right text-[11px] text-slate-500">
                 <div>
-                  Total: <span className="font-medium">{c.total}</span>
+                  Total:{" "}
+                  <span className="font-mono text-slate-900">{c.total}</span>
                 </div>
                 <div>
                   Overdue:{" "}
-                  <span className="font-medium text-red-300">
+                  <span className="font-mono text-rose-600">
                     {c.overdue}
                   </span>
                 </div>
@@ -495,16 +513,16 @@ const ProcessCoveragePage: React.FC = () => {
 
             {c.processTags.length > 0 && (
               <div className="space-y-1">
-                <div className="font-medium text-xs">
+                <div className="text-[11px] font-medium text-slate-700">
                   Processes activity (process:* tags)
                 </div>
-                <div className="space-y-1 max-h-40 overflow-auto border border-slate-800 rounded p-2">
+                <div className="max-h-40 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2">
                   {c.processTags.map((p) => {
                     const stats = c.perProcess[p];
                     return (
                       <div
                         key={p}
-                        className="flex items-center justify-between text-[11px]"
+                        className="flex items-center justify-between text-[11px] text-slate-700"
                       >
                         <span className="font-mono">{p}</span>
                         <span className="space-x-2">
@@ -522,25 +540,44 @@ const ProcessCoveragePage: React.FC = () => {
 
             {c.processInstances && (
               <div className="space-y-1">
-                <div className="font-medium text-xs">
+                <div className="text-[11px] font-medium text-slate-700">
                   Process instances this period
                 </div>
-                <div className="text-[11px] space-y-0.5">
+                <div className="space-y-0.5 text-[11px] text-slate-700">
                   <div>
-                    total:{" "}
+                    total:&nbsp;
                     <span className="font-mono">
                       {c.processInstances.total}
                     </span>
                   </div>
-                  <div>
-                    open / waiting / completed / error:{" "}
-                    <span className="font-mono">
-                      {c.processInstances.open} / {c.processInstances.waiting} /{" "}
-                      {c.processInstances.completed} / {c.processInstances.error}
+                  <div className="flex flex-wrap gap-3">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-sky-500" />
+                      <span className="font-mono">
+                        {c.processInstances.open}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      <span className="font-mono">
+                        {c.processInstances.waiting}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="font-mono">
+                        {c.processInstances.completed}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                      <span className="font-mono">
+                        {c.processInstances.error}
+                      </span>
                     </span>
                   </div>
                   {c.processInstances.other > 0 && (
-                    <div className="text-[10px] opacity-70">
+                    <div className="text-[10px] text-slate-400">
                       other statuses: {c.processInstances.other}
                     </div>
                   )}
@@ -548,17 +585,17 @@ const ProcessCoveragePage: React.FC = () => {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-800/60 mt-2">
+            <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-2">
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded border border-slate-600 px-2 py-0.5 text-[11px] hover:bg-slate-800/60"
+                className="inline-flex items-center justify-center rounded-md border border-slate-400 px-2 py-0.5 text-[11px] text-slate-800 hover:bg-slate-50"
                 onClick={() => handleOpenClientProfile(c.clientId)}
               >
                 Open profile
               </button>
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded border border-sky-600 px-2 py-0.5 text-[11px] hover:bg-sky-800/60"
+                className="inline-flex items-center justify-center rounded-md border border-sky-500 px-2 py-0.5 text-[11px] text-sky-900 hover:bg-sky-50"
                 onClick={() => handleOpenClientOverview(c.clientId)}
               >
                 Client overview
@@ -568,27 +605,27 @@ const ProcessCoveragePage: React.FC = () => {
         ))}
       </section>
 
-      <div className="text-xs md:text-sm opacity-80 space-y-1">
+      <div className="space-y-1 text-xs text-slate-500">
         <div>
           For detailed per-event view use{" "}
-          <Link to="/control-events" className="underline">
-            Control Events
-          </Link>{" "}
-          page.
+          <Link to="/control-events" className="text-sky-700 underline">
+            Control events
+          </Link>
+          .
         </div>
         <div>
           For tasks created from control events use{" "}
-          <Link to="/tasks" className="underline">
+          <Link to="/tasks" className="text-sky-700 underline">
             Tasks dashboard
-          </Link>{" "}
-          page.
+          </Link>
+          .
         </div>
         <div>
           For per-client process instances and steps use{" "}
-          <Link to="/client-process-overview" className="underline">
+          <Link to="/client-process-overview" className="text-sky-700 underline">
             Client process overview
-          </Link>{" "}
-          page.
+          </Link>
+          .
         </div>
       </div>
     </div>
