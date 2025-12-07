@@ -12,8 +12,8 @@ import ClientProfilePage from "./pages/ClientProfilePage";
 import InternalProcessesPage from "./pages/InternalProcessesPage";
 import ProcessCoveragePage from "./pages/ProcessCoveragePage";
 import ControlEventsPage from "./pages/ControlEventsPage";
-
 import InternalControlEventsPage from "./pages/InternalControlEventsPage";
+import ClientProcessOverviewPage from "./pages/ClientProcessOverviewPage";
 
 const linkStyle = (isActive: boolean): React.CSSProperties => ({
   padding: "4px 10px",
@@ -104,6 +104,13 @@ const App: React.FC = () => {
               >
                 Process coverage
               </NavLink>
+
+              <NavLink
+                to="/client-process-overview"
+                style={({ isActive }) => linkStyle(isActive)}
+              >
+                Client overview
+              </NavLink>
             </nav>
           </div>
         </header>
@@ -141,7 +148,11 @@ const App: React.FC = () => {
               element={<ProcessCoveragePage />}
             />
 
-            {/* legacy */}
+            <Route
+              path="/client-process-overview"
+              element={<ClientProcessOverviewPage />}
+            />
+
             <Route
               path="/internal"
               element={<Navigate to="/internal-processes" replace />}

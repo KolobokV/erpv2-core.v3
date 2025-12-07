@@ -31,7 +31,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # auto-load routers under app.* and app.api.*
     _include_all_routers(app)
+
+    # explicit load of process-overview router (critical fix)
+    from app.api.routes_process_overview import router as process_overview_router
+    app.include_router(process_overview_router)
 
     @app.on_event("startup")
     async def _on_startup() -> None:  # type: ignore[no-redef]
@@ -53,6 +58,7 @@ def _iter_modules(package_name: str) -> Iterable[Any]:
         return []
 
     if not hasattr(base, "__path__"):
+        # a regular module, not a package
         return [base]
 
     modules = []
@@ -90,7 +96,7 @@ def _include_all_routers(app: FastAPI) -> None:
                 logger.info(
                     "Including router from module %s with prefix %s",
                     getattr(module, "__name__", "<unknown>"),
-                    "".join(getattr(router, "prefix", "") or ""),
+                    getattr(router, "prefix", ""),
                 )
                 app.include_router(router)
 
