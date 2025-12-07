@@ -1,740 +1,518 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
-const CLIENT_PROFILE_FOCUS_KEY = "erpv2_client_profile_focus";
-const TASKS_FOCUS_KEY = "erpv2_tasks_focus";
-
-type ProcessDefinition = {
+type InstanceStep = {
   id: string;
-  name: string;
-  description?: string;
+  title: string;
+  status: string;
+  created_at?: string;
+  completed_at?: string;
 };
 
 type ProcessInstance = {
   id: string;
-  definition_id: string;
-  definition_name?: string;
-  month: string;
-  status: string;
-  last_run_result?: string;
-  created_at?: string;
   client_id?: string;
+  profile_code?: string;
+  period?: string;
+  key?: string;
+  status?: string;
+  computed_status?: string;
+  source?: string;
+  events?: string[];
+  last_event_code?: string;
+  steps?: InstanceStep[];
+  created_at?: string;
+  updated_at?: string;
 };
 
-type TasksSummary = {
-  total: number;
-  completed: number;
-  overdue: number;
-  planned: number;
-  derivedStatus: string;
+type FetchState<T> = {
+  loading: boolean;
+  error: string | null;
+  items: T[];
 };
+
+type StatusCounters = {
+  total: number;
+  open: number;
+  waiting: number;
+  completed: number;
+  error: number;
+  other: number;
+};
+
+function getInstanceDisplayStatus(inst: ProcessInstance): string {
+  if (inst.computed_status && inst.computed_status.trim().length > 0) {
+    return inst.computed_status;
+  }
+  if (inst.status && inst.status.trim().length > 0) {
+    return inst.status;
+  }
+  return "open";
+}
+
+function getStatusPillClasses(status: string): string {
+  const normalized = status.toLowerCase();
+  if (normalized === "completed") {
+    return "border border-green-200 bg-green-50 text-green-800";
+  }
+  if (normalized === "waiting") {
+    return "border border-amber-200 bg-amber-50 text-amber-800";
+  }
+  if (normalized === "error" || normalized === "failed") {
+    return "border border-red-200 bg-red-50 text-red-800";
+  }
+  return "border border-blue-200 bg-blue-50 text-blue-800";
+}
+
+function getStepPillClasses(status: string): string {
+  const normalized = (status || "").toLowerCase();
+  if (normalized === "completed") {
+    return "border border-green-200 bg-green-50 text-green-800";
+  }
+  if (normalized === "error" || normalized === "failed") {
+    return "border border-red-200 bg-red-50 text-red-800";
+  }
+  return "border border-slate-200 bg-slate-50 text-slate-700";
+}
 
 const InternalProcessesPage: React.FC = () => {
-  const navigate = useNavigate();
+  const [state, setState] = useState<FetchState<ProcessInstance>>({
+    loading: false,
+    error: null,
+    items: [],
+  });
 
-  const [defs, setDefs] = useState<ProcessDefinition[]>([]);
-  const [instances, setInstances] = useState<ProcessInstance[]>([]);
-  const [selectedInstance, setSelectedInstance] = useState<ProcessInstance | null>(
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
     null
   );
-  const [tasksForInstance, setTasksForInstance] = useState<any[]>([]);
-  const [lifecycleSyncInProgress, setLifecycleSyncInProgress] = useState(false);
-  const [lifecycleSyncError, setLifecycleSyncError] = useState<string | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("");
 
-  // ===== CHAIN DEBUG TRIGGER STATE =====
-  const [chainId, setChainId] = useState("debug.log");
-  const [chainClient, setChainClient] = useState("");
-  const [chainContext, setChainContext] = useState("{}");
-  const [chainResult, setChainResult] = useState<string | null>(null);
-  const [chainError, setChainError] = useState<string | null>(null);
-
-  const [chainOptions, setChainOptions] = useState<string[]>([]);
-
-  const tasksSummary = useMemo<TasksSummary>(() => {
-    const total = tasksForInstance.length;
-    let completed = 0;
-    let overdue = 0;
-    let planned = 0;
-
-    const completedStatuses = ["done", "completed", "closed", "finished"];
-
-    for (const raw of tasksForInstance) {
-      const statusValue = (raw?.status ?? "").toString().toLowerCase();
-
-      if (!statusValue || statusValue === "planned" || statusValue === "new") {
-        planned += 1;
-        continue;
-      }
-
-      if (statusValue === "overdue" || statusValue === "late") {
-        overdue += 1;
-        continue;
-      }
-
-      if (completedStatuses.includes(statusValue)) {
-        completed += 1;
-      } else {
-        planned += 1;
-      }
-    }
-
-    let derivedStatus = "in-progress";
-
-    if (total === 0) {
-      derivedStatus = "no-tasks";
-    } else if (completed === total && overdue === 0) {
-      derivedStatus = "completed-by-tasks";
-    } else if (overdue > 0) {
-      derivedStatus = "has-overdue-tasks";
-    }
-
-    return {
-      total,
-      completed,
-      overdue,
-      planned,
-      derivedStatus,
-    };
-  }, [tasksForInstance]);
-
-  const selectedInstanceLive: ProcessInstance | null = useMemo(() => {
-    if (!selectedInstance) return null;
-    const found = instances.find((inst) => inst.id === selectedInstance.id);
-    return found || selectedInstance;
-  }, [selectedInstance, instances]);
-
-  const loadAll = async () => {
+  const loadInstances = async () => {
     try {
-      setLoading(true);
-      setErr(null);
+      setState((prev) => ({ ...prev, loading: true, error: null }));
 
-      const [defsRes, instRes] = await Promise.all([
-        fetch("/api/internal/process-definitions"),
-        fetch("/api/internal/process-instances"),
-      ]);
+      const res = await fetch("/api/internal/process-instances");
+      if (!res.ok) {
+        throw new Error(`Failed to load process instances, status ${res.status}`);
+      }
 
-      if (!defsRes.ok) throw new Error("Failed to load process definitions");
-      if (!instRes.ok) throw new Error("Failed to load process instances");
+      const json = await res.json();
+      const items: ProcessInstance[] = Array.isArray(json)
+        ? json
+        : json.items ?? [];
 
-      const defsJson = await defsRes.json();
-      const instJson = await instRes.json();
-
-      setDefs(Array.isArray(defsJson) ? defsJson : defsJson.items ?? []);
-      setInstances(Array.isArray(instJson) ? instJson : instJson.items ?? []);
+      setState({ loading: false, error: null, items });
+      if (items.length > 0) {
+        setSelectedInstanceId(items[0].id);
+      } else {
+        setSelectedInstanceId(null);
+      }
     } catch (e: any) {
-      setErr(e.message || "Failed to load internal processes");
-    } finally {
-      setLoading(false);
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: e?.message || "Failed to load process instances",
+      }));
     }
   };
 
   useEffect(() => {
-    loadAll();
+    loadInstances().catch(() => undefined);
   }, []);
 
-  // ===== LOAD REGISTERED CHAINS FOR DEBUG PANEL =====
-  useEffect(() => {
-    const loadChains = async () => {
-      try {
-        const res = await fetch("/api/internal/chains/registered");
-        if (!res.ok) {
-          return;
-        }
-        const json = await res.json();
-        const items = Array.isArray(json) ? json : json.items ?? [];
-        const ids: string[] = [];
-        for (const item of items) {
-          if (item && typeof item.id === "string") {
-            ids.push(item.id);
-          }
-        }
-        if (ids.length > 0) {
-          setChainOptions(ids);
-          if (!chainId) {
-            setChainId(ids[0]);
-          }
-        }
-      } catch {
-        // silent fail for debug helper
-      }
-    };
+  const { loading, error, items } = state;
 
-    loadChains();
-  }, [chainId]);
+  const filteredInstances = useMemo(() => {
+    let list = items;
 
-  // ===== LIFECYCLE AUTOSYNC FROM TASKS =====
-  useEffect(() => {
-    if (!selectedInstance) return;
-    const live = instances.find((inst) => inst.id === selectedInstance.id);
-    if (!live) return;
-
-    if (
-      tasksSummary.derivedStatus !== "completed-by-tasks" ||
-      live.status === "completed" ||
-      lifecycleSyncInProgress
-    ) {
-      return;
-    }
-
-    const controller = new AbortController();
-
-    const doSync = async () => {
-      try {
-        setLifecycleSyncInProgress(true);
-        setLifecycleSyncError(null);
-
-        const res = await fetch(
-          `/api/internal/process-instances/${encodeURIComponent(
-            live.id
-          )}/lifecycle/sync-from-tasks`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ derived_status: tasksSummary.derivedStatus }),
-            signal: controller.signal,
-          }
-        );
-
-        if (!res.ok) {
-          throw new Error(`Lifecycle sync failed with status ${res.status}`);
-        }
-
-        await res.json();
-        await loadAll();
-      } catch (error: any) {
-        if (error?.name === "AbortError") return;
-        setLifecycleSyncError(error?.message || "Failed to sync lifecycle from tasks.");
-      } finally {
-        setLifecycleSyncInProgress(false);
-      }
-    };
-
-    doSync();
-    return () => controller.abort();
-  }, [selectedInstance, instances, tasksSummary.derivedStatus, lifecycleSyncInProgress]);
-
-  // ===== RUN INSTANCE =====
-  const handleRun = async (inst: ProcessInstance) => {
-    try {
-      setLoading(true);
-      setErr(null);
-
-      const res = await fetch(
-        `/api/internal/process-instances/${encodeURIComponent(inst.id)}/generate-tasks`,
-        { method: "POST" }
+    const cf = clientFilter.trim().toLowerCase();
+    if (cf) {
+      list = list.filter((inst) =>
+        (inst.client_id || "").toLowerCase().includes(cf)
       );
-
-      if (!res.ok) throw new Error("Failed to generate tasks for instance");
-
-      await loadAll();
-      await handleViewTasks(inst);
-    } catch (e: any) {
-      setErr(e.message || "Failed to run process instance");
-    } finally {
-      setLoading(false);
     }
-  };
 
-  // ===== VIEW TASKS + AUTOFILL CHAIN DEBUG CONTEXT =====
-  const handleViewTasks = async (inst: ProcessInstance) => {
-    try {
-      setLoading(true);
-      setErr(null);
-
-      setSelectedInstance(inst);
-
-      const autofillClientId = inst.client_id || "";
-      setChainClient(autofillClientId);
-
-      const contextPayload = {
-        process_instance_id: inst.id,
-        process_definition_id: inst.definition_id,
-        process_name: inst.definition_name || inst.definition_id,
-        month: inst.month,
-        client_id: autofillClientId,
-        status: inst.status,
-      };
-
-      setChainContext(JSON.stringify(contextPayload, null, 2));
-
-      const res = await fetch(
-        `/api/internal/process-instances/${encodeURIComponent(inst.id)}/tasks`
-      );
-
-      if (!res.ok) throw new Error("Failed to load tasks for instance");
-
-      const json = await res.json();
-      const items = Array.isArray(json) ? json : json.items ?? [];
-      setTasksForInstance(items);
-    } catch (e: any) {
-      setErr(e.message || "Failed to load tasks for instance");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ===== NAVIGATION =====
-  const handleOpenClientProfile = (inst: ProcessInstance) => {
-    try {
-      const payload = {
-        clientId: inst.client_id || "",
-        processId: inst.definition_id,
-        instanceId: inst.id,
-      };
-      window.localStorage.setItem(CLIENT_PROFILE_FOCUS_KEY, JSON.stringify(payload));
-    } catch {}
-    navigate("/client-profile");
-  };
-
-  const handleOpenTasksDashboard = (inst: ProcessInstance) => {
-    try {
-      const payload = {
-        clientId: inst.client_id || "",
-        processId: inst.definition_id,
-        instanceId: inst.id,
-      };
-      window.localStorage.setItem(TASKS_FOCUS_KEY, JSON.stringify(payload));
-    } catch {}
-    navigate("/tasks");
-  };
-
-  const hasInstances = instances.length > 0;
-
-  // ===== CHAIN DEBUG TRIGGER ACTION =====
-  const handleChainDebug = async () => {
-    try {
-      setChainError(null);
-      setChainResult(null);
-
-      let parsedContext: any = {};
-
-      try {
-        parsedContext =
-          chainContext.trim() === "" ? {} : JSON.parse(chainContext.trim());
-      } catch (e: any) {
-        setChainError("Context is not valid JSON");
-        return;
-      }
-
-      const payload = {
-        chain_id: chainId,
-        client_id: chainClient || null,
-        context: parsedContext,
-      };
-
-      const res = await fetch("/api/internal/chains/debug-trigger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+    if (statusFilter !== "all") {
+      list = list.filter((inst) => {
+        const displayStatus = getInstanceDisplayStatus(inst).toLowerCase();
+        return displayStatus === statusFilter;
       });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const json = await res.json();
-      setChainResult(JSON.stringify(json, null, 2));
-    } catch (e: any) {
-      setChainError(e.message || "Failed to trigger chain");
     }
-  };
+
+    const copy = [...list];
+    copy.sort((a, b) => {
+      const aKey =
+        (a.client_id || "") +
+        "|" +
+        (a.profile_code || "") +
+        "|" +
+        (a.period || "") +
+        "|" +
+        a.id;
+      const bKey =
+        (b.client_id || "") +
+        "|" +
+        (b.profile_code || "") +
+        "|" +
+        (b.period || "") +
+        "|" +
+        b.id;
+      if (aKey < bKey) return -1;
+      if (aKey > bKey) return 1;
+      return 0;
+    });
+    return copy;
+  }, [items, clientFilter, statusFilter]);
+
+  const statusCounters: StatusCounters = useMemo(() => {
+    const counters: StatusCounters = {
+      total: items.length,
+      open: 0,
+      waiting: 0,
+      completed: 0,
+      error: 0,
+      other: 0,
+    };
+
+    for (const inst of items) {
+      const s = getInstanceDisplayStatus(inst).toLowerCase();
+      if (s === "open") counters.open += 1;
+      else if (s === "waiting") counters.waiting += 1;
+      else if (s === "completed") counters.completed += 1;
+      else if (s === "error" || s === "failed") counters.error += 1;
+      else counters.other += 1;
+    }
+
+    return counters;
+  }, [items]);
+
+  const selectedInstance: ProcessInstance | undefined = useMemo(() => {
+    if (!selectedInstanceId) return undefined;
+    return items.find((inst) => inst.id === selectedInstanceId);
+  }, [selectedInstanceId, items]);
+
+  const steps: InstanceStep[] = selectedInstance?.steps ?? [];
 
   return (
-    <div className="flex h-full p-4">
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <header className="border-b border-gray-200 pb-2">
-          <h1 className="text-base font-semibold text-gray-900">
-            Internal processes
-          </h1>
-          <p className="mt-1 text-xs text-gray-500">
-            Internal process instances on the left, related tasks in the middle, chain debug on the right.
-          </p>
-        </header>
+    <div className="flex h-full flex-col p-4">
+      <header className="mb-3 border-b border-gray-200 pb-2">
+        <h1 className="text-base font-semibold text-gray-900">
+          Internal processes
+        </h1>
+        <p className="mt-1 text-xs text-gray-500">
+          Process instances built from control events and stored in JSON backend
+          store. This view shows instances on the left and steps of the selected
+          instance on the right.
+        </p>
+      </header>
 
-        {err && (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            {err}
+      {error && (
+        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      <section className="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-medium text-gray-700">
+            Client filter
+          </label>
+          <input
+            type="text"
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            placeholder="client_id (optional)"
+            className="h-8 w-48 rounded border border-gray-300 px-2 text-xs"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-medium text-gray-700">
+            Status filter
+          </label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-8 w-40 rounded border border-gray-300 px-2 text-xs"
+          >
+            <option value="all">All statuses</option>
+            <option value="open">Open</option>
+            <option value="waiting">Waiting</option>
+            <option value="completed">Completed</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={loadInstances}
+          disabled={loading}
+          className="inline-flex h-8 items-center rounded border border-gray-300 bg-white px-3 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? "Refreshing..." : "Reload"}
+        </button>
+
+        <div className="ml-auto flex flex-col items-end gap-0.5 text-[11px] text-gray-600">
+          <div>
+            Total instances:{" "}
+            <span className="font-mono text-gray-900">
+              {statusCounters.total}
+            </span>
           </div>
-        )}
-
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(340px,380px)_minmax(0,1fr)_280px] gap-3">
-          {/* Left column: process instances */}
-          <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-gray-800">
-                Process instances
-              </h2>
-              <span className="text-[11px] text-gray-500">
-                Total:{" "}
-                <span className="font-semibold text-gray-900">
-                  {instances.length}
-                </span>
+          <div className="flex gap-3">
+            <span>
+              Open:{" "}
+              <span className="font-mono text-gray-900">
+                {statusCounters.open}
               </span>
+            </span>
+            <span>
+              Waiting:{" "}
+              <span className="font-mono text-gray-900">
+                {statusCounters.waiting}
+              </span>
+            </span>
+            <span>
+              Completed:{" "}
+              <span className="font-mono text-gray-900">
+                {statusCounters.completed}
+              </span>
+            </span>
+            <span>
+              Error:{" "}
+              <span className="font-mono text-gray-900">
+                {statusCounters.error}
+              </span>
+            </span>
+          </div>
+          {statusCounters.other > 0 && (
+            <div className="text-[10px] text-gray-400">
+              Other statuses: {statusCounters.other}
             </div>
+          )}
+        </div>
+      </section>
 
-            {!hasInstances ? (
-              <div className="mt-2 text-xs text-gray-500">
-                No instances found. Use backend scheduler or demo data to create
-                them.
-              </div>
-            ) : (
-              <div className="mt-1 min-h-0 flex-1 overflow-auto pr-1">
-                <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
-                  <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
-                    <tr>
-                      <th className="w-[110px] px-2 py-1 text-left font-medium">
-                        Client
-                      </th>
-                      <th className="w-[70px] px-2 py-1 text-left font-medium">
-                        Month
-                      </th>
-                      <th className="px-2 py-1 text-left font-medium">Process</th>
-                      <th className="w-[80px] px-2 py-1 text-left font-medium">
-                        Status
-                      </th>
-                      <th className="w-[130px] px-2 py-1 text-right font-medium">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {instances.map((inst) => {
-                      const isSelected =
-                        selectedInstance && selectedInstance.id === inst.id;
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(340px,0.9fr)_minmax(0,1.1fr)] gap-3">
+        {/* Left: process instances */}
+        <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-800">
+              Process instances
+            </h2>
+            <span className="text-[11px] text-gray-500">
+              Showing{" "}
+              <span className="font-mono text-gray-900">
+                {filteredInstances.length}
+              </span>{" "}
+              of{" "}
+              <span className="font-mono text-gray-900">
+                {items.length}
+              </span>
+            </span>
+          </div>
 
-                      return (
-                        <tr
-                          key={inst.id}
-                          className={
-                            "cursor-pointer rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800 shadow-sm hover:border-blue-300 hover:bg-blue-50" +
-                            (isSelected ? " bg-blue-50 border-blue-300" : "")
-                          }
-                          onClick={() => handleViewTasks(inst)}
-                        >
-                          <td className="px-2 py-1 align-top">
-                            <span className="font-mono text-[11px] text-gray-900">
-                              {inst.client_id || "no-client"}
-                            </span>
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <span className="font-mono text-[11px] text-gray-800">
-                              {inst.month}
-                            </span>
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <div className="text-[11px] text-gray-900">
-                              {inst.definition_name || inst.definition_id}
-                            </div>
-                            {inst.last_run_result && (
-                              <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-1">
-                                {inst.last_run_result}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <span
-                              className={
-                                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium " +
-                                (inst.status === "completed"
-                                  ? "bg-green-100 text-green-800 border border-green-200"
-                                  : inst.status === "ready"
-                                  ? "bg-gray-100 text-gray-800 border border-gray-200"
-                                  : "bg-yellow-100 text-yellow-800 border border-yellow-200")
-                              }
-                            >
-                              {inst.status}
-                            </span>
-                          </td>
-                          <td
-                            className="px-2 py-1 align-top"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className="flex flex-col items-end gap-1">
-                              <button
-                                type="button"
-                                className="inline-flex items-center rounded border border-gray-300 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-700 hover:bg-gray-50"
-                                onClick={() => handleRun(inst)}
-                              >
-                                Run
-                              </button>
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
-                                  onClick={() => handleOpenClientProfile(inst)}
-                                >
-                                  Client
-                                </button>
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
-                                  onClick={() => handleOpenTasksDashboard(inst)}
-                                >
-                                  Tasks
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          {filteredInstances.length === 0 ? (
+            <div className="mt-2 flex-1 px-3 py-4 text-xs text-gray-500">
+              No process instances found for current filters. Trigger reglament
+              chains or adjust filters.
+            </div>
+          ) : (
+            <div className="mt-1 min-h-0 flex-1 overflow-auto pr-1">
+              <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
+                <thead className="sticky top-0 bg-white text-[11px] text-gray-500">
+                  <tr>
+                    <th className="w-[110px] px-2 py-1 text-left font-medium">
+                      Client
+                    </th>
+                    <th className="w-[90px] px-2 py-1 text-left font-medium">
+                      Profile
+                    </th>
+                    <th className="w-[80px] px-2 py-1 text-left font-medium">
+                      Period
+                    </th>
+                    <th className="w-[90px] px-2 py-1 text-left font-medium">
+                      Status
+                    </th>
+                    <th className="w-[80px] px-2 py-1 text-left font-medium">
+                      Steps
+                    </th>
+                    <th className="px-2 py-1 text-left font-medium">
+                      Last event
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInstances.map((inst) => {
+                    const isSelected = selectedInstanceId === inst.id;
+                    const displayStatus = getInstanceDisplayStatus(inst);
+                    const stepsCount = inst.steps ? inst.steps.length : 0;
 
-          {/* Middle column: tasks for selected instance */}
-          <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-            <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-800">
-                  Tasks for selected instance
-                </h2>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Auto-generated tasks linked to internal process instance.
-                </p>
-                {selectedInstance && (
-                  <>
-                    <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-600">
-                      <span>
-                        Client:{" "}
-                        <span className="font-mono text-gray-900">
-                          {selectedInstance.client_id || "no client"}
-                        </span>
-                      </span>
-                      <span>
-                        Process:{" "}
-                        <span className="font-mono text-gray-900">
-                          {selectedInstance.definition_name ||
-                            selectedInstance.definition_id}
-                        </span>
-                      </span>
-                      <span>
-                        Month:{" "}
-                        <span className="font-mono text-gray-900">
-                          {selectedInstance.month || "n/a"}
-                        </span>
-                      </span>
-                      <span>
-                        Status:{" "}
-                        <span className="font-semibold text-gray-900">
-                          {selectedInstanceLive?.status ?? selectedInstance.status}
-                        </span>
-                      </span>
-                    </div>
-
-                    <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-600">
-                      <span>
-                        Tasks:{" "}
-                        <span className="font-mono text-gray-900">
-                          {tasksSummary.completed} / {tasksSummary.total} completed
-                        </span>
-                      </span>
-                      <span>
-                        Overdue:{" "}
-                        <span className="font-mono text-gray-900">
-                          {tasksSummary.overdue}
-                        </span>
-                      </span>
-                      <span>
-                        Derived:{" "}
-                        <span className="font-mono text-gray-900">
-                          {tasksSummary.derivedStatus}
-                        </span>
-                      </span>
-                      {tasksSummary.derivedStatus === "completed-by-tasks" && (
-                        <span>
-                          Lifecycle:{" "}
-                          <span className="font-mono text-gray-900">
-                            auto-sync to "completed"
-                            {lifecycleSyncInProgress ? " (syncing...)" : ""}
+                    return (
+                      <tr
+                        key={inst.id}
+                        className={
+                          "cursor-pointer rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800 shadow-sm hover:border-blue-300 hover:bg-blue-50" +
+                          (isSelected ? " border-blue-300 bg-blue-50" : "")
+                        }
+                        onClick={() => setSelectedInstanceId(inst.id)}
+                      >
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[11px] text-gray-900">
+                            {inst.client_id || "n/a"}
                           </span>
-                        </span>
-                      )}
-                      {lifecycleSyncError && (
-                        <span className="text-red-600">
-                          Lifecycle sync error: {lifecycleSyncError}
-                        </span>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {!selectedInstance ? (
-              <div className="flex-1 px-4 py-6 text-xs text-gray-500">
-                Select an instance on the left to see related tasks.
-              </div>
-            ) : tasksForInstance.length === 0 ? (
-              <div className="flex-1 space-y-2 px-4 py-6 text-xs text-gray-500">
-                <div>No tasks for this instance.</div>
-                <div>
-                  Use{" "}
-                  <span className="font-mono text-xs">
-                    Run
-                  </span>{" "}
-                  on the instance in the left panel to generate tasks.
-                </div>
-              </div>
-            ) : (
-              <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1">
-                <table className="min-w-full border-separate border-spacing-y-1 text-xs">
-                  <thead className="text-[11px] text-gray-500">
-                    <tr>
-                      <th className="px-2 py-1 text-left font-medium">Title</th>
-                      <th className="px-2 py-1 text-left font-medium">Status</th>
-                      <th className="px-2 py-1 text-left font-medium">Due</th>
-                      <th className="px-2 py-1 text-left font-medium">Assignee</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tasksForInstance.map((task, index) => {
-                      const baseKey =
-                        (task.id as string) ||
-                        (task.internal_id as string) ||
-                        "task";
-                      const rowKey = `${baseKey}_${index}`;
-
-                      return (
-                        <tr
-                          key={rowKey}
-                          className="rounded-md bg-gray-50 text-[11px] text-gray-800"
-                        >
-                          <td className="px-2 py-1 align-top">
-                            <div className="font-medium text-gray-900">
-                              {task.title || "(no title)"}
-                            </div>
-                            {task.description && (
-                              <div className="mt-0.5 text-[10px] text-gray-500 line-clamp-2">
-                                {task.description}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <span className="inline-flex items-center rounded-full border border-gray-300 px-2 py-0.5 text-[10px]">
-                              {task.status || "n/a"}
-                            </span>
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <div className="flex flex-col gap-0.5 text-[10px]">
-                              <span>
-                                {task.due_date ||
-                                  task.deadline ||
-                                  task.planned_date ||
-                                  "n/a"}
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[10px] text-gray-800">
+                            {inst.profile_code || "n/a"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[10px] text-gray-800">
+                            {inst.period || "n/a"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span
+                            className={
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium " +
+                              getStatusPillClasses(displayStatus)
+                            }
+                          >
+                            {displayStatus}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <span className="font-mono text-[11px] text-gray-900">
+                            {stepsCount}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 align-top">
+                          <div className="flex flex-col gap-0.5">
+                            {inst.last_event_code && (
+                              <span className="font-mono text-[10px] text-gray-800">
+                                {inst.last_event_code}
                               </span>
-                              {task.is_overdue && (
-                                <span className="text-[10px] font-semibold text-red-600">
-                                  Overdue
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-2 py-1 align-top">
-                            <span className="font-mono text-[10px] text-gray-700">
-                              {task.assignee || "unassigned"}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+                            )}
+                            {inst.source && (
+                              <span className="text-[10px] text-gray-500">
+                                {inst.source}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
-          {/* Right column: chain debug panel */}
-          <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
-            <div className="mb-2">
-              <div className="text-[11px] font-semibold text-gray-700">
-                Chain debug
-              </div>
+        {/* Right: steps for selected instance */}
+        <section className="flex min-h-0 flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
+          <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">
+                Process steps
+              </h2>
               <p className="mt-0.5 text-[11px] text-gray-500">
-                Trigger chains with instance context.
+                Steps for the selected process instance. Derived status is
+                computed from these steps on the backend.
               </p>
             </div>
-
-            <div className="min-h-0 flex-1 overflow-auto">
-              <div className="mb-2">
-                <label className="mb-1 block text-[11px] text-gray-600">
-                  Chain id
-                </label>
-                {chainOptions.length > 0 ? (
-                  <select
-                    value={chainId}
-                    onChange={(e) => setChainId(e.target.value)}
-                    className="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] bg-white"
-                  >
-                    {chainOptions.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={chainId}
-                    placeholder="chain_id"
-                    onChange={(e) => setChainId(e.target.value)}
-                    className="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
-                  />
-                )}
-              </div>
-
-              <div className="mb-2">
-                <label className="mb-1 block text-[11px] text-gray-600">
-                  Client id (optional)
-                </label>
-                <input
-                  type="text"
-                  value={chainClient}
-                  placeholder="client_id (optional)"
-                  onChange={(e) => setChainClient(e.target.value)}
-                  className="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px]"
-                />
-              </div>
-
-              <div className="mb-2">
-                <label className="mb-1 block text-[11px] text-gray-600">
-                  Context JSON
-                </label>
-                <textarea
-                  value={chainContext}
-                  placeholder="context JSON"
-                  onChange={(e) => setChainContext(e.target.value)}
-                  className="h-32 w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] font-mono"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleChainDebug}
-                className="inline-flex w-full items-center justify-center rounded border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
-              >
-                Run chain
-              </button>
-
-              {chainError && (
-                <div className="mt-2 text-[11px] text-red-600 break-words">
-                  {chainError}
+            {selectedInstance && (
+              <div className="text-right text-[10px] text-gray-500">
+                <div>
+                  Client:{" "}
+                  <span className="font-mono text-gray-900">
+                    {selectedInstance.client_id || "n/a"}
+                  </span>
                 </div>
-              )}
+                <div>
+                  Profile:{" "}
+                  <span className="font-mono text-gray-900">
+                    {selectedInstance.profile_code || "n/a"}
+                  </span>
+                </div>
+                <div>
+                  Period:{" "}
+                  <span className="font-mono text-gray-900">
+                    {selectedInstance.period || "n/a"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
-              {chainResult && (
-                <pre className="mt-2 max-h-40 overflow-auto rounded border border-gray-200 bg-gray-50 p-1 text-[11px] text-gray-700">
-                  {chainResult}
-                </pre>
-              )}
+          {!selectedInstance ? (
+            <div className="flex-1 px-3 py-4 text-xs text-gray-500">
+              Select a process instance on the left to see its steps.
             </div>
-          </section>
-        </div>
+          ) : steps.length === 0 ? (
+            <div className="flex-1 px-3 py-4 text-xs text-gray-500">
+              This instance has no steps yet. Auto-steps will be created by
+              backend when new control events are mapped to this process.
+            </div>
+          ) : (
+            <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1">
+              <table className="min-w-full border-separate border-spacing-y-[4px] text-xs">
+                <thead className="text-[11px] text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium">
+                      Step
+                    </th>
+                    <th className="w-[90px] px-2 py-1 text-left font-medium">
+                      Status
+                    </th>
+                    <th className="w-[120px] px-2 py-1 text-left font-medium">
+                      Created
+                    </th>
+                    <th className="w-[120px] px-2 py-1 text-left font-medium">
+                      Completed
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {steps.map((step) => (
+                    <tr
+                      key={step.id}
+                      className="rounded-md border border-gray-100 bg-gray-50 text-[11px] text-gray-800"
+                    >
+                      <td className="px-2 py-1 align-top">
+                        <div className="font-medium text-gray-900">
+                          {step.title}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1 align-top">
+                        <span
+                          className={
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium " +
+                            getStepPillClasses(step.status)
+                          }
+                        >
+                          {step.status || "pending"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 align-top">
+                        <span className="font-mono text-[10px] text-gray-800">
+                          {step.created_at || "n/a"}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 align-top">
+                        <span className="font-mono text-[10px] text-gray-800">
+                          {step.completed_at || "n/a"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
