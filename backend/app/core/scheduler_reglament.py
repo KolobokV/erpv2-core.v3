@@ -1,43 +1,32 @@
-﻿from __future__ import annotations
-
-import logging
+﻿import logging
 import threading
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Set
+from typing import Dict
 
 from app.core.events import EventTypes, get_event_system
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class ReglamentChainConfig:
-    chain_id: str
-    client_id: str
-
-
-# Demo mapping: one chain per client profile.
-REGLEMENT_CHAINS: List[ReglamentChainConfig] = [
-    ReglamentChainConfig(
-        chain_id="reglament.ip_usn_dr.monthly",
-        client_id="ip_usn_dr",
-    ),
-    ReglamentChainConfig(
-        chain_id="reglament.ooo_osno_3_zp1025.monthly",
-        client_id="ooo_osno_3_zp1025",
-    ),
-    ReglamentChainConfig(
-        chain_id="reglament.ooo_usn_dr_tour_zp520.monthly",
-        client_id="ooo_usn_dr_tour_zp520",
-    ),
+# Registry of reglament chains.
+REGLEMENT_CHAINS = [
+    {
+        "chain_id": "reglament.ip_usn_dr.monthly",
+        "client_id": "ip_usn_dr",
+    },
+    {
+        "chain_id": "reglament.ooo_osno_3_zp1025.monthly",
+        "client_id": "ooo_osno_3_zp1025",
+    },
+    {
+        "chain_id": "reglament.ooo_usn_dr_tour.monthly",
+        "client_id": "ooo_usn_dr_tour",
+    },
 ]
 
-
 _scheduler_started = False
-_fired_keys_lock = threading.Lock()
-_fired_keys: Set[str] = set()
+_fired = set()
+_fired_lock = threading.Lock()
 
 
 def _current_period() -> str:
@@ -45,68 +34,59 @@ def _current_period() -> str:
     return f"{now.year:04d}-{now.month:02d}"
 
 
-def _make_fired_key(chain_id: str, period: str) -> str:
-    return f"{chain_id}::{period}"
-
-
-def _fire_chains_for_period(period: str) -> None:
+async def _publish_chain_event(chain: Dict[str, str], period: str):
     """
-    For each configured reglement chain, publish a CHAIN_TRIGGERED event
-    for the given period if it was not fired before in this process.
+    Publish CHAIN_TRIGGERED event for a single chain.
     """
-    global _fired_keys
-
     es = get_event_system()
 
-    for cfg in REGLEMENT_CHAINS:
-        key = _make_fired_key(cfg.chain_id, period)
+    payload = {
+        "chain_id": chain["chain_id"],
+        "client_id": chain["client_id"],
+        "period": period,
+        "mode": "reglament",
+        "trigger": "scheduler",
+    }
 
-        with _fired_keys_lock:
-            if key in _fired_keys:
-                continue
-            _fired_keys.add(key)
+    logger.info(
+        "REGLEMENT_SCHEDULER: publishing CHAIN_TRIGGERED -> %s",
+        payload,
+    )
 
-        context = {
-            "process_instance_id": "",
-            "process_definition_id": "",
-            "process_name": cfg.chain_id,
-            "month": period,
-            "client_id": cfg.client_id,
-            "status": "scheduled",
-        }
-
-        logger.info(
-            "REGLEMENT_SCHEDULER_FIRE: chain_id=%s client_id=%s period=%s",
-            cfg.chain_id,
-            cfg.client_id,
-            period,
-        )
-
-        es.publish(
-            EventTypes.CHAIN_TRIGGERED,
-            {
-                "chain_id": cfg.chain_id,
-                "client_id": cfg.client_id,
-                "context": context,
-            },
-        )
+    await es.publish(EventTypes.CHAIN_TRIGGERED, payload)
 
 
-def _scheduler_loop() -> None:
+def _fire_period(period: str):
     """
-    Background loop that triggers reglement chains once per period (YYYY-MM).
+    Fire CHAIN_TRIGGERED events for all chains only once per period.
+    """
+    global _fired
 
-    Strategy:
-      - On start: fire chains for current period once.
-      - Then every 5 minutes:
-          - recompute current period,
-          - fire chains for this period if not fired before.
+    for chain in REGLEMENT_CHAINS:
+        key = f"{chain['chain_id']}::{period}"
+
+        with _fired_lock:
+            if key in _fired:
+                continue
+            _fired.add(key)
+
+        # schedule async publish (EventSystem is async)
+        import asyncio
+
+        asyncio.run(_publish_chain_event(chain, period))
+
+
+def _scheduler_loop():
+    """
+    Runs in background thread:
+      - fires events once on start
+      - every 5 minutes checks and fires new period
     """
     logger.info("REGLEMENT_SCHEDULER_LOOP_START")
 
     try:
         period = _current_period()
-        _fire_chains_for_period(period)
+        _fire_period(period)
     except Exception as exc:
         logger.warning("REGLEMENT_SCHEDULER_INITIAL_FIRE_FAILED: %s", exc)
 
@@ -114,21 +94,19 @@ def _scheduler_loop() -> None:
         time.sleep(300.0)
         try:
             period = _current_period()
-            _fire_chains_for_period(period)
+            _fire_period(period)
         except Exception as exc:
             logger.warning("REGLEMENT_SCHEDULER_TICK_FAILED: %s", exc)
 
 
-def start_reglament_scheduler() -> None:
+def start_reglament_scheduler():
     """
-    Idempotent entry point to start background reglement scheduler.
+    Start the background scheduler (idempotent).
     """
     global _scheduler_started
 
     if _scheduler_started:
-        logger.debug("REGLEMENT_SCHEDULER_ALREADY_STARTED")
         return
-
     _scheduler_started = True
 
     thread = threading.Thread(

@@ -1,19 +1,27 @@
 ﻿from __future__ import annotations
 
+import logging
 from fastapi import FastAPI
 
-from app.core.event_handlers import register_default_event_handlers
-from app.core.chain_registry import register_builtin_chains
+from app.core.events import get_event_system
+from app.core.scheduler_reglament import start_reglament_scheduler
+
+logger = logging.getLogger(__name__)
 
 
-async def init_app_events(app: FastAPI) -> None:
-    """
-    Initialize application event handlers and chain registry.
+def register_startup_events(app: FastAPI) -> None:
+    @app.on_event("startup")
+    async def on_startup() -> None:
+        _ = get_event_system()
+        logger.info("APP_STARTUP_EVENTS_REGISTERED")
+        try:
+            start_reglament_scheduler()
+            logger.info("REGLEMENT_SCHEDULER_START_REQUESTED")
+        except Exception:
+            logger.exception("REGLEMENT_SCHEDULER_START_FAILED")
 
-    This is called once on application startup.
-    """
-    # Register builtin chains first
-    register_builtin_chains()
 
-    # Then subscribe event handlers
-    await register_default_event_handlers()
+def register_shutdown_events(app: FastAPI) -> None:
+    @app.on_event("shutdown")
+    async def on_shutdown() -> None:
+        logger.info("APP_SHUTDOWN_EVENTS_TRIGGERED")

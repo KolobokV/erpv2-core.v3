@@ -1,0 +1,12 @@
+﻿{
+  "templates": [
+    { "code": "salary", "label": "Salary event" },
+    { "code": "ndfl", "label": "NDFL payment" },
+    { "code": "insurance", "label": "Insurance payment" },
+    { "code": "usn_advance", "label": "USN advance" },
+    { "code": "bank_statement", "label": "Bank statement request" },
+    { "code": "document_request", "label": "Document request" },
+    { "code": "vat", "label": "VAT declaration" },
+    { "code": "tourist_tax", "label": "Tourist tax monthly" }
+  ]
+}
