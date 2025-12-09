@@ -1,119 +1,54 @@
-﻿import logging
-import threading
-import time
-from datetime import datetime, timezone
-from typing import Dict
+﻿import asyncio
+import datetime
+import logging
+from typing import Optional
 
-from app.core.events import EventTypes, get_event_system
+from app.services.chain_executor_v2 import run_reglament_for_period
 
 logger = logging.getLogger(__name__)
 
-# Registry of reglament chains.
-REGLEMENT_CHAINS = [
-    {
-        "chain_id": "reglament.ip_usn_dr.monthly",
-        "client_id": "ip_usn_dr",
-    },
-    {
-        "chain_id": "reglament.ooo_osno_3_zp1025.monthly",
-        "client_id": "ooo_osno_3_zp1025",
-    },
-    {
-        "chain_id": "reglament.ooo_usn_dr_tour.monthly",
-        "client_id": "ooo_usn_dr_tour",
-    },
-]
-
-_scheduler_started = False
-_fired = set()
-_fired_lock = threading.Lock()
-
-
-def _current_period() -> str:
-    now = datetime.now(timezone.utc)
-    return f"{now.year:04d}-{now.month:02d}"
-
-
-async def _publish_chain_event(chain: Dict[str, str], period: str):
-    """
-    Publish CHAIN_TRIGGERED event for a single chain.
-    """
-    es = get_event_system()
-
-    payload = {
-        "chain_id": chain["chain_id"],
-        "client_id": chain["client_id"],
-        "period": period,
-        "mode": "reglament",
-        "trigger": "scheduler",
+# Registry of reglament chains for UI / dev API
+REGLEMENT_CHAINS = {
+    "monthly_reglament": {
+        "code": "monthly_reglament",
+        "description": "Monthly reglament for all clients based on client profiles and step templates",
+        "schedule": "0 9 1 * *",  # cron like: 09:00 at first day of month
     }
+}
 
-    logger.info(
-        "REGLEMENT_SCHEDULER: publishing CHAIN_TRIGGERED -> %s",
-        payload,
-    )
-
-    await es.publish(EventTypes.CHAIN_TRIGGERED, payload)
+_scheduler_task: Optional[asyncio.Task] = None
 
 
-def _fire_period(period: str):
+def start_reglament_scheduler() -> None:
     """
-    Fire CHAIN_TRIGGERED events for all chains only once per period.
+    Lightweight scheduler:
+    - runs background loop
+    - every 60 seconds checks current datetime
+    - on first day of month at 09:00 triggers reglament for previous month
     """
-    global _fired
+    global _scheduler_task
 
-    for chain in REGLEMENT_CHAINS:
-        key = f"{chain['chain_id']}::{period}"
-
-        with _fired_lock:
-            if key in _fired:
-                continue
-            _fired.add(key)
-
-        # schedule async publish (EventSystem is async)
-        import asyncio
-
-        asyncio.run(_publish_chain_event(chain, period))
-
-
-def _scheduler_loop():
-    """
-    Runs in background thread:
-      - fires events once on start
-      - every 5 minutes checks and fires new period
-    """
-    logger.info("REGLEMENT_SCHEDULER_LOOP_START")
-
-    try:
-        period = _current_period()
-        _fire_period(period)
-    except Exception as exc:
-        logger.warning("REGLEMENT_SCHEDULER_INITIAL_FIRE_FAILED: %s", exc)
-
-    while True:
-        time.sleep(300.0)
-        try:
-            period = _current_period()
-            _fire_period(period)
-        except Exception as exc:
-            logger.warning("REGLEMENT_SCHEDULER_TICK_FAILED: %s", exc)
-
-
-def start_reglament_scheduler():
-    """
-    Start the background scheduler (idempotent).
-    """
-    global _scheduler_started
-
-    if _scheduler_started:
+    if _scheduler_task is not None:
+        logger.info("Reglament scheduler already running")
         return
-    _scheduler_started = True
 
-    thread = threading.Thread(
-        target=_scheduler_loop,
-        name="reglament-scheduler",
-        daemon=True,
-    )
-    thread.start()
+    async def _worker() -> None:
+        logger.info("Reglament scheduler started")
+        while True:
+            now = datetime.datetime.now()
+            try:
+                year = now.year
+                month = now.month - 1
+                if month == 0:
+                    month = 12
+                    year -= 1
 
-    logger.info("REGLEMENT_SCHEDULER_STARTED")
+                if now.day == 1 and now.hour == 9 and now.minute == 0:
+                    logger.info("Scheduler triggering reglament for %04d-%02d", year, month)
+                    await run_reglament_for_period(year=year, month=month)
+            except Exception as exc:
+                logger.exception("Error in reglament scheduler: %s", exc)
+            await asyncio.sleep(60)
+
+    loop = asyncio.get_event_loop()
+    _scheduler_task = loop.create_task(_worker())

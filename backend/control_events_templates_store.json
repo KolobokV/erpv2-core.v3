@@ -1,12 +1,53 @@
 ﻿{
   "templates": [
-    { "code": "salary", "label": "Salary event" },
-    { "code": "ndfl", "label": "NDFL payment" },
-    { "code": "insurance", "label": "Insurance payment" },
-    { "code": "usn_advance", "label": "USN advance" },
-    { "code": "bank_statement", "label": "Bank statement request" },
-    { "code": "document_request", "label": "Document request" },
-    { "code": "vat", "label": "VAT declaration" },
-    { "code": "tourist_tax", "label": "Tourist tax monthly" }
+    {
+      "code": "salary",
+      "label": "Salary payment",
+      "category": "salary",
+      "auto": true,
+      "description": "Salary transfer for employees"
+    },
+    {
+      "code": "ndfl",
+      "label": "NDFL payment",
+      "category": "tax",
+      "auto": true,
+      "description": "Tax withheld from employees"
+    },
+    {
+      "code": "insurance",
+      "label": "Insurance contributions",
+      "category": "social",
+      "auto": true,
+      "description": "Pension and medical insurance"
+    },
+    {
+      "code": "usn_advance",
+      "label": "USN advance",
+      "category": "tax",
+      "auto": true,
+      "description": "Quarterly USN advance payment"
+    },
+    {
+      "code": "tourist_tax",
+      "label": "Tourist tax",
+      "category": "local",
+      "auto": true,
+      "description": "Tourism fee payment"
+    },
+    {
+      "code": "bank_statement",
+      "label": "Bank statement request",
+      "category": "documents",
+      "auto": true,
+      "description": "Request bank statement from client"
+    },
+    {
+      "code": "document_request",
+      "label": "Document request",
+      "category": "documents",
+      "auto": true,
+      "description": "Request accounting documents"
+    }
   ]
 }

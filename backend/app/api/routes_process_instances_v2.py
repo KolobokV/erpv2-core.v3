@@ -1,93 +1,167 @@
-﻿from __future__ import annotations
-
-import json
+﻿import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
-router = APIRouter(prefix="/api/internal", tags=["internal-processes-v2"])
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+INSTANCES_PATH = BASE_DIR / "process_instances_store.json"
+PROFILES_PATH = BASE_DIR / "client_profiles_store.json"
+
+router = APIRouter(
+    prefix="/api/internal/process-instances-v2",
+    tags=["internal.process_instances_v2"],
+)
 
 
-def _load_raw_instances() -> List[Dict[str, Any]]:
-    """
-    Load process instances from JSON store created by
-    dev_create_test_process_all_clients.
-
-    Falls back to an empty list if the file is missing or invalid.
-    """
-    # project root: .../ERPv2_backend_connect/
-    root = Path(__file__).resolve().parents[2]
-    path = root / "process_instances_store.json"
+def _load_json(path: Path, default: Any) -> Any:
     if not path.exists():
-        return []
-
+        return default
     try:
+        raw = path.read_text(encoding="utf-8-sig")
+    except Exception:
         raw = path.read_text(encoding="utf-8")
-    except Exception:
-        return []
-
-    raw = raw.strip()
-    if not raw:
-        return []
-
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except Exception:
-        return []
-
-    # supported formats:
-    # 1) plain list: [ {...}, {...} ]
-    # 2) dict with "items" or "instances"
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        items = data.get("items") or data.get("instances") or []
-        if isinstance(items, list):
-            return items
-    return []
+        return default
 
 
-@router.get("/process-instances-v2/")
-async def list_process_instances_v2() -> Dict[str, Any]:
+def _load_instances_raw() -> Any:
     """
-    Lightweight read-only endpoint for frontend dashboards.
+    Load raw instances store as is.
 
-    Returns:
-      {
-        "instances": [
-          { "id", "client_id", "profile_code", "period", "status" },
-          ...
-        ],
-        "clients": [
-          { "client_id": "ip_usn_dr" },
-          ...
-        ]
-      }
+    Supported legacy formats:
+      - dict: { "<key>": { ... }, ... }
+      - list: [ { ... }, ... ]
     """
-    raw_items = _load_raw_instances()
+    return _load_json(INSTANCES_PATH, {})
 
-    instances: List[Dict[str, Any]] = []
-    client_ids: List[str] = []
 
-    for inst in raw_items:
-        client_id = inst.get("client_id") or ""
-        period = inst.get("period") or inst.get("month") or ""
-        status = inst.get("computed_status") or inst.get("status") or "open"
+def _load_profiles_map() -> Dict[str, str]:
+    """
+    Return mapping client_code -> label.
+    """
+    data = _load_json(PROFILES_PATH, {"profiles": []})
+    profiles = []
+    if isinstance(data, dict) and isinstance(data.get("profiles"), list):
+        profiles = data["profiles"]
+    elif isinstance(data, list):
+        profiles = data
 
-        if client_id and client_id not in client_ids:
-            client_ids.append(client_id)
+    result: Dict[str, str] = {}
+    for p in profiles:
+        code = p.get("code")
+        label = p.get("label") or p.get("name") or code
+        if code:
+            result[code] = label or code
+    return result
 
-        instances.append(
-            {
-                "id": inst.get("id"),
-                "client_id": client_id,
-                "profile_code": inst.get("profile_code") or "",
-                "period": period,
-                "status": status,
-            }
+
+def _normalize_instances() -> List[Dict[str, Any]]:
+    """
+    Normalize raw instances into flat list with derived fields.
+
+    Output fields:
+      - instance_key
+      - client_code
+      - client_label
+      - year
+      - month
+      - period (YYYY-MM)
+      - status
+      - steps_count
+      - ...all original fields
+    """
+    raw = _load_instances_raw()
+    profiles_map = _load_profiles_map()
+
+    items: List[Dict[str, Any]] = []
+
+    if isinstance(raw, dict):
+        iterable = raw.items()
+    elif isinstance(raw, list):
+        iterable = [(None, it) for it in raw]
+    else:
+        iterable = []
+
+    for key, value in iterable:
+        if not isinstance(value, dict):
+            continue
+
+        inst = dict(value)
+
+        client_code = inst.get("client_code") or inst.get("client_id")
+        year = inst.get("year")
+        month = inst.get("month")
+        period = inst.get("period")
+
+        if period and (not year or not month):
+            # try to parse YYYY-MM
+            parts = str(period).split("-")
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                year = int(parts[0])
+                month = int(parts[1])
+        if (year is not None) and (month is not None) and not period:
+            period = f"{int(year):04d}-{int(month):02d}"
+
+        status = inst.get("status") or "unknown"
+        steps = inst.get("steps") or []
+        if isinstance(steps, dict):
+            steps_count = len(steps.get("items", []))
+        elif isinstance(steps, list):
+            steps_count = len(steps)
+        else:
+            steps_count = 0
+
+        instance_key = key or inst.get("key") or (
+            f"{client_code}::{period}" if client_code and period else None
         )
 
-    clients = [{"client_id": cid} for cid in client_ids]
+        client_label = profiles_map.get(client_code or "", client_code)
 
-    return {"instances": instances, "clients": clients}
+        inst["instance_key"] = instance_key
+        inst["client_code"] = client_code
+        inst["client_label"] = client_label
+        inst["year"] = year
+        inst["month"] = month
+        inst["period"] = period
+        inst["status"] = status
+        inst["steps_count"] = steps_count
+
+        items.append(inst)
+
+    return items
+
+
+@router.get("/")
+def list_instances(
+    client_code: Optional[str] = Query(None),
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    period: Optional[str] = Query(None),
+) -> List[Dict[str, Any]]:
+    """
+    Unified list of process instances for coverage / internal tools.
+
+    Filters are optional; if omitted, all instances are returned.
+    """
+    items = _normalize_instances()
+    result: List[Dict[str, Any]] = []
+
+    for inst in items:
+        if client_code and inst.get("client_code") != client_code:
+            continue
+
+        if period:
+            if inst.get("period") != period:
+                continue
+        else:
+            if year is not None and inst.get("year") != year:
+                continue
+            if month is not None and inst.get("month") != month:
+                continue
+
+        result.append(inst)
+
+    return result

@@ -1,7 +1,7 @@
 ﻿{
   "profiles": [
     {
-      "id": "11111111-1111-1111-1111-111111111111",
+      "id": "ip-usn-dr-001",
       "code": "ip_usn_dr",
       "label": "IP USN DR",
       "profile_type": "usn_dr",
@@ -10,7 +10,7 @@
       "settings": {}
     },
     {
-      "id": "22222222-2222-2222-2222-222222222222",
+      "id": "ooo-osno-3zp1025-001",
       "code": "ooo_osno_3_zp1025",
       "label": "OOO OSNO 3 zp1025",
       "profile_type": "osno",
@@ -19,7 +19,7 @@
       "settings": {}
     },
     {
-      "id": "33333333-3333-3333-3333-333333333333",
+      "id": "ooo-usn-dr-tour-001",
       "code": "ooo_usn_dr_tour",
       "label": "OOO USN DR + tourist tax",
       "profile_type": "usn_dr",

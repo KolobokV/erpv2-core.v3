@@ -1,89 +1,166 @@
-﻿import uuid
+﻿import json
 from datetime import datetime
-from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
+from typing import Any, Dict, List
 
-from app.core.store_json import load_json_store, save_json_store
+from fastapi import APIRouter, HTTPException, Query
 
-CONTROL_EVENTS_STORE = "control_events_store.json"
-CLIENT_PROFILES_STORE = "client_profiles_store.json"
+CONTROL_EVENTS_STORE_NAME = "control_events_store.json"
+CLIENT_PROFILES_STORE_NAME = "client_profiles_store.json"
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+EVENTS_PATH = BASE_DIR / CONTROL_EVENTS_STORE_NAME
+PROFILES_PATH = BASE_DIR / CLIENT_PROFILES_STORE_NAME
 
 router = APIRouter(
     prefix="/api/control-events",
-    tags=["control_events"]
+    tags=["control_events"],
 )
 
-def _load_events() -> Dict[str, Any]:
-    data = load_json_store(CONTROL_EVENTS_STORE, default={"events": []})
+
+def _load_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    try:
+        raw = path.read_text(encoding="utf-8-sig")
+    except Exception:
+        raw = path.read_text(encoding="utf-8")
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default
+
+
+def _save_json(path: Path, data: Any) -> None:
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _load_events_store() -> Dict[str, Any]:
+    data = _load_json(EVENTS_PATH, {"events": []})
+    if isinstance(data, list):
+        return {"events": data}
     if isinstance(data, dict) and isinstance(data.get("events"), list):
         return data
     return {"events": []}
 
-def _save_events(data: Dict[str, Any]):
-    save_json_store(CONTROL_EVENTS_STORE, data)
 
-def _load_profiles() -> Dict[str, Any]:
-    data = load_json_store(CLIENT_PROFILES_STORE, default={"profiles": []})
+def _save_events_store(store: Dict[str, Any]) -> None:
+    _save_json(EVENTS_PATH, store)
+
+
+def _load_profiles_store() -> Dict[str, Any]:
+    data = _load_json(PROFILES_PATH, {"profiles": []})
+    if isinstance(data, list):
+        return {"profiles": data}
     if isinstance(data, dict) and isinstance(data.get("profiles"), list):
         return data
     return {"profiles": []}
 
+
 @router.get("/{client_code}")
-def list_control_events(client_code: str, year: int, month: int):
+def list_events_for_client(
+    client_code: str,
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+) -> List[Dict[str, Any]]:
+    """
+    Return events for given client and period.
+
+    API гарантирует, что в ответе не будет дубликатов событий
+    (по идентификатору события).
+    """
+    store = _load_events_store()
+    events = store.get("events", [])
     period = f"{year:04d}-{month:02d}"
-    store = _load_events()
-    events = [
-        ev for ev in store.get("events", [])
-        if ev.get("client_code") == client_code and ev.get("period") == period
-    ]
-    return events
+
+    seen_ids = set()
+    result: List[Dict[str, Any]] = []
+
+    for ev in events:
+        ev_client = ev.get("client_code") or ev.get("client_id")
+        ev_period = ev.get("period")
+        if ev_client != client_code or ev_period != period:
+            continue
+
+        ev_id = ev.get("id")
+        if ev_id and ev_id in seen_ids:
+            # skip duplicates in store
+            continue
+
+        if ev_id:
+            seen_ids.add(ev_id)
+
+        result.append(ev)
+
+    return result
+
 
 @router.post("/{client_code}/generate")
-def generate_control_events(client_code: str, year: int, month: int):
+def generate_events_for_client(
+    client_code: str,
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+) -> Dict[str, Any]:
+    """
+    Simple generator: ensures base events exist for client and period.
+
+    Используется как вспомогательный инструмент поверх основной
+    генерации через chain executor.
+    """
+    profiles = _load_profiles_store().get("profiles", [])
+    profile = next((p for p in profiles if p.get("code") == client_code), None)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Unknown client")
+
+    store = _load_events_store()
+    events = store.get("events", [])
     period = f"{year:04d}-{month:02d}"
 
-    profiles_store = _load_profiles()
-    profile = next((p for p in profiles_store.get("profiles", []) 
-                    if p.get("code") == client_code), None)
+    existing = [
+        e
+        for e in events
+        if (e.get("client_code") or e.get("client_id")) == client_code
+        and e.get("period") == period
+    ]
+    if existing:
+        return {"created": 0, "period": period, "client": client_code}
 
-    if not profile:
-        raise HTTPException(404, "Client profile not found")
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    base_types: List[str] = []
 
-    base_events = []
     profile_type = profile.get("profile_type")
+    has_salary = bool(profile.get("has_salary"))
+    has_tourist_tax = bool(profile.get("has_tourist_tax"))
+
+    base_types.extend(["bank_statement", "document_request"])
 
     if profile_type == "usn_dr":
-        base_events.append(("usn_advance", f"{year}-12-25"))
-        base_events.append(("bank_statement", f"{year}-{month:02d}-01"))
-        base_events.append(("document_request", f"{year}-{month:02d}-02"))
+        base_types.append("usn_advance")
 
-    if profile_type == "osno":
-        salary_dates = profile.get("salary_dates", [])
-        for d in salary_dates:
-            base_events.append(("salary", f"{year}-{month:02d}-{d:02d}"))
-        base_events.append(("ndfl", f"{year}-{month:02d}-15"))
-        base_events.append(("insurance", f"{year}-{month:02d}-20"))
-        base_events.append(("vat", f"{year}-12-25"))
+    if has_salary:
+        base_types.extend(["salary", "ndfl", "insurance"])
 
-    if profile.get("has_tourist_tax"):
-        base_events.append(("tourist_tax", f"{year}-{month:02d}-15"))
+    if has_tourist_tax:
+        base_types.append("tourist_tax")
 
-    store = _load_events()
-    now_events = store.get("events", [])
     created = 0
-
-    for ev_type, due in base_events:
-        now_events.append({
-            "id": str(uuid.uuid4()),
+    for ev_type in base_types:
+        ev = {
+            "id": f"evt-{ev_type}-{client_code}-{period}",
             "client_code": client_code,
-            "type": ev_type,
             "period": period,
-            "due_date": due,
+            "type": ev_type,
+            "label": ev_type.replace("_", " ").title(),
             "status": "new",
-            "created_at": datetime.utcnow().isoformat() + "Z"
-        })
+            "created_at": now_iso,
+        }
+        events.append(ev)
         created += 1
 
-    store["events"] = now_events
-    _save_events(store)
+    store["events"] = events
+    _save_events_store(store)
+
     return {"created": created, "period": period, "client": client_code}

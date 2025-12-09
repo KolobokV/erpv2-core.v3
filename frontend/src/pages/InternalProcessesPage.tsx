@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from "react";
 
 type ProcessInstance = {
-  id: string;
+  id?: string | null;
   client_id?: string;
   period?: string;
   status?: string;
@@ -116,8 +116,12 @@ export default function InternalProcessesPage() {
                 else if (s === "open") color = "#1d4ed8";
                 else if (s === "stuck") color = "#b91c1c";
 
+                const key =
+                  inst.id ||
+                  `${inst.client_id || "unknown"}::${inst.period || "unknown"}`;
+
                 return (
-                  <tr key={inst.id}>
+                  <tr key={key}>
                     <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6" }}>
                       {inst.client_id}
                     </td>

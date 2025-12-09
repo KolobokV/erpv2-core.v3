@@ -1,26 +1,59 @@
-﻿import uuid
+﻿import json
+import uuid
+import logging
+from pathlib import Path
 from typing import Any, Dict, List
+
 from fastapi import APIRouter, HTTPException
 
-from app.core.store_json import load_json_store, save_json_store
+logger = logging.getLogger(__name__)
 
 CLIENT_PROFILES_STORE = "client_profiles_store.json"
 
+# Project root (same pattern as in chain_executor_v2)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+STORE_PATH = BASE_DIR / CLIENT_PROFILES_STORE
+
 router = APIRouter(
     prefix="/api/internal",
-    tags=["internal.client_profiles"]
+    tags=["internal.client_profiles"],
 )
 
 
 def _load_profiles() -> Dict[str, Any]:
-    data = load_json_store(CLIENT_PROFILES_STORE, default={"profiles": []})
+    """
+    Load client profiles from JSON store.
+    Expected structure:
+      { "profiles": [ {...}, {...} ] }
+    """
+    if not STORE_PATH.exists():
+        logger.info("Client profiles store not found at %s, using empty list", STORE_PATH)
+        return {"profiles": []}
+
+    try:
+        with STORE_PATH.open("r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except Exception as exc:
+        logger.exception("Failed to load client profiles store %s: %s", STORE_PATH, exc)
+        return {"profiles": []}
+
     if isinstance(data, dict) and isinstance(data.get("profiles"), list):
         return data
+
+    logger.warning("Client profiles store has invalid structure, using empty list")
     return {"profiles": []}
 
 
 def _save_profiles(data: Dict[str, Any]) -> None:
-    save_json_store(CLIENT_PROFILES_STORE, data)
+    """
+    Save client profiles to JSON store with stable UTF-8 encoding.
+    """
+    try:
+        with STORE_PATH.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.exception("Failed to save client profiles store %s: %s", STORE_PATH, exc)
+        raise
 
 
 @router.get("/client-profiles")
