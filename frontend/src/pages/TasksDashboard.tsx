@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import TasksBoard from "../components/tasks/TasksBoard";
 
 const TasksDashboard: React.FC = () => {
@@ -10,8 +10,7 @@ const TasksDashboard: React.FC = () => {
             Tasks dashboard
           </h1>
           <p className="text-xs text-slate-600 mt-1">
-            Operational tasks loaded from backend. Today filters and advanced
-            views can be added later.
+            Operational tasks loaded from backend.
           </p>
         </div>
       </header>

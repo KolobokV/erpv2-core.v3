@@ -1,56 +1,93 @@
-﻿from typing import Any, Dict, List, Optional
+﻿from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+import json
+from pathlib import Path
+from typing import Any, Dict, List
 
-from app.services.process_instances_service import (
-    list_process_instances as svc_list_instances,
-    list_process_instances_for_client as svc_list_instances_for_client,
-    get_process_instance as svc_get_process_instance,
-)
+from fastapi import APIRouter
 
-router = APIRouter(
-    prefix="/api/internal/process-instances-v2",
-    tags=["internal-process-instances-v2"],
-)
+router = APIRouter(prefix="/api/internal", tags=["internal-processes-v2"])
 
 
-@router.get("/", summary="List process instances (v2)")
-def list_process_instances_v2(
-    client_id: Optional[str] = Query(
-        default=None,
-        description="Optional client_id to filter instances",
-    ),
-    period: Optional[str] = Query(
-        default=None,
-        description="Optional period filter in YYYY-MM format",
-    ),
-) -> List[Dict[str, Any]]:
+def _load_raw_instances() -> List[Dict[str, Any]]:
     """
-    Return process instances from the JSON store via process_instances_service.
+    Load process instances from JSON store created by
+    dev_create_test_process_all_clients.
 
-    If client_id is provided, only instances for this client are returned.
-    If both client_id and period are provided, instances are filtered by
-    client and exact period (YYYY-MM).
+    Falls back to an empty list if the file is missing or invalid.
     """
-    if client_id:
-        return svc_list_instances_for_client(
-            client_id=client_id,
-            period=period,
+    # project root: .../ERPv2_backend_connect/
+    root = Path(__file__).resolve().parents[2]
+    path = root / "process_instances_store.json"
+    if not path.exists():
+        return []
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+
+    raw = raw.strip()
+    if not raw:
+        return []
+
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+
+    # supported formats:
+    # 1) plain list: [ {...}, {...} ]
+    # 2) dict with "items" or "instances"
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        items = data.get("items") or data.get("instances") or []
+        if isinstance(items, list):
+            return items
+    return []
+
+
+@router.get("/process-instances-v2/")
+async def list_process_instances_v2() -> Dict[str, Any]:
+    """
+    Lightweight read-only endpoint for frontend dashboards.
+
+    Returns:
+      {
+        "instances": [
+          { "id", "client_id", "profile_code", "period", "status" },
+          ...
+        ],
+        "clients": [
+          { "client_id": "ip_usn_dr" },
+          ...
+        ]
+      }
+    """
+    raw_items = _load_raw_instances()
+
+    instances: List[Dict[str, Any]] = []
+    client_ids: List[str] = []
+
+    for inst in raw_items:
+        client_id = inst.get("client_id") or ""
+        period = inst.get("period") or inst.get("month") or ""
+        status = inst.get("computed_status") or inst.get("status") or "open"
+
+        if client_id and client_id not in client_ids:
+            client_ids.append(client_id)
+
+        instances.append(
+            {
+                "id": inst.get("id"),
+                "client_id": client_id,
+                "profile_code": inst.get("profile_code") or "",
+                "period": period,
+                "status": status,
+            }
         )
-    return svc_list_instances()
 
+    clients = [{"client_id": cid} for cid in client_ids]
 
-@router.get(
-    "/{instance_id}",
-    summary="Get single process instance by id (v2)",
-)
-def get_process_instance_v2(instance_id: str) -> Dict[str, Any]:
-    """
-    Return a single process instance by its id.
-
-    The instance is annotated with computed_status derived from its steps.
-    """
-    instance = svc_get_process_instance(instance_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail="Process instance not found")
-    return instance
+    return {"instances": instances, "clients": clients}

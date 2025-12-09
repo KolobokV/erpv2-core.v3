@@ -1,630 +1,406 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const CLIENT_PROFILE_FOCUS_KEY = "erpv2_client_profile_focus";
-
-type ControlEvent = {
+type ClientProfile = {
   id: string;
-  client_id: string;
-  profile_code?: string;
-  period?: string;
-  event_code?: string;
-  date?: string;
-  title?: string;
-  status?: string;
-  category?: string;
-  source?: string;
+  label: string;
+  short_label?: string;
 };
 
-type InstanceStep = {
+type ProcessStep = {
   id: string;
-  title: string;
-  status: string;
-  created_at?: string;
-  completed_at?: string;
+  name?: string;
+  title?: string;
+  status?: string;
+  type?: string;
+  due_date?: string;
+  [key: string]: any;
 };
 
 type ProcessInstance = {
   id: string;
   client_id: string;
-  profile_code?: string;
+  label?: string;
+  year?: number;
+  month?: number;
   period?: string;
   status?: string;
-  computed_status?: string;
-  source?: string;
-  events?: string[];
-  steps?: InstanceStep[];
-  created_at?: string;
-  updated_at?: string;
+  steps?: ProcessStep[];
+  [key: string]: any;
 };
 
-type EventWithInstanceLink = {
-  event: ControlEvent;
-  instance_id?: string | null;
-  instance_status?: string | null;
-  instance_steps_count?: number | null;
-};
-
-type ProcessOverviewPayload = {
+type ControlEvent = {
+  id: string;
   client_id: string;
-  year: number;
-  month: number;
-  period: string;
-  events: EventWithInstanceLink[];
-  instances: ProcessInstance[];
+  instance_id?: string;
+  name?: string;
+  title?: string;
+  type?: string;
+  due_date?: string;
+  year?: number;
+  month?: number;
+  period?: string;
+  status?: string;
+  [key: string]: any;
 };
 
-function getDefaultClientId(): string {
-  try {
-    const raw = window.localStorage.getItem(CLIENT_PROFILE_FOCUS_KEY);
-    if (!raw) {
-      return "ip_usn_dr";
-    }
+type InstancesResponse = {
+  clients?: ClientProfile[];
+  instances?: ProcessInstance[];
+};
 
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      return "ip_usn_dr";
-    }
-
-    // try JSON payload { clientId: "..." }
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (
-        parsed &&
-        typeof parsed.clientId === "string" &&
-        parsed.clientId.trim().length > 0
-      ) {
-        return parsed.clientId.trim();
-      }
-    } catch {
-      // not JSON, fall back to raw string
-    }
-
-    return trimmed;
-  } catch {
-    return "ip_usn_dr";
-  }
-}
-
-function getCurrentYearMonth(): { year: number; month: number } {
-  const now = new Date();
-  return {
-    year: now.getFullYear(),
-    month: now.getMonth() + 1,
-  };
-}
-
-function formatYearMonth(year: number, month: number): string {
-  const mm = month < 10 ? `0${month}` : String(month);
+function makePeriod(year: number, month: number): string {
+  const mm = String(month).padStart(2, "0");
   return `${year}-${mm}`;
 }
 
-function getInstanceDisplayStatus(instance: ProcessInstance): string {
-  if (instance.computed_status && instance.computed_status.trim().length > 0) {
-    return instance.computed_status;
+function matchPeriod(obj: any, year: number, month: number): boolean {
+  if (!obj) {
+    return false;
   }
-  if (instance.status && instance.status.trim().length > 0) {
-    return instance.status;
+
+  const targetPeriod = makePeriod(year, month);
+
+  if (obj.period === targetPeriod) {
+    return true;
   }
-  return "open";
+
+  const oy = obj.year;
+  const om = obj.month;
+
+  if (oy == null || om == null) {
+    return false;
+  }
+
+  const omInt = typeof om === "string" ? parseInt(om, 10) : om;
+  return Number(oy) === Number(year) && Number(omInt) === Number(month);
 }
 
-function getInstanceStatusColor(status: string): string {
-  const normalized = status.toLowerCase();
-  if (normalized === "completed") {
-    return "#10b981"; // green
-  }
-  if (normalized === "waiting") {
-    return "#f59e0b"; // orange
-  }
-  if (normalized === "error" || normalized === "failed") {
-    return "#ef4444"; // red
-  }
-  return "#3b82f6"; // blue
-}
+const ClientProcessOverviewPage: React.FC = () => {
+  const navigate = useNavigate();
 
-function getStepStatusColor(status: string): string {
-  const normalized = (status || "").toLowerCase();
-  if (normalized === "completed") {
-    return "#10b981";
-  }
-  if (normalized === "error" || normalized === "failed") {
-    return "#ef4444";
-  }
-  return "#64748b";
-}
+  const [clients, setClients] = useState<ClientProfile[]>([]);
+  const [instances, setInstances] = useState<ProcessInstance[]>([]);
+  const [events, setEvents] = useState<ControlEvent[]>([]);
 
-const cardStyle: React.CSSProperties = {
-  border: "1px solid #e2e8f0",
-  borderRadius: "12px",
-  padding: "12px",
-  backgroundColor: "#ffffff",
-  boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-  minHeight: 0,
-};
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [year, setYear] = useState<number>(2025);
+  const [month, setMonth] = useState<number>(12);
 
-const columnHeaderStyle: React.CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 600,
-  letterSpacing: "0.04em",
-  textTransform: "uppercase",
-  color: "#64748b",
-};
-
-const badgeStyleBase: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "2px 8px",
-  borderRadius: "999px",
-  fontSize: "11px",
-  fontWeight: 500,
-  backgroundColor: "#e5e7eb",
-  color: "#374151",
-};
-
-const listContainerStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "6px",
-  overflowY: "auto",
-  paddingRight: "4px",
-};
-
-const listItemStyleBase: React.CSSProperties = {
-  borderRadius: "8px",
-  padding: "6px 8px",
-  cursor: "pointer",
-  border: "1px solid transparent",
-};
-
-const listItemSelectedBorder = "#3b82f6";
-const listItemSelectedBg = "#eff6ff";
-
-export const ClientProcessOverviewPage: React.FC = () => {
-  const initial = getCurrentYearMonth();
-
-  const [clientId, setClientId] = useState<string>(getDefaultClientId);
-  const [year, setYear] = useState<number>(initial.year);
-  const [month, setMonth] = useState<number>(initial.month);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [overview, setOverview] = useState<ProcessOverviewPayload | null>(null);
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
+  // Load base data (clients, instances, events) once
   useEffect(() => {
-    const abort = new AbortController();
-
-    const load = async () => {
+    async function loadAll() {
       setLoading(true);
       setError(null);
       try {
-        const url = `/api/internal/process-overview/client/${encodeURIComponent(
-          clientId,
-        )}?year=${year}&month=${month}`;
-        const resp = await fetch(url, { signal: abort.signal });
-        if (!resp.ok) {
-          throw new Error(`Request failed with status ${resp.status}`);
-        }
-        const data = (await resp.json()) as ProcessOverviewPayload;
-        setOverview(data);
+        const [clientsResp, instancesResp, eventsResp] = await Promise.all([
+          fetch("/api/internal/client-profiles"),
+          fetch("/api/internal/process-instances-v2/"),
+          fetch("/api/internal/control-events-store/"),
+        ]);
 
-        let newSelectedInstanceId: string | null = null;
-        let newSelectedEventId: string | null = null;
-
-        if (data.events && data.events.length > 0) {
-          const first = data.events[0];
-          newSelectedEventId = first.event.id;
-          if (first.instance_id) {
-            newSelectedInstanceId = first.instance_id;
-          }
+        if (!clientsResp.ok) {
+          throw new Error("Failed to load client profiles");
         }
 
-        if (!newSelectedInstanceId && data.instances && data.instances.length > 0) {
-          newSelectedInstanceId = data.instances[0].id;
+        if (!instancesResp.ok) {
+          throw new Error("Failed to load process instances");
         }
 
-        setSelectedInstanceId((prev) => prev ?? newSelectedInstanceId);
-        setSelectedEventId((prev) => prev ?? newSelectedEventId);
-      } catch (err: any) {
-        if (err.name === "AbortError") {
-          return;
+        if (!eventsResp.ok) {
+          throw new Error("Failed to load control events store");
         }
-        setError(err?.message || "Failed to load client process overview");
+
+        const clientsJson: any = await clientsResp.json();
+        const instancesJson = (await instancesResp.json()) as InstancesResponse;
+        const eventsJson = (await eventsResp.json()) as ControlEvent[];
+
+        // Normalize clients shape: support array and { clients: [...] }
+        let normalizedClients: ClientProfile[] = [];
+        if (Array.isArray(clientsJson)) {
+          normalizedClients = clientsJson;
+        } else if (clientsJson && Array.isArray(clientsJson.clients)) {
+          normalizedClients = clientsJson.clients;
+        }
+
+        setClients(normalizedClients);
+        const allInstances = instancesJson.instances || [];
+        setInstances(allInstances);
+        setEvents(eventsJson || []);
+
+        if (!selectedClientId && normalizedClients.length > 0) {
+          setSelectedClientId(normalizedClients[0].id);
+        }
+      } catch (e: any) {
+        console.error("Error loading client process overview data:", e);
+        setError(e?.message || "Failed to load data");
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    load().catch(() => undefined);
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    return () => {
-      abort.abort();
-    };
-  }, [clientId, year, month]);
-
-  const currentPeriod = formatYearMonth(year, month);
-
-  const events = overview?.events ?? [];
-  const instances = overview?.instances ?? [];
-
-  const selectedInstance: ProcessInstance | undefined = instances.find(
-    (inst) => inst.id === selectedInstanceId,
+  const currentClient = useMemo(
+    () =>
+      Array.isArray(clients)
+        ? clients.find((c) => c.id === selectedClientId) || null
+        : null,
+    [clients, selectedClientId]
   );
 
-  const steps: InstanceStep[] = selectedInstance?.steps ?? [];
+  const currentInstance = useMemo(() => {
+    if (!selectedClientId || !Array.isArray(instances)) {
+      return null;
+    }
+    const forClient = instances.filter(
+      (inst) => String(inst.client_id) === String(selectedClientId)
+    );
+    if (forClient.length === 0) {
+      return null;
+    }
 
-  const handleClientIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.trim();
-    setClientId(value);
-    setSelectedInstanceId(null);
-    setSelectedEventId(null);
-  };
+    const exact = forClient.find((inst) => matchPeriod(inst, year, month));
+    if (exact) {
+      return exact;
+    }
 
-  const handleYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number.parseInt(e.target.value, 10);
+    return forClient[forClient.length - 1];
+  }, [instances, selectedClientId, year, month]);
+
+  const currentSteps = useMemo<ProcessStep[]>(() => {
+    if (!currentInstance || !Array.isArray(currentInstance.steps)) {
+      return [];
+    }
+    return currentInstance.steps as ProcessStep[];
+  }, [currentInstance]);
+
+  const currentEvents = useMemo<ControlEvent[]>(() => {
+    if (!selectedClientId || !Array.isArray(events)) {
+      return [];
+    }
+    return events.filter(
+      (ev) =>
+        String(ev.client_id) === String(selectedClientId) &&
+        matchPeriod(ev, year, month)
+    );
+  }, [events, selectedClientId, year, month]);
+
+  const meta = useMemo(
+    () => ({
+      client_id: selectedClientId || null,
+      client_label: currentClient ? currentClient.label : null,
+      year,
+      month,
+      period: makePeriod(year, month),
+      instance_id: currentInstance ? currentInstance.id : null,
+      instance_period: currentInstance ? currentInstance.period : null,
+      steps_count: currentSteps.length,
+      control_events_count: currentEvents.length,
+    }),
+    [selectedClientId, currentClient, year, month, currentInstance, currentSteps, currentEvents]
+  );
+
+  function handleClientChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    setSelectedClientId(e.target.value);
+  }
+
+  function handleYearChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = parseInt(e.target.value, 10);
     if (!Number.isNaN(v)) {
       setYear(v);
-      setSelectedInstanceId(null);
-      setSelectedEventId(null);
     }
-  };
+  }
 
-  const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number.parseInt(e.target.value, 10);
-    if (!Number.isNaN(v) && v >= 1 && v <= 12) {
+  function handleMonthChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = parseInt(e.target.value, 10);
+    if (!Number.isNaN(v)) {
       setMonth(v);
-      setSelectedInstanceId(null);
-      setSelectedEventId(null);
     }
-  };
+  }
+
+  function handleStepClick(step: ProcessStep) {
+    if (!step.id) {
+      return;
+    }
+    navigate(`/client-process-overview/step/${step.id}`);
+  }
+
+  function handleEventClick(event: ControlEvent) {
+    if (!event.id) {
+      return;
+    }
+    navigate(`/client-process-overview/event/${event.id}`);
+  }
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Client process overview
-        </h1>
-        <p className="text-xs text-slate-600 max-w-2xl">
-          Combined view of control events, process instances, and steps for a
-          single client and period. Use this to understand how well the
-          regulatory workflow is covered by processes.
-        </p>
-      </header>
+    <div className="p-4 space-y-4">
+      <h1 className="text-xl font-bold mb-2">Client process overview</h1>
 
-      <section className="flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col text-xs">
-          <label className="mb-1 font-medium text-slate-700">Client ID</label>
-          <input
-            type="text"
-            value={clientId}
-            onChange={handleClientIdChange}
-            className="border border-slate-300 rounded px-2 py-1 text-xs font-mono"
-            placeholder="ip_usn_dr"
-          />
+      <div className="flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="block text-sm font-medium mb-1">Client</label>
+          <select
+            className="border rounded px-2 py-1 min-w-[240px]"
+            value={selectedClientId}
+            onChange={handleClientChange}
+          >
+            <option value="">Select client</option>
+            {Array.isArray(clients) &&
+              clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.short_label || c.label || c.id}
+                </option>
+              ))}
+          </select>
         </div>
 
-        <div className="flex flex-col text-xs w-20">
-          <label className="mb-1 font-medium text-slate-700">Year</label>
+        <div>
+          <label className="block text-sm font-medium mb-1">Year</label>
           <input
             type="number"
+            className="border rounded px-2 py-1 w-24"
             value={year}
             onChange={handleYearChange}
-            className="border border-slate-300 rounded px-2 py-1 text-xs"
           />
         </div>
 
-        <div className="flex flex-col text-xs w-20">
-          <label className="mb-1 font-medium text-slate-700">Month</label>
+        <div>
+          <label className="block text-sm font-medium mb-1">Month</label>
           <input
             type="number"
+            className="border rounded px-2 py-1 w-20"
+            value={month}
             min={1}
             max={12}
-            value={month}
             onChange={handleMonthChange}
-            className="border border-slate-300 rounded px-2 py-1 text-xs"
           />
         </div>
 
-        <div className="text-xs text-slate-500">
-          <div>Period: {currentPeriod}</div>
-          {overview && (
-            <div>
-              Loaded for:{" "}
-              <span className="font-mono">
-                {overview.client_id} / {overview.period}
-              </span>
+        {loading && <div className="text-sm text-gray-500">Loading...</div>}
+        {error && <div className="text-sm text-red-600">Error: {error}</div>}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Instance block */}
+        <div className="border rounded p-3 bg-white">
+          <h2 className="font-semibold mb-2">Instance</h2>
+          {!selectedClientId && (
+            <div className="text-sm text-gray-500">
+              Select client to see instance.
+            </div>
+          )}
+          {selectedClientId && !currentInstance && (
+            <div className="text-sm text-gray-500">
+              No instance found for this client and period.
+            </div>
+          )}
+          {currentInstance && (
+            <pre className="text-xs bg-gray-50 border rounded p-2 overflow-auto max-h-64">
+              {JSON.stringify(currentInstance, null, 2)}
+            </pre>
+          )}
+        </div>
+
+        {/* Steps block */}
+        <div className="border rounded p-3 bg-white">
+          <h2 className="font-semibold mb-2">
+            Steps ({currentSteps.length})
+          </h2>
+          {currentSteps.length === 0 && (
+            <div className="text-sm text-gray-500">
+              No steps for this client and period.
+            </div>
+          )}
+          {currentSteps.length > 0 && (
+            <div className="border rounded max-h-64 overflow-auto text-xs">
+              <table className="w-full border-collapse">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="border px-2 py-1 text-left">Name</th>
+                    <th className="border px-2 py-1 text-left">Status</th>
+                    <th className="border px-2 py-1 text-left">Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentSteps.map((step) => (
+                    <tr
+                      key={step.id || step.name}
+                      className="hover:bg-gray-100 cursor-pointer"
+                      onClick={() => handleStepClick(step)}
+                    >
+                      <td className="border px-2 py-1">
+                        {step.title || step.name || step.id}
+                      </td>
+                      <td className="border px-2 py-1">
+                        {step.status || step.type || ""}
+                      </td>
+                      <td className="border px-2 py-1">
+                        {step.due_date || ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
 
-        {loading && (
-          <div className="text-xs text-slate-500">Loading overview...</div>
-        )}
-        {error && (
-          <div className="text-xs text-red-500">
-            Error: <span className="font-mono">{error}</span>
-          </div>
-        )}
-      </section>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Events column */}
-        <div style={cardStyle}>
-          <div style={columnHeaderStyle}>Control events</div>
-          <div style={{ fontSize: "12px", color: "#6b7280" }}>
-            Events generated by reglament chains for this client and period.
-          </div>
-          <div style={{ marginTop: "6px", ...listContainerStyle }}>
-            {events.length === 0 && (
-              <div style={{ fontSize: "12px", color: "#9ca3af" }}>
-                No control events found.
-              </div>
-            )}
-            {events.map((item) => {
-              const ev = item.event;
-              const isSelected = ev.id === selectedEventId;
-              const hasInstance = !!item.instance_id;
-              const baseStyle: React.CSSProperties = {
-                ...listItemStyleBase,
-                borderColor: isSelected ? listItemSelectedBorder : "transparent",
-                backgroundColor: isSelected ? listItemSelectedBg : "transparent",
-              };
-
-              return (
-                <div
-                  key={ev.id}
-                  style={baseStyle}
-                  onClick={() => {
-                    setSelectedEventId(ev.id);
-                    if (item.instance_id) {
-                      setSelectedInstanceId(item.instance_id);
-                    }
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#111827",
-                      }}
+        {/* Control events block */}
+        <div className="border rounded p-3 bg-white">
+          <h2 className="font-semibold mb-2">
+            Control events ({currentEvents.length})
+          </h2>
+          {currentEvents.length === 0 && (
+            <div className="text-sm text-gray-500">
+              No control events for this client and period.
+            </div>
+          )}
+          {currentEvents.length > 0 && (
+            <div className="border rounded max-h-64 overflow-auto text-xs">
+              <table className="w-full border-collapse">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="border px-2 py-1 text-left">Name</th>
+                    <th className="border px-2 py-1 text-left">Status</th>
+                    <th className="border px-2 py-1 text-left">Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentEvents.map((ev) => (
+                    <tr
+                      key={ev.id}
+                      className="hover:bg-gray-100 cursor-pointer"
+                      onClick={() => handleEventClick(ev)}
                     >
-                      {ev.title || ev.event_code || "(no title)"}
-                    </div>
-                    {hasInstance && (
-                      <span
-                        style={{
-                          ...badgeStyleBase,
-                          backgroundColor: "#ecfdf5",
-                          color: "#16a34a",
-                          border: "1px solid #bbf7d0",
-                        }}
-                      >
-                        linked
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      fontSize: "11px",
-                      color: "#6b7280",
-                    }}
-                  >
-                    {ev.date && (
-                      <span style={{ marginRight: "6px" }}>
-                        {ev.date} •{" "}
-                        <span className="font-mono">
-                          {ev.event_code || "event"}
-                        </span>
-                      </span>
-                    )}
-                    {ev.status && (
-                      <span className="font-mono text-[11px]">
-                        status: {ev.status}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      fontSize: "11px",
-                      color: "#9ca3af",
-                    }}
-                  >
-                    src: <span>{ev.source || "reglament"}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      <td className="border px-2 py-1">
+                        {ev.title || ev.name || ev.id}
+                      </td>
+                      <td className="border px-2 py-1">
+                        {ev.status || ev.type || ""}
+                      </td>
+                      <td className="border px-2 py-1">
+                        {ev.due_date || ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Instances column */}
-        <div style={cardStyle}>
-          <div style={columnHeaderStyle}>Process instances</div>
-          <div style={{ fontSize: "12px", color: "#6b7280" }}>
-            Instances built from control events, one per client/profile/period.
-          </div>
-          <div style={{ marginTop: "6px", ...listContainerStyle }}>
-            {instances.length === 0 && (
-              <div style={{ fontSize: "12px", color: "#9ca3af" }}>
-                No process instances for this client and period.
-              </div>
-            )}
-            {instances.map((inst) => {
-              const isSelected = inst.id === selectedInstanceId;
-              const instanceStatus = getInstanceDisplayStatus(inst);
-              const badgeColor = getInstanceStatusColor(instanceStatus);
-              const stepCount = inst.steps ? inst.steps.length : 0;
-
-              const baseStyle: React.CSSProperties = {
-                ...listItemStyleBase,
-                borderColor: isSelected ? listItemSelectedBorder : "transparent",
-                backgroundColor: isSelected ? listItemSelectedBg : "transparent",
-              };
-
-              return (
-                <div
-                  key={inst.id}
-                  style={baseStyle}
-                  onClick={() => setSelectedInstanceId(inst.id)}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#111827",
-                      }}
-                    >
-                      {inst.profile_code || "process"} •{" "}
-                      {inst.period || currentPeriod}
-                    </div>
-                    <span
-                      style={{
-                        ...badgeStyleBase,
-                        backgroundColor: "#eff6ff",
-                        color: badgeColor,
-                        border: `1px solid ${badgeColor}`,
-                      }}
-                    >
-                      {instanceStatus}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      fontSize: "11px",
-                      color: "#6b7280",
-                    }}
-                  >
-                    steps:{" "}
-                    <span style={{ fontWeight: 500 }}>{stepCount}</span>
-                    {inst.events && inst.events.length > 0 && (
-                      <span style={{ marginLeft: "6px" }}>
-                        events:{" "}
-                        <span style={{ fontWeight: 500 }}>
-                          {inst.events.length}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "2px",
-                      fontSize: "11px",
-                      color: "#9ca3af",
-                    }}
-                  >
-                    id: <span>{inst.id}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Steps column */}
-        <div style={cardStyle}>
-          <div style={columnHeaderStyle}>Process steps</div>
-          <div style={{ fontSize: "12px", color: "#6b7280" }}>
-            Steps for the selected process instance.
-          </div>
-          <div style={{ marginTop: "6px", ...listContainerStyle }}>
-            {!selectedInstance && (
-              <div style={{ fontSize: "12px", color: "#9ca3af" }}>
-                Select an instance to see its steps.
-              </div>
-            )}
-            {selectedInstance && steps.length === 0 && (
-              <div style={{ fontSize: "12px", color: "#9ca3af" }}>
-                This instance has no steps yet.
-              </div>
-            )}
-            {selectedInstance &&
-              steps.length > 0 &&
-              steps.map((step) => {
-                const color = getStepStatusColor(step.status);
-                return (
-                  <div
-                    key={step.id}
-                    style={{
-                      ...listItemStyleBase,
-                      cursor: "default",
-                      borderColor: "transparent",
-                      backgroundColor: "#f9fafb",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: 500,
-                          color: "#111827",
-                        }}
-                      >
-                        {step.title}
-                      </div>
-                      <span
-                        style={{
-                          ...badgeStyleBase,
-                          backgroundColor: "#f9fafb",
-                          color: color,
-                          border: `1px solid ${color}`,
-                        }}
-                      >
-                        {step.status || "pending"}
-                      </span>
-                    </div>
-                    {(step.created_at || step.completed_at) && (
-                      <div
-                        style={{
-                          marginTop: "2px",
-                          fontSize: "11px",
-                          color: "#9ca3af",
-                        }}
-                      >
-                        {step.created_at && (
-                          <span style={{ marginRight: "6px" }}>
-                            created: {step.created_at}
-                          </span>
-                        )}
-                        {step.completed_at && (
-                          <span>completed: {step.completed_at}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-        </div>
+      <div className="border rounded p-3 bg-white">
+        <h2 className="font-semibold mb-2">Meta</h2>
+        <pre className="text-xs bg-gray-50 border rounded p-2 overflow-auto max-h-40">
+          {JSON.stringify(meta, null, 2)}
+        </pre>
       </div>
     </div>
   );

@@ -1,7 +1,5 @@
-﻿"""
-API package for internal and external routes.
+﻿"""API package marker.
 
-Routers are discovered automatically by main.py which scans
-modules under `app` and `app.api` and includes any module that
-exposes a `router` or `api_router` attribute.
+Routers are imported directly in app.main from app.api.routes_* modules.
+This file is intentionally minimal to avoid circular imports.
 """

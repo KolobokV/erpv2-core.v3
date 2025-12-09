@@ -1,398 +1,319 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 
-type ControlEvent = {
-  id: string;
-  client_id?: string | null;
-  profile_code?: string | null;
-  period?: string | null;
-  event_code?: string | null;
-  source?: string | null;
-  status?: string | null;
-  created_at?: string | null;
-  payload?: any;
+type AnyStore = any;
+
+type FlatEvent = {
+  id?: string;
+  client_id?: string;
+  year?: number | string;
+  month?: number | string;
+  code?: string;
+  status?: string;
+  [key: string]: any;
 };
 
-type FetchState<T> = {
-  loading: boolean;
-  error: string | null;
-  items: T[];
-};
+function extractEvents(store: AnyStore): FlatEvent[] {
+  if (!store) {
+    return [];
+  }
+  if (Array.isArray(store)) {
+    return store as FlatEvent[];
+  }
+  if (Array.isArray(store.events)) {
+    return store.events as FlatEvent[];
+  }
+  if (Array.isArray(store.items)) {
+    return store.items as FlatEvent[];
+  }
+  return [];
+}
 
-const InternalControlEventsPage: React.FC = () => {
-  const [clientFilter, setClientFilter] = useState<string>("");
-  const [periodFilter, setPeriodFilter] = useState<string>("");
-
-  const [state, setState] = useState<FetchState<ControlEvent>>({
-    loading: false,
-    error: null,
-    items: [],
-  });
-
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-
-  const selectedEvent = useMemo<ControlEvent | null>(() => {
-    if (!selectedEventId) return null;
-    return state.items.find((e) => e.id === selectedEventId) ?? null;
-  }, [selectedEventId, state.items]);
-
-  const loadAllEvents = async () => {
-    try {
-      setState((prev) => ({ ...prev, loading: true, error: null }));
-
-      const res = await fetch("/api/internal/control-events-store/");
-      if (!res.ok) {
-        throw new Error(`Failed to load events, status ${res.status}`);
-      }
-
-      const json = await res.json();
-      const items = Array.isArray(json) ? json : json.items ?? [];
-      setState({ loading: false, error: null, items });
-      setSelectedEventId(items.length > 0 ? String(items[0].id) : null);
-    } catch (e: any) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: e?.message || "Failed to load control events",
-      }));
-    }
-  };
-
-  const loadFilteredEvents = async () => {
-    try {
-      setState((prev) => ({ ...prev, loading: true, error: null }));
-
-      const clientId = clientFilter.trim();
-      const period = periodFilter.trim();
-
-      let url = "/api/internal/control-events-store/";
-      if (clientId) {
-        const encodedClient = encodeURIComponent(clientId);
-        const search = period ? `?period=${encodeURIComponent(period)}` : "";
-        url = `/api/internal/control-events-store/client/${encodedClient}${search}`;
-      }
-
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`Failed to load events, status ${res.status}`);
-      }
-
-      const json = await res.json();
-      const items = Array.isArray(json) ? json : json.items ?? [];
-      setState({ loading: false, error: null, items });
-      setSelectedEventId(items.length > 0 ? String(items[0].id) : null);
-    } catch (e: any) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: e?.message || "Failed to load control events",
-      }));
-    }
-  };
+export default function InternalControlEventsPage() {
+  const [store, setStore] = useState<AnyStore | null>(null);
+  const [events, setEvents] = useState<FlatEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAllEvents().catch(() => undefined);
+    loadAllEvents();
   }, []);
 
-  const { loading, error, items } = state;
-  const hasItems = items.length > 0;
+  async function loadAllEvents() {
+    try {
+      setLoading(true);
+      setError(null);
 
-  const totalByStatus = useMemo(() => {
-    let totalNew = 0;
-    let totalHandled = 0;
-    let totalError = 0;
-
-    for (const ev of items) {
-      const status = (ev.status || "").toLowerCase();
-      if (!status || status === "new") {
-        totalNew += 1;
-      } else if (status === "handled") {
-        totalHandled += 1;
-      } else if (status === "error") {
-        totalError += 1;
+      const r = await fetch("/api/internal/control-events-store/");
+      if (!r.ok) {
+        throw new Error("HTTP " + r.status);
       }
+      const json = await r.json();
+      setStore(json);
+      setEvents(extractEvents(json));
+    } catch (e: any) {
+      setError(e?.message || "Failed to load control events store");
+      setStore(null);
+      setEvents([]);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    return { totalNew, totalHandled, totalError };
-  }, [items]);
+  const byClient: Record<string, number> = {};
+  for (const ev of events) {
+    const cid = String(ev.client_id || "unknown");
+    byClient[cid] = (byClient[cid] || 0) + 1;
+  }
 
   return (
-    <div className="flex h-full flex-col p-4">
-      <header className="mb-3 border-b border-gray-200 pb-2">
-        <h1 className="text-base font-semibold text-gray-900">
+    <div style={{ padding: 4 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>
           Control events store
-        </h1>
-        <p className="mt-1 text-xs text-gray-500">
-          Events created by reglament chains and stored in JSON backend store.
-        </p>
-      </header>
-
-      <div className="mb-3 flex flex-wrap items-end gap-3">
-        <div className="flex flex-col">
-          <label className="mb-1 text-[11px] text-gray-600">
-            Client id filter
-          </label>
-          <input
-            type="text"
-            value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
-            placeholder="client_id (optional)"
-            className="w-48 rounded border border-gray-300 px-2 py-1 text-xs"
-          />
-        </div>
-
-        <div className="flex flex-col">
-          <label className="mb-1 text-[11px] text-gray-600">
-            Period filter
-          </label>
-          <input
-            type="text"
-            value={periodFilter}
-            onChange={(e) => setPeriodFilter(e.target.value)}
-            placeholder="YYYY-MM (optional)"
-            className="w-32 rounded border border-gray-300 px-2 py-1 text-xs"
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={loadFilteredEvents}
-          className="rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-        >
-          Load with filters
-        </button>
-
+        </h2>
         <button
           type="button"
           onClick={loadAllEvents}
-          className="rounded border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+          style={{ padding: "4px 10px" }}
         >
-          Load all
+          Reload
         </button>
-
-        <div className="ml-auto flex flex-col items-end text-[11px] text-gray-500">
-          <div>
-            Total events:{" "}
-            <span className="font-semibold text-gray-900">
-              {items.length}
-            </span>
-          </div>
-          <div className="mt-0.5 flex gap-3">
-            <span>
-              New:{" "}
-              <span className="font-mono text-gray-900">
-                {totalByStatus.totalNew}
-              </span>
-            </span>
-            <span>
-              Handled:{" "}
-              <span className="font-mono text-gray-900">
-                {totalByStatus.totalHandled}
-              </span>
-            </span>
-            <span>
-              Error:{" "}
-              <span className="font-mono text-gray-900">
-                {totalByStatus.totalError}
-              </span>
-            </span>
-          </div>
-        </div>
       </div>
 
+      {loading && <div style={{ fontSize: 12 }}>Loading...</div>}
+
       {error && (
-        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
+        <div
+          style={{
+            fontSize: 12,
+            color: "#b91c1c",
+            marginBottom: 8,
+          }}
+        >
+          Error: {error}
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-3">
-        <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-            <h2 className="text-sm font-semibold text-gray-800">
-              Events
-            </h2>
-            {loading && (
-              <span className="text-[11px] text-gray-500">
-                Loading...
-              </span>
-            )}
-          </div>
+      {!loading && !error && (
+        <>
+          <p
+            style={{
+              fontSize: 11,
+              color: "#6b7280",
+              marginBottom: 8,
+            }}
+          >
+            Total events: {events.length}. Clients in store:{" "}
+            {Object.keys(byClient).length}.
+          </p>
 
-          {!hasItems ? (
-            <div className="flex-1 px-3 py-4 text-xs text-gray-500">
-              No events found. Trigger reglament chains or use filters.
-            </div>
-          ) : (
-            <div className="mt-2 min-h-0 flex-1 overflow-auto">
-              <table className="min-w-full border-separate border-spacing-y-1 text-xs">
-                <thead className="text-[11px] text-gray-500">
+          {events.length > 0 && (
+            <>
+              <h3
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 4,
+                }}
+              >
+                Per client summary
+              </h3>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 11,
+                  marginBottom: 12,
+                }}
+              >
+                <thead>
                   <tr>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Created
+                    <th
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #e5e7eb",
+                        padding: 4,
+                      }}
+                    >
+                      Client id
                     </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Client
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Profile
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Period
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Code
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Status
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Source
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium">
-                      Payload
+                    <th
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #e5e7eb",
+                        padding: 4,
+                      }}
+                    >
+                      Events count
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((ev) => {
-                    const isSelected = selectedEventId === ev.id;
-                    const created = ev.created_at || "";
-
-                    const status = (ev.status || "").toLowerCase();
-                    let statusLabel = ev.status || "new";
-                    let statusClasses =
-                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] ";
-
-                    if (status === "handled") {
-                      statusClasses +=
-                        "border-green-200 bg-green-50 text-green-700";
-                    } else if (status === "error") {
-                      statusClasses +=
-                        "border-red-200 bg-red-50 text-red-700";
-                    } else {
-                      statusClasses +=
-                        "border-gray-200 bg-gray-50 text-gray-700";
-                    }
-
-                    const shortPayload = (() => {
-                      try {
-                        if (!ev.payload) return "";
-                        const raw = JSON.stringify(ev.payload);
-                        if (raw.length > 80) {
-                          return raw.slice(0, 77) + "...";
-                        }
-                        return raw;
-                      } catch {
-                        return "";
-                      }
-                    })();
-
-                    return (
-                      <tr
-                        key={ev.id}
-                        className={
-                          "cursor-pointer rounded-md bg-gray-50 text-[11px] text-gray-800 hover:bg-blue-50" +
-                          (isSelected ? " bg-blue-50" : "")
-                        }
-                        onClick={() => setSelectedEventId(ev.id)}
+                  {Object.keys(byClient).map((cid) => (
+                    <tr key={cid}>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #f3f4f6",
+                          padding: 4,
+                        }}
                       >
-                        <td className="px-2 py-1 align-top">
-                          <div className="font-mono text-[10px] text-gray-800">
-                            {created}
-                          </div>
+                        {cid}
+                      </td>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #f3f4f6",
+                          padding: 4,
+                        }}
+                      >
+                        {byClient[cid]}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <h3
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 4,
+                }}
+              >
+                Flat events (first 200)
+              </h3>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 11,
+                  marginBottom: 12,
+                }}
+              >
+                <thead>
+                  <tr>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #e5e7eb",
+                        padding: 4,
+                      }}
+                    >
+                      Client
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #e5e7eb",
+                        padding: 4,
+                      }}
+                    >
+                      Period
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #e5e7eb",
+                        padding: 4,
+                      }}
+                    >
+                      Code
+                    </th>
+                    <th
+                      style={{
+                        textAlign: "left",
+                        borderBottom: "1px solid #e5e7eb",
+                        padding: 4,
+                      }}
+                    >
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.slice(0, 200).map((ev, idx) => {
+                    const period =
+                      (ev.year ?? "") +
+                      (ev.month
+                        ? "-" +
+                          String(ev.month)
+                            .toString()
+                            .padStart(2, "0")
+                        : "");
+                    return (
+                      <tr key={ev.id || idx}>
+                        <td
+                          style={{
+                            borderBottom: "1px solid #f3f4f6",
+                            padding: 4,
+                          }}
+                        >
+                          {ev.client_id || "-"}
                         </td>
-                        <td className="px-2 py-1 align-top">
-                          <div className="font-mono text-[11px] text-gray-900">
-                            {ev.client_id || "n/a"}
-                          </div>
+                        <td
+                          style={{
+                            borderBottom: "1px solid #f3f4f6",
+                            padding: 4,
+                          }}
+                        >
+                          {period || "-"}
                         </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[10px] text-gray-800">
-                            {ev.profile_code || "n/a"}
-                          </span>
+                        <td
+                          style={{
+                            borderBottom: "1px solid #f3f4f6",
+                            padding: 4,
+                          }}
+                        >
+                          {ev.code || ev.event_code || "-"}
                         </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[10px] text-gray-800">
-                            {ev.period || "n/a"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[10px] text-gray-800">
-                            {ev.event_code || "n/a"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className={statusClasses}>
-                            {statusLabel}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <span className="font-mono text-[10px] text-gray-800">
-                            {ev.source || "chain"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 align-top">
-                          <div className="max-w-[260px] text-[10px] text-gray-600">
-                            {shortPayload || "(empty payload)"}
-                          </div>
+                        <td
+                          style={{
+                            borderBottom: "1px solid #f3f4f6",
+                            padding: 4,
+                          }}
+                        >
+                          {ev.status || "-"}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-            </div>
+            </>
           )}
-        </section>
 
-        <section className="flex min-h-0 w-[340px] flex-col rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-sm">
-          <div className="mb-2 border-b border-gray-100 pb-1">
-            <h2 className="text-sm font-semibold text-gray-800">
-              Selected event payload
-            </h2>
-            {selectedEvent && (
-              <div className="mt-1 text-[11px] text-gray-600">
-                <span className="mr-2">
-                  Client:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedEvent.client_id || "n/a"}
-                  </span>
-                </span>
-                <span className="mr-2">
-                  Period:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedEvent.period || "n/a"}
-                  </span>
-                </span>
-                <span className="mr-2">
-                  Code:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedEvent.event_code || "n/a"}
-                  </span>
-                </span>
-                <span>
-                  Status:{" "}
-                  <span className="font-mono text-gray-900">
-                    {selectedEvent.status || "new"}
-                  </span>
-                </span>
-              </div>
-            )}
-          </div>
-
-          {!selectedEvent ? (
-            <div className="flex-1 px-2 py-3 text-xs text-gray-500">
-              Select an event on the left to inspect its payload.
-            </div>
-          ) : (
-            <pre className="min-h-0 flex-1 overflow-auto rounded border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-800">
-              {JSON.stringify(selectedEvent.payload ?? {}, null, 2)}
+          <details>
+            <summary
+              style={{
+                fontSize: 11,
+                cursor: "pointer",
+                marginBottom: 4,
+              }}
+            >
+              Raw store payload
+            </summary>
+            <pre
+              style={{
+                fontSize: 11,
+                backgroundColor: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                padding: 8,
+                borderRadius: 4,
+                maxHeight: 260,
+                overflow: "auto",
+              }}
+            >
+              {JSON.stringify(store, null, 2)}
             </pre>
-          )}
-        </section>
-      </div>
+          </details>
+        </>
+      )}
     </div>
   );
-};
-
-export default InternalControlEventsPage;
+}

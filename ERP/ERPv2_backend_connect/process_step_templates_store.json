@@ -1,0 +1,53 @@
+﻿{
+  "ip_usn_dr": {
+    "label": "IP USN DR",
+    "steps": [
+      {
+        "title": "IP USN DR: Request bank statements",
+        "status": "completed"
+      },
+      {
+        "title": "IP USN DR: Request primary documents",
+        "status": "completed"
+      },
+      {
+        "title": "IP USN DR: Prepare tax and reports",
+        "status": "completed"
+      }
+    ]
+  },
+  "ooo_osno_3_zp1025": {
+    "label": "OOO OSNO 3 ZP 10/25",
+    "steps": [
+      {
+        "title": "OOO OSNO 3 ZP 10/25: Request bank statements",
+        "status": "open"
+      },
+      {
+        "title": "OOO OSNO 3 ZP 10/25: Request primary documents",
+        "status": "waiting"
+      },
+      {
+        "title": "OOO OSNO 3 ZP 10/25: Prepare tax and reports",
+        "status": "open"
+      }
+    ]
+  },
+  "ooo_usn_dr_tour_zp520": {
+    "label": "OOO USN DR TOUR ZP 5/20",
+    "steps": [
+      {
+        "title": "OOO USN DR TOUR ZP 5/20: Request bank statements",
+        "status": "completed"
+      },
+      {
+        "title": "OOO USN DR TOUR ZP 5/20: Request primary documents",
+        "status": "error"
+      },
+      {
+        "title": "OOO USN DR TOUR ZP 5/20: Prepare tax and reports",
+        "status": "open"
+      }
+    ]
+  }
+}
