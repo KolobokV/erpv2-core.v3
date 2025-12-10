@@ -1,101 +1,105 @@
-﻿from typing import List, Dict, Any
+﻿from __future__ import annotations
 
-from fastapi import APIRouter
+import json
+from pathlib import Path
+from typing import Any, Dict, List
 
-from app.core.store_json import load_json_store
-
-CONTROL_EVENTS_TEMPLATES_STORE = "control_events_templates_store.json"
-CONTROL_EVENTS_STORE = "control_events_store.json"
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(
-    prefix="/api/internal/control-events-store",
-    tags=["internal.control_events_store"]
+  prefix="/api/internal/control-events-store",
+  tags=["internal-control-events-store"],
 )
 
+# -------------------------------
+# Strict, file-format-exact loader
+# -------------------------------
 
-def _load_templates_raw() -> Any:
-    """
-    Load templates store in any legacy format.
-    """
-    data = load_json_store(CONTROL_EVENTS_TEMPLATES_STORE, default={"templates": []})
-    return data
-
-
-def _load_events_raw() -> Any:
-    """
-    Load real control events to infer templates if needed.
-    """
-    data = load_json_store(CONTROL_EVENTS_STORE, default={"events": []})
-    return data
+BASE_DIR = Path(__file__).resolve().parents[2]
+STORE_PATH = BASE_DIR / "control_events_store.json"
+TEMPLATES_PATH = BASE_DIR / "control_events_templates_store.json"
 
 
-def _normalize_templates() -> List[Dict[str, Any]]:
-    """
-    Return unified list of control event templates.
+def _load_json(path: Path) -> Any:
+  if not path.exists():
+    return None
+  try:
+    with path.open("r", encoding="utf-8") as f:
+      return json.load(f)
+  except Exception:
+    return None
 
-    Priority:
-      1) Explicit templates from control_events_templates_store.json
-      2) If none -> infer minimal templates from real events in control_events_store.json
-    """
-    raw = _load_templates_raw()
 
-    # 1) try explicit templates
-    templates: List[Dict[str, Any]] = []
+def _load_events_strict() -> List[Dict[str, Any]]:
+  """
+  Strict loader based on REAL file format:
+  {
+    "events": [ {...}, {...}, ... ]
+  }
+  """
+  data = _load_json(STORE_PATH)
+  if not isinstance(data, dict):
+    return []
+  events = data.get("events")
+  if not isinstance(events, list):
+    return []
+  # Filter only dict events
+  return [e for e in events if isinstance(e, dict)]
 
-    if isinstance(raw, list):
-        templates = [t for t in raw if isinstance(t, dict)]
-    elif isinstance(raw, dict):
-        if isinstance(raw.get("templates"), list):
-            templates = [t for t in raw["templates"] if isinstance(t, dict)]
-        elif isinstance(raw.get("items"), list):
-            templates = [t for t in raw["items"] if isinstance(t, dict)]
-        elif isinstance(raw.get("events"), list):
-            templates = [t for t in raw["events"] if isinstance(t, dict)]
 
-    # If we have explicit templates, use them
-    if templates:
-        # normalize basic fields
-        result: Dict[str, Dict[str, Any]] = {}
-        for t in templates:
-            code = t.get("code") or t.get("type")
-            if not code:
-                continue
-            entry = result.get(code, {})
-            entry.update(t)
-            entry["code"] = code
-            if not entry.get("label"):
-                entry["label"] = code.replace("_", " ").title()
-            result[code] = entry
-        return sorted(result.values(), key=lambda x: x.get("code", ""))
+def _load_explicit_templates() -> List[Dict[str, Any]]:
+  """
+  If user manually created control_events_templates_store.json – we use it.
+  """
+  data = _load_json(TEMPLATES_PATH)
+  if not isinstance(data, dict) and not isinstance(data, list):
+    return []
 
-    # 2) Fallback: infer minimal templates from real events
-    events_raw = _load_events_raw()
-    events: List[Dict[str, Any]] = []
-    if isinstance(events_raw, list):
-        events = [e for e in events_raw if isinstance(e, dict)]
-    elif isinstance(events_raw, dict) and isinstance(events_raw.get("events"), list):
-        events = [e for e in events_raw["events"] if isinstance(e, dict)]
+  # Accept same format as events
+  if isinstance(data, dict):
+    items = data.get("templates") or data.get("items") or data.get("events")
+    if isinstance(items, list):
+      return [t for t in items if isinstance(t, dict)]
 
-    by_code: Dict[str, Dict[str, Any]] = {}
-    for ev in events:
-        code = ev.get("code") or ev.get("type")
-        if not code:
-            continue
-        tpl = by_code.get(code, {})
-        tpl["code"] = code
-        tpl["label"] = tpl.get("label") or ev.get("label") or code.replace("_", " ").title()
-        tpl["category"] = tpl.get("category") or ev.get("category")
-        tpl["default_status"] = tpl.get("default_status") or ev.get("status") or "new"
-        by_code[code] = tpl
+  if isinstance(data, list):
+    return [t for t in data if isinstance(t, dict)]
 
-    return sorted(by_code.values(), key=lambda x: x.get("code", ""))
-    
+  return []
 
-@router.get("/")
-def list_templates() -> List[Dict[str, Any]]:
-    """
-    Internal read-only view of control event templates.
 
-    Always returns a flat list, even if underlying JSON uses other shapes.
-    """
-    return _normalize_templates()
+def _build_templates(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+  """
+  Build unique templates based on event `type`.
+  """
+  by_type: Dict[str, Dict[str, Any]] = {}
+
+  for e in events:
+    t = (e.get("type") or "").strip()
+    if not t:
+      continue
+
+    if t not in by_type:
+      by_type[t] = {
+        "type": t,
+        "code": t,  # backend unified field
+        "label": e.get("label") or t,
+        "category": e.get("category") or "general",
+        "default_status": e.get("status") or "new",
+      }
+
+  return list(by_type.values())
+
+
+@router.get("/", summary="Get internal control event templates store")
+def get_internal_control_events_store() -> List[Dict[str, Any]]:
+  # 1) explicit templates, if exist
+  explicit = _load_explicit_templates()
+  if explicit:
+    return explicit
+
+  # 2) derive templates from events exactly as in real store
+  events = _load_events_strict()
+  if not events:
+    return []
+
+  return _build_templates(events)

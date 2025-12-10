@@ -1,104 +1,134 @@
 ﻿import React, { useEffect, useState } from "react";
 
 type ControlEventTemplate = {
-  id?: string;
+  type: string;
   code?: string;
   label?: string;
-  description?: string;
   category?: string;
   default_status?: string;
-  is_active?: boolean;
   [key: string]: any;
 };
 
-function toList(data: any): ControlEventTemplate[] {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.templates)) return data.templates;
-  if (Array.isArray(data.items)) return data.items;
-  return [];
-}
-
 const InternalControlEventsStorePage: React.FC = () => {
-  const [items, setItems] = useState<ControlEventTemplate[]>([]);
+  const [templates, setTemplates] = useState<ControlEventTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    const load = async () => {
+    const loadTemplates = async () => {
+      setLoading(true);
+      setError(null);
+
       try {
-        setLoading(true);
-        setError(null);
-        const r = await fetch("/api/internal/control-events-store/");
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const json = await r.json();
-        if (!mounted) return;
-        const list = toList(json);
-        list.sort((a, b) => {
-          const ca = (a.code || "").toString();
-          const cb = (b.code || "").toString();
-          return ca.localeCompare(cb);
-        });
-        setItems(list);
+        const resp = await fetch("/api/internal/control-events-store-v2/");
+        if (!resp.ok) {
+          throw new Error("Failed to load templates: " + resp.status);
+        }
+        const data = (await resp.json()) as ControlEventTemplate[] | null;
+        if (!isMounted) return;
+        if (!data) {
+          setTemplates([]);
+        } else {
+          const list = Array.isArray(data) ? data : [];
+          list.sort((a, b) => {
+            const ca = (a.category || "").toString().toLowerCase();
+            const cb = (b.category || "").toString().toLowerCase();
+            if (ca < cb) return -1;
+            if (ca > cb) return 1;
+            const ta = (a.type || "").toString().toLowerCase();
+            const tb = (b.type || "").toString().toLowerCase();
+            if (ta < tb) return -1;
+            if (ta > tb) return 1;
+            return 0;
+          });
+          setTemplates(list);
+        }
       } catch (e: any) {
-        if (mounted) setError(e?.message || "Unknown error");
+        if (isMounted) {
+          setError(e?.message || "Unknown error");
+        }
       } finally {
-        if (mounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    load();
+    loadTemplates();
     return () => {
-      mounted = false;
+      isMounted = false;
     };
   }, []);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Internal control events store</h1>
-      <p className="text-xs text-slate-600">
-        Read-only view of control event templates loaded from control_events_templates_store.json.
-      </p>
+    <div className="p-4 space-y-4">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-xl font-semibold text-slate-900">
+          Internal control events store
+        </h1>
+        <p className="text-sm text-slate-600">
+          Read-only view of control event templates inferred from control_events_store.json
+          via /api/internal/control-events-store-v2/.
+        </p>
+      </div>
 
-      {loading && <div>Loading...</div>}
-      {error && <div className="text-red-700 text-xs">Error: {error}</div>}
-
-      {!loading && !error && items.length === 0 && (
-        <div className="text-sm">
-          Store is empty. Define control event templates in control_events_templates_store.json.
+      {error && (
+        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          Failed to load templates: {error}
         </div>
       )}
 
-      {items.length > 0 && (
-        <div className="text-xs border rounded-md bg-white overflow-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="px-3 py-2 text-left">Code</th>
-                <th className="px-3 py-2 text-left">Label</th>
-                <th className="px-3 py-2 text-left">Category</th>
-                <th className="px-3 py-2 text-left">Default status</th>
-                <th className="px-3 py-2 text-left">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((tpl, idx) => (
-                <tr key={tpl.id || tpl.code || idx} className="border-t">
-                  <td className="px-3 py-2 font-mono">{tpl.code || "-"}</td>
-                  <td className="px-3 py-2">{tpl.label || "-"}</td>
-                  <td className="px-3 py-2">{tpl.category || "-"}</td>
-                  <td className="px-3 py-2">{tpl.default_status || "-"}</td>
-                  <td className="px-3 py-2 max-w-xs">
-                    <div className="truncate" title={tpl.description || ""}>
-                      {tpl.description || "-"}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {loading && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          Loading control event templates...
+        </div>
+      )}
+
+      {!loading && templates.length === 0 && !error && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Store is empty. No control event templates could be inferred from control_events_store.json.
+        </div>
+      )}
+
+      {templates.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Templates
+            </h2>
+            <span className="text-xs text-slate-500">
+              {templates.length} templates
+            </span>
+          </div>
+          <div className="max-h-[480px] overflow-auto text-xs">
+            <div className="grid grid-cols-5 gap-2 border-b border-slate-100 pb-1 font-medium text-slate-600">
+              <div>Type</div>
+              <div>Code</div>
+              <div>Label</div>
+              <div>Category</div>
+              <div>Default status</div>
+            </div>
+            {templates.map((t) => (
+              <div
+                key={t.type}
+                className="grid grid-cols-5 gap-2 border-b border-slate-100 py-1 last:border-b-0"
+              >
+                <div className="truncate" title={t.type}>
+                  {t.type}
+                </div>
+                <div className="truncate" title={t.code || t.type}>
+                  {t.code || t.type}
+                </div>
+                <div className="truncate" title={t.label || t.type}>
+                  {t.label || t.type}
+                </div>
+                <div>{t.category || "general"}</div>
+                <div>{t.default_status || "new"}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

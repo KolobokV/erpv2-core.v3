@@ -1,64 +1,91 @@
-﻿import logging
+﻿from __future__ import annotations
+
+import importlib
+import logging
+import pkgutil
+from typing import Any
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Core event handlers
-from app.events.handlers_chain_executor import register_chain_executor_handler
-
-# Routers (API)
-from app.api.routes_tasks import router as router_tasks
-from app.api.routes_client_profiles import router as router_client_profiles
-from app.api.routes_control_events import router as router_control_events
-from app.api.routes_internal_control_events import router as router_internal_control_events
-from app.api.routes_internal_control_events_store import router as router_internal_control_events_store
-
-from app.api.routes_process_instances_v2 import router as router_process_instances_v2
-from app.api.routes_process_chains_dev import router as router_process_chains_dev
-from app.api.routes_process_overview import router as router_process_overview
-from app.api.routes_process_overview_zoom import router as router_process_overview_zoom
-from app.api.routes_process_to_tasks import router as router_process_to_tasks
-from app.api.routes_process_chains_v2 import router as router_process_chains_v2
-
-# Startup/shutdown logic
 from app.startup_events import register_startup_events, register_shutdown_events
 
+logger = logging.getLogger("erpv2.app.main")
 
-def create_app():
-    app = FastAPI(title="ERPv2 backend")
 
-    # CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+def create_app() -> FastAPI:
+  app = FastAPI(
+    title="ERPv2 Backend",
+    version="0.1.0",
+  )
 
-    # Routers
-    app.include_router(router_tasks)
-    app.include_router(router_client_profiles)
-    app.include_router(router_control_events)
-    app.include_router(router_internal_control_events)
-    app.include_router(router_internal_control_events_store)
+  # CORS for local frontend (Vite on 5174)
+  origins = [
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://10.132.65.236:5174",
+    "http://192.168.1.135:5174",
+  ]
 
-    app.include_router(router_process_instances_v2)
-    app.include_router(router_process_chains_dev)
-    app.include_router(router_process_overview)
-    app.include_router(router_process_overview_zoom)
+  app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+  )
 
-    app.include_router(router_process_to_tasks)
-    app.include_router(router_process_chains_v2)
+  # Include all routers from app and app.api packages automatically.
+  _include_all_routers(app)
 
-    # Startup events
-    register_startup_events(app)
-    register_shutdown_events(app)
+  # Register startup / shutdown events.
+  register_startup_events(app)
+  register_shutdown_events(app)
 
-    # EventSystem handlers
-    @app.on_event("startup")
-    async def _register_chain_handlers():
-        await register_chain_executor_handler()
+  @app.get("/api/health", tags=["system"])
+  def health() -> dict[str, Any]:
+    return {"status": "ok"}
 
-    return app
+  return app
+
+
+def _include_all_routers(app: FastAPI) -> None:
+  """
+  Auto-discover and include all FastAPI routers from app/* and app/api/*.
+
+  Any module that defines a top-level variable named `router`
+  will be imported and included.
+  """
+  import app as app_pkg  # type: ignore
+  import app.api as api_pkg  # type: ignore
+
+  packages = [app_pkg, api_pkg]
+
+  for pkg in packages:
+    for module_info in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
+      module_name = module_info.name
+
+      try:
+        module = importlib.import_module(module_name)
+      except Exception as exc:
+        logger.warning(
+          "Failed to import module %s: %s",
+          module_name,
+          exc,
+        )
+        continue
+
+      router = getattr(module, "router", None)
+      if router is not None:
+        try:
+          app.include_router(router)  # type: ignore[arg-type]
+          logger.info("Included router from module %s", module_name)
+        except Exception as exc:
+          logger.warning(
+            "Failed to include router from module %s: %s",
+            module_name,
+            exc,
+          )
 
 
 app = create_app()
