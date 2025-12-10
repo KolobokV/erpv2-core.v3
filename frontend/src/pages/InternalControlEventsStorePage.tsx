@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 
 type ControlEventTemplate = {
   type: string;
@@ -20,7 +20,6 @@ const InternalControlEventsStorePage: React.FC = () => {
     const loadTemplates = async () => {
       setLoading(true);
       setError(null);
-
       try {
         const resp = await fetch("/api/internal/control-events-store-v2/");
         if (!resp.ok) {
@@ -28,6 +27,7 @@ const InternalControlEventsStorePage: React.FC = () => {
         }
         const data = (await resp.json()) as ControlEventTemplate[] | null;
         if (!isMounted) return;
+
         if (!data) {
           setTemplates([]);
         } else {
@@ -41,6 +41,10 @@ const InternalControlEventsStorePage: React.FC = () => {
             const tb = (b.type || "").toString().toLowerCase();
             if (ta < tb) return -1;
             if (ta > tb) return 1;
+            const coa = (a.code || "").toString().toLowerCase();
+            const cob = (b.code || "").toString().toLowerCase();
+            if (coa < cob) return -1;
+            if (coa > cob) return 1;
             return 0;
           });
           setTemplates(list);
@@ -62,33 +66,84 @@ const InternalControlEventsStorePage: React.FC = () => {
     };
   }, []);
 
+  const stats = useMemo(() => {
+    const total = templates.length;
+    const categoriesSet = new Set<string>();
+    let defaultNew = 0;
+    let defaultDone = 0;
+
+    for (const t of templates) {
+      if (t.category) {
+        categoriesSet.add(String(t.category));
+      }
+      const st = (t.default_status || "").toLowerCase();
+      if (st === "new") defaultNew += 1;
+      if (st === "done" || st === "completed" || st === "closed") {
+        defaultDone += 1;
+      }
+    }
+
+    return {
+      total,
+      categories: categoriesSet.size,
+      defaultNew,
+      defaultDone,
+    };
+  }, [templates]);
+
   return (
-    <div className="p-4 space-y-4">
+    <div className="space-y-4 p-4">
       <div className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold text-slate-900">
           Internal control events store
         </h1>
         <p className="text-sm text-slate-600">
-          Read-only view of control event templates inferred from control_events_store.json
-          via /api/internal/control-events-store-v2/.
+          Read-only view of control event templates from /api/internal/control-events-store-v2/.
         </p>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm">
+          <div className="text-slate-500">Total templates</div>
+          <div className="mt-1 text-lg font-semibold text-slate-900">
+            {stats.total}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm">
+          <div className="text-slate-500">Categories</div>
+          <div className="mt-1 text-lg font-semibold text-slate-900">
+            {stats.categories}
+          </div>
+        </div>
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs shadow-sm">
+          <div className="text-sky-700">Default status: new</div>
+          <div className="mt-1 text-lg font-semibold text-sky-900">
+            {stats.defaultNew}
+          </div>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs shadow-sm">
+          <div className="text-emerald-700">Default status: done</div>
+          <div className="mt-1 text-lg font-semibold text-emerald-900">
+            {stats.defaultDone}
+          </div>
+        </div>
+      </div>
+
       {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
-          Failed to load templates: {error}
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {error}
         </div>
       )}
 
       {loading && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          Loading control event templates...
+          Loading templates...
         </div>
       )}
 
       {!loading && templates.length === 0 && !error && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Store is empty. No control event templates could be inferred from control_events_store.json.
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600">
+          No templates loaded from /api/internal/control-events-store-v2/.
         </div>
       )}
 
@@ -96,38 +151,48 @@ const InternalControlEventsStorePage: React.FC = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">
-              Templates
+              Templates list
             </h2>
             <span className="text-xs text-slate-500">
               {templates.length} templates
             </span>
           </div>
-          <div className="max-h-[480px] overflow-auto text-xs">
-            <div className="grid grid-cols-5 gap-2 border-b border-slate-100 pb-1 font-medium text-slate-600">
+          <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-100 text-xs">
+            <div className="grid grid-cols-5 gap-2 border-b border-slate-100 bg-slate-50 px-2 py-1 font-medium text-slate-600">
+              <div>Category</div>
               <div>Type</div>
               <div>Code</div>
               <div>Label</div>
-              <div>Category</div>
               <div>Default status</div>
             </div>
-            {templates.map((t) => (
-              <div
-                key={t.type}
-                className="grid grid-cols-5 gap-2 border-b border-slate-100 py-1 last:border-b-0"
-              >
-                <div className="truncate" title={t.type}>
-                  {t.type}
+            {templates.map((t, index) => {
+              const rowStripe = index % 2 === 0 ? "bg-white" : "bg-slate-50/40";
+              return (
+                <div
+                  key={(t.code || t.type || index).toString()}
+                  className={
+                    "grid grid-cols-5 items-center gap-2 border-b border-slate-100 px-2 py-1 " +
+                    rowStripe
+                  }
+                >
+                  <div className="truncate">
+                    {t.category || "general"}
+                  </div>
+                  <div className="truncate">
+                    {t.type}
+                  </div>
+                  <div className="truncate">
+                    {t.code || "-"}
+                  </div>
+                  <div className="truncate">
+                    {t.label || t.type}
+                  </div>
+                  <div className="truncate">
+                    {t.default_status || "new"}
+                  </div>
                 </div>
-                <div className="truncate" title={t.code || t.type}>
-                  {t.code || t.type}
-                </div>
-                <div className="truncate" title={t.label || t.type}>
-                  {t.label || t.type}
-                </div>
-                <div>{t.category || "general"}</div>
-                <div>{t.default_status || "new"}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
