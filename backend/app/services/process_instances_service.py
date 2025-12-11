@@ -1,103 +1,75 @@
-﻿from __future__ import annotations
-
 from typing import Any, Dict, List, Optional
+from app.core import process_instances_store as core_store
 
-from app.core import process_instances_store
-from app.core.process_auto_steps import get_auto_steps_for_event
-from app.core.process_instance_status import (
-    annotate_instance_with_computed_status,
-    annotate_instances_with_computed_status,
-)
+def _load_store() -> Dict[str, Any]:
+    data = core_store.load_store()
+    if isinstance(data, list):
+        # legacy plain list: wrap
+        return {"instances": data}
+    if isinstance(data, dict):
+        instances = data.get("instances")
+        if isinstance(instances, list):
+            return {"instances": instances}
+    return {"instances": []}
 
+def _save_store(store: Dict[str, Any]) -> None:
+    instances = store.get("instances", [])
+    core_store.save_store({"instances": instances})
 
-InstanceDict = Dict[str, Any]
+def get_all_instances() -> List[Dict[str, Any]]:
+    store = _load_store()
+    return store.get("instances", [])
 
+def list_instances_for_client(client_id: str) -> List[Dict[str, Any]]:
+    instances = get_all_instances()
+    return [i for i in instances if i.get("client_id") == client_id]
 
-def _ensure_auto_steps_for_instance(instance: InstanceDict, event: Dict[str, Any]) -> InstanceDict:
+def find_instance_by_id(instance_id: str) -> Optional[Dict[str, Any]]:
+    instances = get_all_instances()
+    for i in instances:
+        if i.get("id") == instance_id:
+            return i
+    return None
+
+def upsert_instance_from_event(event: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Attach auto-generated steps to a freshly created instance.
-
-    Rules:
-    - Auto steps are created ONLY if the instance currently has no steps.
-    - Mapping is driven by event["event_code"] (with a small fallback to "code").
-    - If there is no mapping for this event code, the instance is returned as is.
+    Very simple upsert for dev/experimental use.
+    Expects event to contain "client_id", "profile_code", "period".
     """
-    steps = instance.get("steps") or []
-    if steps:
-        # There are already steps, do not overwrite or duplicate them.
-        return instance
+    client_id = event.get("client_id")
+    profile_code = event.get("profile_code") or client_id
+    period = event.get("period")
 
-    event_code: Optional[str] = event.get("event_code") or event.get("code")
-    step_titles: List[str] = get_auto_steps_for_event(event_code or "")
+    store = _load_store()
+    instances = store.get("instances", [])
 
-    if not step_titles:
-        return instance
+    key = f"{client_id}::{profile_code}::{period}"
+    target = None
+    for inst in instances:
+        if inst.get("key") == key:
+            target = inst
+            break
 
-    updated_instance = instance
-    for title in step_titles:
-        # process_instances_store.add_step must return the updated instance.
-        updated_instance = process_instances_store.add_step(updated_instance["id"], title)
+    if target is None:
+        target = {
+            "id": event.get("instance_id") or key,
+            "key": key,
+            "client_id": client_id,
+            "profile_code": profile_code,
+            "period": period,
+            "status": "open",
+            "source": "event",
+            "events": [],
+            "last_event_code": None,
+            "steps": [],
+        }
+        instances.append(target)
 
-    return updated_instance
+    target["events"] = target.get("events", [])
+    target["events"].append(event)
+    target["last_event_code"] = event.get("code")
+    target["status"] = event.get("status") or target.get("status", "open")
 
-
-def find_or_create_process_instance_from_event(event: Dict[str, Any]) -> InstanceDict:
-    """
-    Find or create a process instance based on control event payload.
-
-    The low-level lookup / upsert logic lives in process_instances_store.
-    This service adds a thin layer on top:
-    - upsert instance based on client_id + profile_code + period
-    - attach auto-steps if this is a fresh instance with no steps yet
-    - annotate instance with computed_status derived from its steps
-    """
-    instance = process_instances_store.upsert_instance_from_event(event)
-    instance = _ensure_auto_steps_for_instance(instance, event)
-    instance = annotate_instance_with_computed_status(instance)
-    return instance
-
-
-def list_process_instances() -> List[InstanceDict]:
-    """
-    Return all process instances from the JSON store, annotated with computed_status.
-    """
-    instances = process_instances_store.get_all_instances()
-    return annotate_instances_with_computed_status(instances)
-
-
-def list_process_instances_for_client(client_id: str, period: Optional[str] = None) -> List[InstanceDict]:
-    """
-    Return process instances for a specific client and optional period (YYYY-MM),
-    annotated with computed_status.
-    """
-    instances = process_instances_store.list_instances_for_client(client_id=client_id, period=period)
-    return annotate_instances_with_computed_status(instances)
-
-
-def get_process_instance(instance_id: str) -> Optional[InstanceDict]:
-    """
-    Return a single process instance by its id, annotated with computed_status,
-    or None if not found.
-    """
-    instance = process_instances_store.find_instance_by_id(instance_id)
-    if not instance:
-        return None
-    return annotate_instance_with_computed_status(instance)
-
-
-def add_step(instance_id: str, title: str) -> InstanceDict:
-    """
-    Add a new step with 'pending' status to the given instance and return it
-    annotated with computed_status.
-    """
-    instance = process_instances_store.add_step(instance_id, title)
-    return annotate_instance_with_computed_status(instance)
-
-
-def complete_step(instance_id: str, step_id: str) -> InstanceDict:
-    """
-    Mark a specific step as completed, update instance status if needed in the store,
-    and return it annotated with computed_status.
-    """
-    instance = process_instances_store.complete_step(instance_id, step_id)
-    return annotate_instance_with_computed_status(instance)
+    store["instances"] = instances
+    _save_store(store)
+    return target

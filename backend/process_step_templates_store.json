@@ -1,42 +1,19 @@
-﻿[
-  {
-    "id": "tmpl_ip_usn_dr_bank_statement",
-    "profile_key": "ip_usn_dr",
-    "code": "bank_statement_request",
-    "title": "Request bank statement",
-    "description": "Request bank statement from bank for period",
-    "order": 10
-  },
-  {
-    "id": "tmpl_ip_usn_dr_documents_request",
-    "profile_key": "ip_usn_dr",
-    "code": "documents_request",
-    "title": "Request documents from client",
-    "description": "Request primary documents from client after bank statement is received",
-    "order": 20
-  },
-  {
-    "id": "tmpl_ip_usn_dr_check_income_expense",
-    "profile_key": "ip_usn_dr",
-    "code": "check_income_expense",
-    "title": "Check income and expense",
-    "description": "Check classification of income and expense for USN DR",
-    "order": 30
-  },
-  {
-    "id": "tmpl_ip_usn_dr_tax_calc",
-    "profile_key": "ip_usn_dr",
-    "code": "calculate_tax",
-    "title": "Calculate tax for period",
-    "description": "Calculate USN DR tax and contributions for the period",
-    "order": 40
-  },
-  {
-    "id": "tmpl_ip_usn_dr_send_result",
-    "profile_key": "ip_usn_dr",
-    "code": "send_results_to_client",
-    "title": "Send results to client",
-    "description": "Send tax and payment information to client",
-    "order": 50
-  }
-]
+{
+  "step_templates": [
+    {
+      "id": "generic_doc_request",
+      "name": "Request documents from client",
+      "default_status": "planned"
+    },
+    {
+      "id": "generic_upload",
+      "name": "Upload documents to 1C",
+      "default_status": "planned"
+    },
+    {
+      "id": "generic_control",
+      "name": "Control accountant review",
+      "default_status": "planned"
+    }
+  ]
+}
