@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SectionCard from "../components/ui/SectionCard";
 import StatusPill from "../components/ui/StatusPill";
 import HorizonList, { HorizonItem } from "../components/ui/HorizonList";
@@ -30,27 +31,26 @@ type ControlEvent = {
   [key: string]: any;
 };
 
-type TasksResponse = Task[] | { items?: Task[]; tasks?: Task[] };
-
+type TasksResponse = Task[] | { items?: Task[]; tasks?: Task[] } | null | undefined;
 type ControlEventsResponse =
   | ControlEvent[]
-  | { events?: ControlEvent[]; items?: ControlEvent[] };
+  | { events?: ControlEvent[]; items?: ControlEvent[] }
+  | null
+  | undefined;
 
-function extractTasks(data: TasksResponse | null | undefined): Task[] {
+function extractTasks(data: TasksResponse): Task[] {
   if (!data) return [];
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data.items)) return data.items;
-  if (Array.isArray(data.tasks)) return data.tasks;
+  if (Array.isArray((data as any).items)) return (data as any).items as Task[];
+  if (Array.isArray((data as any).tasks)) return (data as any).tasks as Task[];
   return [];
 }
 
-function extractControlEvents(
-  data: ControlEventsResponse | null | undefined
-): ControlEvent[] {
+function extractControlEvents(data: ControlEventsResponse): ControlEvent[] {
   if (!data) return [];
   if (Array.isArray(data)) return data;
-  if (Array.isArray((data as any).events)) return (data as any).events;
-  if (Array.isArray((data as any).items)) return (data as any).items;
+  if (Array.isArray((data as any).events)) return (data as any).events as ControlEvent[];
+  if (Array.isArray((data as any).items)) return (data as any).items as ControlEvent[];
   return [];
 }
 
@@ -59,7 +59,7 @@ function parseIsoDateLike(value: string | undefined | null): Date | null {
   const trimmed = String(value).trim();
   if (!trimmed) return null;
   const d = new Date(trimmed);
-  if (isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime())) return null;
   return d;
 }
 
@@ -81,17 +81,21 @@ function getControlEventDueRaw(ev: ControlEvent): string | undefined {
 const DayDashboardPage: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<ControlEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const navigate = useNavigate();
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   useEffect(() => {
     let active = true;
+
     const loadAll = async () => {
       setLoading(true);
       setError(null);
+
       try {
         const [tasksResp, eventsResp] = await Promise.all([
           fetch("/api/tasks"),
@@ -109,7 +113,6 @@ const DayDashboardPage: React.FC = () => {
         const eventsJson = (await eventsResp.json()) as ControlEventsResponse;
 
         if (!active) return;
-
         setTasks(extractTasks(tasksJson));
         setEvents(extractControlEvents(eventsJson));
       } catch (e: any) {
@@ -123,7 +126,6 @@ const DayDashboardPage: React.FC = () => {
     };
 
     loadAll();
-
     return () => {
       active = false;
     };
@@ -135,23 +137,20 @@ const DayDashboardPage: React.FC = () => {
     let totalTasks = 0;
     let overdueTasks = 0;
     let todayTasks = 0;
-
     const horizonTasks: HorizonItem[] = [];
 
-    for (const t of tasks) {
+    for (const t of tasks || []) {
       totalTasks += 1;
       const dueRaw = t.due_date ?? t.deadline ?? null;
       if (!dueRaw) continue;
       const d = parseIsoDateLike(dueRaw);
       if (!d) continue;
+
       const diff = getDateDiffInDays(d, today);
       const dateStr = getDateOnlyString(d);
 
-      if (dateStr < todayStr) {
-        overdueTasks += 1;
-      } else if (dateStr === todayStr) {
-        todayTasks += 1;
-      }
+      if (dateStr < todayStr) overdueTasks += 1;
+      else if (dateStr === todayStr) todayTasks += 1;
 
       if (diff < 0 || diff <= 7) {
         horizonTasks.push({
@@ -167,29 +166,25 @@ const DayDashboardPage: React.FC = () => {
     let totalEvents = 0;
     let overdueEvents = 0;
     let todayEvents = 0;
-
     const horizonEvents: HorizonItem[] = [];
 
-    for (const ev of events) {
+    for (const ev of events || []) {
       const dueRaw = getControlEventDueRaw(ev);
       if (!dueRaw) continue;
       const d = parseIsoDateLike(dueRaw);
       if (!d) continue;
-      totalEvents += 1;
 
+      totalEvents += 1;
       const dateStr = getDateOnlyString(d);
       const diff = getDateDiffInDays(d, today);
 
-      if (dateStr < todayStr) {
-        overdueEvents += 1;
-      } else if (dateStr === todayStr) {
-        todayEvents += 1;
-      }
+      if (dateStr < todayStr) overdueEvents += 1;
+      else if (dateStr === todayStr) todayEvents += 1;
 
       if (diff < 0 || diff <= 7) {
         horizonEvents.push({
-          id: String(ev.id ?? ev.event_id ?? ev.code ?? "event"),
-          title: ev.label || ev.title || ev.code || "Event",
+          id: String(ev.id ?? ev.event_id ?? ev.client_code ?? "event"),
+          title: ev.label || ev.title || ev.event_type || "Event",
           date: dateStr,
           category: ev.client_code || ev.event_type || undefined,
           highlight: diff < 0 ? "overdue" : diff === 0 ? "today" : "soon",
@@ -229,139 +224,183 @@ const DayDashboardPage: React.FC = () => {
   const todayLabel = useMemo(() => {
     const weekday = today.toLocaleDateString(undefined, { weekday: "long" });
     const dateStr = today.toISOString().slice(0, 10);
-    return weekday + " · " + dateStr;
+    return `${weekday} · ${dateStr}`;
   }, [today]);
 
+  const overdueTotal = aggregates.overdueTasks + aggregates.overdueEvents;
+  const todayTotal = aggregates.todayTasks + aggregates.todayEvents;
+
+  let riskTone: "danger" | "warning" | "success" = "success";
+  let riskLabel = "Calm day";
+  let riskDescription = "No overdue items and nothing due today.";
+
+  if (overdueTotal > 0) {
+    riskTone = "danger";
+    riskLabel = "Attention required";
+    riskDescription = "There are overdue tasks or control events that need attention.";
+  } else if (todayTotal > 0) {
+    riskTone = "warning";
+    riskLabel = "Workload today";
+    riskDescription = "There are items scheduled for today. Plan the workload carefully.";
+  }
+
+  const openTasksBoard = (view?: "overdue" | "today" | "next7" | "future") => {
+    const params = new URLSearchParams();
+    if (view) {
+      params.set("view", view);
+    }
+    const qs = params.toString();
+    navigate(qs ? `/tasks?${qs}` : "/tasks");
+  };
+
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
-            Day dashboard
-          </h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-xl font-semibold text-slate-900">Day dashboard</h1>
+          <p className="text-sm text-slate-500">
             Global view of tasks and control events for all clients for today and the nearest days.
           </p>
         </div>
-        <div className="text-xs text-slate-600">
-          {todayLabel}
+        <div className="text-right text-xs text-slate-500">
+          <div>{todayLabel}</div>
         </div>
       </div>
 
       {loading && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Loading day dashboard data...
-        </div>
+        <div className="text-sm text-slate-500">Loading day dashboard data...</div>
       )}
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {!loading && !error && (
         <>
-          <div className="grid gap-3 text-xs md:grid-cols-4">
-            <SectionCard title="Tasks today" variant="default">
-              <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <SectionCard
+              title="Tasks today"
+              subtitle="Summary of all tasks from /api/tasks."
+              actions={
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100"
+                    onClick={() => openTasksBoard("today")}
+                  >
+                    Open today
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                    onClick={() => openTasksBoard()}
+                  >
+                    All tasks
+                  </button>
+                </div>
+              }
+            >
+              <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
-                  <div className="text-[10px] text-slate-500">Total</div>
-                  <div className="text-lg font-semibold text-slate-900">
+                  <div className="text-[11px] text-slate-500">Total</div>
+                  <div className="text-base font-semibold">
                     {aggregates.totalTasks}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-500">Today</div>
-                  <div className="text-lg font-semibold text-slate-900">
+                  <div className="text-[11px] text-slate-500">Today</div>
+                  <div className="text-base font-semibold">
                     {aggregates.todayTasks}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-500">Overdue</div>
-                  <div className="text-lg font-semibold text-red-700">
+                  <div className="text-[11px] text-slate-500">Overdue</div>
+                  <div className="text-base font-semibold text-red-600">
                     {aggregates.overdueTasks}
                   </div>
                 </div>
               </div>
             </SectionCard>
-            <SectionCard title="Control events" variant="default">
-              <div className="grid grid-cols-2 gap-2">
+
+            <SectionCard
+              title="Control events"
+              subtitle="Summary of internal control events across all clients."
+            >
+              <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
-                  <div className="text-[10px] text-slate-500">Total</div>
-                  <div className="text-lg font-semibold text-slate-900">
+                  <div className="text-[11px] text-slate-500">Total</div>
+                  <div className="text-base font-semibold">
                     {aggregates.totalEvents}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-500">Today</div>
-                  <div className="text-lg font-semibold text-slate-900">
+                  <div className="text-[11px] text-slate-500">Today</div>
+                  <div className="text-base font-semibold">
                     {aggregates.todayEvents}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-500">Overdue</div>
-                  <div className="text-lg font-semibold text-red-700">
+                  <div className="text-[11px] text-slate-500">Overdue</div>
+                  <div className="text-base font-semibold text-red-600">
                     {aggregates.overdueEvents}
                   </div>
                 </div>
               </div>
             </SectionCard>
+
             <SectionCard
               title="Risk snapshot"
-              actions={
-                aggregates.overdueTasks + aggregates.overdueEvents > 0 ? (
-                  <StatusPill label="Attention required" tone="danger" />
-                ) : aggregates.todayTasks + aggregates.todayEvents > 0 ? (
-                  <StatusPill label="Workload today" tone="warning" />
-                ) : (
-                  <StatusPill label="Calm day" tone="success" />
-                )
-              }
+              subtitle="Overall risk level for the current day."
             >
-              <p className="text-[11px] text-slate-600">
-                Overdue items: {aggregates.overdueTasks + aggregates.overdueEvents}.{" "}
-                Today items: {aggregates.todayTasks + aggregates.todayEvents}.
-              </p>
-            </SectionCard>
-            <SectionCard title="Summary" variant="muted">
-              <p className="text-[11px] text-slate-600">
-                This dashboard is an overview only. Detailed per-client view is available in the
-                client cockpit.
-              </p>
+              <div className="space-y-2 text-xs">
+                <StatusPill tone={riskTone} label={riskLabel} />
+                <p className="text-[11px] text-slate-600">{riskDescription}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[11px] text-slate-500">
+                      Overdue items
+                    </div>
+                    <div className="text-base font-semibold text-red-600">
+                      {overdueTotal}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-500">
+                      Items today
+                    </div>
+                    <div className="text-base font-semibold">
+                      {todayTotal}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </SectionCard>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             <SectionCard
               title="Nearest tasks"
-              subtitle="Tasks with deadlines today and in the next 7 days."
+              subtitle="Tasks due today and in the next 7 days."
             >
-              <HorizonList
-                items={aggregates.horizonTasks.slice(0, 40)}
-                emptyLabel="No tasks in the nearest horizon."
-              />
+              <HorizonList items={aggregates.horizonTasks} />
             </SectionCard>
+
             <SectionCard
               title="Nearest control events"
-              subtitle="Control events for all clients for today and the next 7 days."
+              subtitle="Control events due today and in the next 7 days."
             >
-              <HorizonList
-                items={aggregates.horizonEvents.slice(0, 40)}
-                emptyLabel="No control events in the nearest horizon."
-              />
+              <HorizonList items={aggregates.horizonEvents} />
+            </SectionCard>
+
+            <SectionCard
+              title="Combined horizon"
+              subtitle="Mixed list of tasks and events by date."
+            >
+              <HorizonList items={combinedHorizon} />
             </SectionCard>
           </div>
-
-          <SectionCard
-            title="Combined horizon"
-            subtitle="Tasks and control events together, sorted by date."
-          >
-            <HorizonList
-              items={combinedHorizon}
-              emptyLabel="Nothing on the combined horizon."
-            />
-          </SectionCard>
         </>
       )}
     </div>

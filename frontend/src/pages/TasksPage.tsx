@@ -1,16 +1,20 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import SectionCard from "../components/ui/SectionCard";
 
 type Task = {
   id?: string;
+  task_id?: string;
   title?: string;
   description?: string;
   client_code?: string;
   client_id?: string;
+  client_label?: string;
   status?: string;
   priority?: string;
-  deadline?: string;
-  event_id?: string;
+  due_date?: string | null;
+  deadline?: string | null;
+  planned_date?: string | null;
   [key: string]: any;
 };
 
@@ -24,9 +28,16 @@ type TasksResponse =
   | null
   | undefined;
 
-function useQuery(): URLSearchParams {
-  return new URLSearchParams(useLocation().search);
-}
+type BucketKey = "overdue" | "today" | "next7" | "future" | "no_deadline";
+
+type EnrichedTask = Task & {
+  _id: string;
+  _clientCode: string;
+  _dueDate: Date | null;
+  _dueDateStr: string | null;
+  _diffDays: number | null;
+  _bucket: BucketKey;
+};
 
 function extractTasks(data: TasksResponse): Task[] {
   if (!data) return [];
@@ -36,400 +47,530 @@ function extractTasks(data: TasksResponse): Task[] {
   return [];
 }
 
-function getStatusKey(status?: string): string {
-  return (status || "").toLowerCase();
+function parseIsoDateLike(value?: string | null): Date | null {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const d = new Date(trimmed);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
 }
 
-function getStatusBadgeClasses(status?: string): string {
-  const s = getStatusKey(status);
-  if (s === "new") return "bg-sky-50 text-sky-800 border-sky-200";
-  if (s === "in_progress" || s === "in-progress" || s === "open") {
-    return "bg-amber-50 text-amber-800 border-amber-200";
-  }
-  if (s === "done" || s === "completed" || s === "closed") {
-    return "bg-emerald-50 text-emerald-800 border-emerald-200";
-  }
-  if (s === "error" || s === "failed") {
-    return "bg-red-50 text-red-800 border-red-200";
-  }
-  return "bg-slate-50 text-slate-700 border-slate-200";
+function getDateOnlyString(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
-function getStatusLabel(status?: string): string {
-  const s = getStatusKey(status);
-  if (!s) return "-";
-  if (s === "in_progress" || s === "in-progress") return "in progress";
-  return s;
-}
-
-type DeadlineSeverity = "none" | "ok" | "soon" | "overdue";
-
-function getDeadlineSeverity(deadline?: string): DeadlineSeverity {
-  if (!deadline) return "none";
-  const d = new Date(deadline);
-  if (Number.isNaN(d.getTime())) return "none";
-  const now = new Date();
-  const diffMs = d.getTime() - now.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  if (diffDays < 0) return "overdue";
-  if (diffDays <= 2) return "soon";
-  return "ok";
-}
-
-function getDeadlineClasses(severity: DeadlineSeverity): string {
-  if (severity === "overdue") return "text-red-700 font-semibold";
-  if (severity === "soon") return "text-amber-700 font-semibold";
-  if (severity === "ok") return "text-slate-800";
-  return "text-slate-500";
-}
-
-function formatDate(value?: string): string {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString();
+function getDateDiffInDays(target: Date, base: Date): number {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const a = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const b = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  return Math.round((a.getTime() - b.getTime()) / msPerDay);
 }
 
 const TasksPage: React.FC = () => {
-  const query = useQuery();
-  const clientFromQuery = query.get("client_code") || query.get("client_id") || "";
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const [clientFilter, setClientFilter] = useState<string>(clientFromQuery);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [textFilter, setTextFilter] = useState<string>("");
-  const [onlyOverdue, setOnlyOverdue] = useState<boolean>(false);
+  const [clientFilter, setClientFilter] = useState<string>("");
+  const [searchText, setSearchText] = useState<string>("");
+  const [bucketFilter, setBucketFilter] = useState<
+    "" | "overdue" | "today" | "next7" | "future"
+  >("");
 
+  // Read query parameters from URL (client_code, status, view)
   useEffect(() => {
-    let mounted = true;
+    const params = new URLSearchParams(location.search);
+    const clientCode = params.get("client_code");
+    const status = params.get("status");
+    const view = params.get("view") as
+      | "overdue"
+      | "today"
+      | "next7"
+      | "future"
+      | null;
 
-    const load = async () => {
+    if (clientCode) {
+      setClientFilter(clientCode);
+    }
+    if (status) {
+      setStatusFilter(status);
+    }
+    if (view === "overdue" || view === "today" || view === "next7" || view === "future") {
+      setBucketFilter(view);
+    }
+  }, [location.search]);
+
+  // Load tasks from /api/tasks
+  useEffect(() => {
+    let active = true;
+
+    const loadTasks = async () => {
       setLoading(true);
       setError(null);
+      setActionError(null);
+
       try {
         const resp = await fetch("/api/tasks");
         if (!resp.ok) {
           throw new Error("Failed to load tasks: " + resp.status);
         }
         const json: TasksResponse = await resp.json();
-        if (!mounted) return;
-        setTasks(extractTasks(json));
+        const list = extractTasks(json);
+        if (!active) return;
+        setTasks(list);
       } catch (e: any) {
-        if (mounted) {
-          setError(e?.message || "Unknown error");
-        }
+        if (!active) return;
+        setError(e?.message || "Unknown error while loading tasks");
       } finally {
-        if (mounted) {
+        if (active) {
           setLoading(false);
         }
       }
     };
 
-    load();
+    loadTasks();
     return () => {
-      mounted = false;
+      active = false;
     };
   }, []);
 
-  const filtered = useMemo(() => {
-    return tasks.filter((t) => {
-      const clientCode = (t.client_code || t.client_id || "").toString();
+  const today = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }, []);
 
-      if (clientFilter && !clientCode.toLowerCase().includes(clientFilter.toLowerCase())) {
+  const enrichedTasks = useMemo<EnrichedTask[]>(() => {
+    return (tasks || []).map((t) => {
+      const rawClient =
+        (t.client_code as any) ||
+        (t.client_id as any) ||
+        (t.client_label as any) ||
+        "";
+      const clientCode = String(rawClient || "").trim();
+
+      const dueRaw =
+        (t.due_date as any) ??
+        (t.deadline as any) ??
+        (t.planned_date as any) ??
+        null;
+      const dueDate = parseIsoDateLike(dueRaw);
+      const dueDateStr = dueDate ? getDateOnlyString(dueDate) : null;
+
+      let diff: number | null = null;
+      let bucket: BucketKey = "no_deadline";
+      if (dueDate) {
+        diff = getDateDiffInDays(dueDate, today);
+        if (diff < 0) bucket = "overdue";
+        else if (diff === 0) bucket = "today";
+        else if (diff > 0 && diff <= 7) bucket = "next7";
+        else bucket = "future";
+      }
+
+      const rawId =
+        (t.id as any) ??
+        (t.task_id as any) ??
+        (t as any).uuid ??
+        (t as any).code ??
+        "";
+      const id = String(
+        rawId || clientCode || t.title || Math.random().toString(36).slice(2)
+      );
+
+      return {
+        ...t,
+        _id: id,
+        _clientCode: clientCode,
+        _dueDate: dueDate,
+        _dueDateStr: dueDateStr,
+        _diffDays: diff,
+        _bucket: bucket,
+      };
+    });
+  }, [tasks, today]);
+
+  const filteredTasks = useMemo(() => {
+    return enrichedTasks.filter((t) => {
+      if (bucketFilter && t._bucket !== bucketFilter) {
         return false;
       }
-
       if (statusFilter) {
-        const st = getStatusKey(t.status);
-        if (st !== statusFilter.toLowerCase()) {
+        const s = (t.status || "").toLowerCase();
+        if (s !== statusFilter.toLowerCase()) {
           return false;
         }
       }
-
-      if (textFilter) {
-        const text = (
-          (t.title || "") +
+      if (clientFilter) {
+        const code = t._clientCode.toLowerCase();
+        if (!code.includes(clientFilter.toLowerCase())) {
+          return false;
+        }
+      }
+      if (searchText.trim()) {
+        const q = searchText.trim().toLowerCase();
+        const haystack =
+          (t.title || "").toLowerCase() +
           " " +
-          (t.description || "") +
-          " " +
-          clientCode
-        ).toLowerCase();
-        if (!text.includes(textFilter.toLowerCase())) {
+          (t.description || "").toLowerCase();
+        if (!haystack.includes(q)) {
           return false;
         }
       }
-
-      if (onlyOverdue) {
-        const severity = getDeadlineSeverity(t.deadline);
-        const st = getStatusKey(t.status);
-        if (
-          severity !== "overdue" ||
-          st === "done" ||
-          st === "completed" ||
-          st === "closed"
-        ) {
-          return false;
-        }
-      }
-
       return true;
     });
-  }, [tasks, clientFilter, statusFilter, textFilter, onlyOverdue]);
+  }, [enrichedTasks, bucketFilter, statusFilter, clientFilter, searchText]);
 
-  const stats = useMemo(() => {
-    const total = tasks.length;
-    let newCount = 0;
-    let inProgress = 0;
-    let done = 0;
-    let overdue = 0;
+  const grouped = useMemo(() => {
+    const byBucket: Record<BucketKey, EnrichedTask[]> = {
+      overdue: [],
+      today: [],
+      next7: [],
+      future: [],
+      no_deadline: [],
+    };
 
-    for (const t of tasks) {
-      const st = getStatusKey(t.status);
-      if (st === "new") newCount += 1;
-      else if (st === "in_progress" || st === "in-progress" || st === "open") {
-        inProgress += 1;
-      } else if (st === "done" || st === "completed" || st === "closed") {
-        done += 1;
-      }
-
-      const severity = getDeadlineSeverity(t.deadline);
-      if (
-        severity === "overdue" &&
-        st !== "done" &&
-        st !== "completed" &&
-        st !== "closed"
-      ) {
-        overdue += 1;
-      }
+    for (const t of filteredTasks) {
+      byBucket[t._bucket].push(t);
     }
 
-    return { total, newCount, inProgress, done, overdue };
+    (Object.keys(byBucket) as BucketKey[]).forEach((key) => {
+      byBucket[key].sort((a, b) => {
+        const da = a._dueDateStr || "";
+        const db = b._dueDateStr || "";
+        if (da && db && da !== db) {
+          return da < db ? -1 : 1;
+        }
+        const pa = (a.priority || "").toString();
+        const pb = (b.priority || "").toString();
+        if (pa && pb && pa !== pb) {
+          return pa < pb ? -1 : 1;
+        }
+        return (a.title || "").localeCompare(b.title || "");
+      });
+    });
+
+    const total = enrichedTasks.length;
+    const overdueCount = byBucket.overdue.length;
+    const todayCount = byBucket.today.length;
+    const next7Count = byBucket.next7.length;
+    const futureCount = byBucket.future.length;
+    const withoutDeadlineCount = byBucket.no_deadline.length;
+
+    return {
+      byBucket,
+      total,
+      overdueCount,
+      todayCount,
+      next7Count,
+      futureCount,
+      withoutDeadlineCount,
+    };
+  }, [filteredTasks, enrichedTasks]);
+
+  const uniqueStatuses = useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach((t) => {
+      if (t.status) set.add(t.status);
+    });
+    return Array.from(set).sort((a, b) =>
+      a.toLowerCase().localeCompare(b.toLowerCase())
+    );
   }, [tasks]);
 
+  const handleOpenTask = (task: EnrichedTask) => {
+    const taskId =
+      (task.id as any) ??
+      (task.task_id as any) ??
+      (task as any).uuid ??
+      (task as any).code;
+    if (!taskId) return;
+
+    const params = new URLSearchParams();
+    params.set("task_id", String(taskId));
+
+    if (task.event_id) {
+      params.set("event_id", String(task.event_id));
+    }
+    if (task._clientCode) {
+      params.set("client_code", String(task._clientCode));
+    }
+
+    navigate(`/task-detail?${params.toString()}`);
+  };
+
+  const handleChangeStatus = async (task: EnrichedTask, newStatus: string) => {
+    const taskId =
+      (task.id as any) ??
+      (task.task_id as any) ??
+      (task as any).uuid ??
+      (task as any).code;
+    if (!taskId) return;
+
+    setActionError(null);
+
+    try {
+      const resp = await fetch(
+        `/api/tasks/${encodeURIComponent(String(taskId))}/status`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+
+      if (!resp.ok) {
+        throw new Error("Failed to update task status: " + resp.status);
+      }
+
+      setTasks((prev) =>
+        (prev || []).map((t) => {
+          const currentId =
+            (t.id as any) ??
+            (t.task_id as any) ??
+            (t as any).uuid ??
+            (t as any).code;
+          if (String(currentId) !== String(taskId)) return t;
+          return { ...t, status: newStatus };
+        })
+      );
+    } catch (e: any) {
+      setActionError(e?.message || "Failed to update task status");
+    }
+  };
+
+  const renderBucketSection = (
+    key: BucketKey,
+    title: string,
+    subtitle: string,
+    items: EnrichedTask[]
+  ) => {
+    return (
+      <SectionCard key={key} title={title} subtitle={subtitle}>
+        {items.length === 0 ? (
+          <p className="text-xs text-slate-500">No tasks in this group.</p>
+        ) : (
+          <ul className="space-y-2">
+            {items.map((t) => {
+              const status = (t.status || "new").toString();
+              const priority = t.priority || "";
+              const dueLabel = t._dueDateStr
+                ? `Due ${t._dueDateStr}`
+                : "No due date";
+              const clientLabel =
+                t.client_label ||
+                t._clientCode ||
+                t.client_code ||
+                t.client_id ||
+                "-";
+
+              const isCompleted =
+                status.toLowerCase() === "completed" ||
+                status.toLowerCase() === "done";
+
+              return (
+                <li
+                  key={t._id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-white p-2 text-xs shadow-sm"
+                >
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className="truncate text-left text-[13px] font-medium text-slate-900 hover:text-emerald-700"
+                        onClick={() => handleOpenTask(t)}
+                      >
+                        {t.title || t._id}
+                      </button>
+                      <span className="shrink-0 text-[10px] text-slate-500">
+                        {clientLabel}
+                      </span>
+                    </div>
+                    {t.description && (
+                      <p className="line-clamp-2 text-[11px] text-slate-500">
+                        {t.description}
+                      </p>
+                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-700">
+                        {status}
+                      </span>
+                      {priority && (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
+                          Priority: {priority}
+                        </span>
+                      )}
+                      <span
+                        className={
+                          "rounded-full px-2 py-0.5 text-[10px] " +
+                          (t._bucket === "overdue"
+                            ? "bg-red-50 text-red-700"
+                            : t._bucket === "today"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : t._bucket === "next7"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-slate-50 text-slate-600")
+                        }
+                      >
+                        {dueLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 text-[10px]">
+                    {!isCompleted && (
+                      <button
+                        type="button"
+                        className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-100"
+                        onClick={() => handleChangeStatus(t, "completed")}
+                      >
+                        Mark done
+                      </button>
+                    )}
+                    {isCompleted && (
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-slate-700 hover:bg-slate-100"
+                        onClick={() => handleChangeStatus(t, "new")}
+                      >
+                        Reopen
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
+    );
+  };
+
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Tasks</h1>
-          <p className="text-sm text-slate-600">
-            All tasks from /api/tasks with client and status filters. Supports client_code in query string.
+          <h1 className="text-xl font-semibold text-slate-900">Tasks board</h1>
+          <p className="text-sm text-slate-500">
+            All tasks from /api/tasks grouped by urgency and ready for the working day.
           </p>
         </div>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-5">
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm">
-          <div className="text-slate-500">Total</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">
-            {stats.total}
-          </div>
-        </div>
-        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs shadow-sm">
-          <div className="text-sky-700">New</div>
-          <div className="mt-1 text-lg font-semibold text-sky-900">
-            {stats.newCount}
-          </div>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs shadow-sm">
-          <div className="text-amber-700">In progress</div>
-          <div className="mt-1 text-lg font-semibold text-amber-900">
-            {stats.inProgress}
-          </div>
-        </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs shadow-sm">
-          <div className="text-emerald-700">Done</div>
-          <div className="mt-1 text-lg font-semibold text-emerald-900">
-            {stats.done}
-          </div>
-        </div>
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs shadow-sm">
-          <div className="text-red-700">Overdue</div>
-          <div className="mt-1 text-lg font-semibold text-red-900">
-            {stats.overdue}
-          </div>
+        <div className="text-right text-xs text-slate-500">
+          <div>Total: {grouped.total}</div>
+          <div>Today: {grouped.todayCount}</div>
+          <div>Overdue: {grouped.overdueCount}</div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm">
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-4 md:items-end">
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-600">
-              Client filter
-            </label>
+      <SectionCard title="Filters" subtitle="Narrow down the tasks list.">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="flex flex-col gap-1 text-xs">
+            <label className="text-[11px] text-slate-500">Search</label>
             <input
-              className="w-full rounded-md border border-slate-300 px-2 py-1"
-              placeholder="client code or id..."
-              value={clientFilter}
-              onChange={(e) => setClientFilter(e.target.value)}
+              className="h-7 rounded-md border border-slate-200 px-2 text-xs"
+              placeholder="Search in title or description..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-600">
-              Status
-            </label>
+          <div className="flex flex-col gap-1 text-xs">
+            <label className="text-[11px] text-slate-500">Status</label>
             <select
-              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1"
+              className="h-7 rounded-md border border-slate-200 px-2 text-xs"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">All</option>
-              <option value="new">New</option>
-              <option value="in_progress">In progress</option>
-              <option value="done">Done</option>
-              <option value="error">Error</option>
+              {uniqueStatuses.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-600">
-              Search text
-            </label>
+          <div className="flex flex-col gap-1 text-xs">
+            <label className="text-[11px] text-slate-500">Client code</label>
             <input
-              className="w-full rounded-md border border-slate-300 px-2 py-1"
-              placeholder="title, description..."
-              value={textFilter}
-              onChange={(e) => setTextFilter(e.target.value)}
+              className="h-7 rounded-md border border-slate-200 px-2 text-xs"
+              placeholder="Filter by client code..."
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2 md:justify-end">
-            <label className="flex items-center gap-1 text-[11px] text-slate-700">
-              <input
-                type="checkbox"
-                className="h-3 w-3"
-                checked={onlyOverdue}
-                onChange={(e) => setOnlyOverdue(e.target.checked)}
-              />
-              Only overdue
-            </label>
+          <div className="flex flex-col gap-1 text-xs">
+            <label className="text-[11px] text-slate-500">Group</label>
+            <select
+              className="h-7 rounded-md border border-slate-200 px-2 text-xs"
+              value={bucketFilter}
+              onChange={(e) =>
+                setBucketFilter(
+                  e.target.value as "" | "overdue" | "today" | "next7" | "future"
+                )
+              }
+            >
+              <option value="">All</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Today</option>
+              <option value="next7">Next 7 days</option>
+              <option value="future">Future</option>
+            </select>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
       {loading && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          Loading tasks...
-        </div>
+        <div className="text-sm text-slate-500">Loading tasks...</div>
       )}
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {!loading && filtered.length === 0 && !error && (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600">
-          No tasks for current filters.
+      {actionError && !error && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          {actionError}
         </div>
       )}
 
-      {filtered.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Tasks list
-            </h2>
-            <span className="text-[11px] text-slate-500">
-              {filtered.length} tasks
-            </span>
-          </div>
-          <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-100">
-            <table className="min-w-full border-collapse text-xs">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="border-b border-slate-100 px-2 py-2 text-left font-medium w-[110px]">
-                    Status
-                  </th>
-                  <th className="border-b border-slate-100 px-2 py-2 text-left font-medium">
-                    Task
-                  </th>
-                  <th className="border-b border-slate-100 px-2 py-2 text-left font-medium w-[140px]">
-                    Client
-                  </th>
-                  <th className="border-b border-slate-100 px-2 py-2 text-left font-medium w-[130px]">
-                    Deadline
-                  </th>
-                  <th className="border-b border-slate-100 px-2 py-2 text-left font-medium w-[110px]">
-                    Link
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((t, index) => {
-                  const status = t.status || "new";
-                  const statusClasses = getStatusBadgeClasses(status);
-                  const statusLabel = getStatusLabel(status);
-                  const client = (t.client_code || t.client_id || "-").toString();
-                  const severity = getDeadlineSeverity(t.deadline);
-                  const deadlineClasses = getDeadlineClasses(severity);
-                  const deadlineFormatted = formatDate(t.deadline || undefined);
-                  const rowStripe =
-                    index % 2 === 0 ? "bg-white" : "bg-slate-50/40";
-
-                  const detailUrl = `/task-detail?task_id=${encodeURIComponent(
-                    t.id || ""
-                  )}&client_code=${encodeURIComponent(client)}${
-                    t.event_id
-                      ? `&event_id=${encodeURIComponent(
-                          t.event_id.toString()
-                        )}`
-                      : ""
-                  }`;
-
-                  return (
-                    <tr key={t.id || index} className={rowStripe}>
-                      <td className="border-b border-slate-100 px-2 py-1.5 align-middle">
-                        <span
-                          className={
-                            "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-medium " +
-                            statusClasses
-                          }
-                        >
-                          {statusLabel}
-                        </span>
-                      </td>
-                      <td className="border-b border-slate-100 px-2 py-1.5 align-middle">
-                        <div
-                          className="truncate font-medium text-slate-900"
-                          title={t.title || ""}
-                        >
-                          {t.title || t.id || "Task"}
-                        </div>
-                        {t.description && (
-                          <div className="truncate text-[11px] text-slate-500">
-                            {t.description}
-                          </div>
-                        )}
-                      </td>
-                      <td className="border-b border-slate-100 px-2 py-1.5 align-middle">
-                        <div className="truncate text-slate-800" title={client}>
-                          {client}
-                        </div>
-                      </td>
-                      <td
-                        className={
-                          "border-b border-slate-100 px-2 py-1.5 align-middle " +
-                          deadlineClasses
-                        }
-                      >
-                        {deadlineFormatted}
-                      </td>
-                      <td className="border-b border-slate-100 px-2 py-1.5 align-middle">
-                        <Link
-                          to={detailUrl}
-                          className="inline-flex items-center rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          Open
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      {!loading && !error && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {renderBucketSection(
+            "overdue",
+            "Overdue",
+            "Tasks with due date before today.",
+            grouped.byBucket.overdue
+          )}
+          {renderBucketSection(
+            "today",
+            "Today",
+            "Tasks that are due today.",
+            grouped.byBucket.today
+          )}
+          {renderBucketSection(
+            "next7",
+            "Next 7 days",
+            "Tasks that are due in the next 7 days.",
+            grouped.byBucket.next7
+          )}
+          {renderBucketSection(
+            "future",
+            "Future",
+            "Tasks with due dates more than 7 days ahead.",
+            grouped.byBucket.future
+          )}
+          {renderBucketSection(
+            "no_deadline",
+            "No due date",
+            "Tasks without explicit due date.",
+            grouped.byBucket.no_deadline
+          )}
         </div>
       )}
     </div>
