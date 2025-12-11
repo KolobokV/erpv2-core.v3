@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import SectionCard from "../components/ui/SectionCard";
 import StatusPill, { StatusPillTone } from "../components/ui/StatusPill";
 import HorizonList, { HorizonItem } from "../components/ui/HorizonList";
@@ -14,8 +14,8 @@ type ClientProfile = {
   tax_system?: string;
   regime?: string;
   type?: string;
-  salary_payment_days?: number[] | string[];
-  payment_dates?: number[] | string[];
+  salary_payment_days?: (number | string)[];
+  payment_dates?: (number | string)[];
   is_active?: boolean;
   [key: string]: any;
 };
@@ -156,11 +156,24 @@ function getStatusLabel(status?: string): string {
   return status || "-";
 }
 
+function getClientCodeFromProfile(profile: ClientProfile): string {
+  const raw =
+    profile.client_code ||
+    profile.code ||
+    profile.client_id ||
+    profile.id ||
+    profile.profile_id ||
+    "";
+  return String(raw || "").trim();
+}
+
 function normalizeSalaryDays(profile: ClientProfile): string {
   const raw =
-    profile.salary_payment_days || profile.payment_dates || ([] as any);
+    profile.salary_payment_days ||
+    profile.payment_dates ||
+    ([] as (number | string)[]);
   if (Array.isArray(raw)) {
-    return raw.join(", ");
+    return raw.map(String).join(", ");
   }
   if (typeof raw === "string") return raw;
   return "";
@@ -174,7 +187,9 @@ function formatJson(obj: any): string {
   }
 }
 
-function parseIsoDateLike(value: string | undefined | null): Date | null {
+function parseIsoDateLike(
+  value: string | undefined | null
+): Date | null {
   if (!value) return null;
   const trimmed = String(value).trim();
   if (!trimmed) return null;
@@ -202,7 +217,6 @@ const ClientProfilePage: React.FC = () => {
   const [profiles, setProfiles] = useState<ClientProfile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
-
   const [controlEvents, setControlEvents] = useState<ControlEvent[]>([]);
   const [controlEventsLoading, setControlEventsLoading] = useState(false);
   const [controlEventsError, setControlEventsError] = useState<string | null>(
@@ -214,10 +228,12 @@ const ClientProfilePage: React.FC = () => {
 
   const [filterText, setFilterText] = useState("");
   const [filterTaxSystem, setFilterTaxSystem] = useState("");
-  const [filterHasSalary, setFilterHasSalary] = useState<"" | "yes" | "no">("");
-  const [filterActive, setFilterActive] = useState<"" | "active" | "inactive">(
+  const [filterHasSalary, setFilterHasSalary] = useState<"" | "yes" | "no">(
     ""
   );
+  const [filterActive, setFilterActive] = useState<
+    "" | "active" | "inactive"
+  >("");
 
   const [selectedClientCode, setSelectedClientCode] = useState<string | null>(
     null
@@ -251,21 +267,30 @@ const ClientProfilePage: React.FC = () => {
           );
         }
 
-        const profilesJson = (await profilesResp.json()) as
-          | ClientProfile[]
-          | null;
+        const profilesJson = (await profilesResp.json()) as ClientProfile[] | {
+          items?: ClientProfile[];
+        } | null;
+
         const tasksJson: TasksResponse = await tasksResp.json();
         const instancesJson: InstancesResponse = await instancesResp.json();
 
         if (!mounted) return;
 
-        setProfiles(Array.isArray(profilesJson) ? profilesJson : []);
+        let profilesList: ClientProfile[] = [];
+        if (Array.isArray(profilesJson)) {
+          profilesList = profilesJson;
+        } else if (profilesJson && Array.isArray((profilesJson as any).items)) {
+          profilesList = (profilesJson as any).items as ClientProfile[];
+        }
+
+        setProfiles(profilesList);
         setTasks(extractTasks(tasksJson));
         setInstances(extractInstances(instancesJson));
       } catch (e: any) {
         if (!mounted) return;
         setError(
-          e?.message || "Failed to load client profiles / tasks / instances"
+          e?.message ||
+            "Failed to load client profiles / tasks / instances"
         );
       } finally {
         if (mounted) {
@@ -275,6 +300,7 @@ const ClientProfilePage: React.FC = () => {
     };
 
     loadAll();
+
     return () => {
       mounted = false;
     };
@@ -293,10 +319,8 @@ const ClientProfilePage: React.FC = () => {
 
     const tasksByClient = new Map<string, Task[]>();
     for (const t of tasks || []) {
-      const code =
-        t.client_code && String(t.client_code).trim().length > 0
-          ? String(t.client_code)
-          : "";
+      const rawCode = t.client_code || "";
+      const code = String(rawCode || "").trim();
       if (!code) continue;
       if (!tasksByClient.has(code)) tasksByClient.set(code, []);
       tasksByClient.get(code)!.push(t);
@@ -304,12 +328,13 @@ const ClientProfilePage: React.FC = () => {
 
     const instancesByClient = new Map<string, InstanceInfo[]>();
     for (const inst of instances || []) {
-      const code =
+      const rawCode =
         inst.client_code && String(inst.client_code).trim().length > 0
-          ? String(inst.client_code)
+          ? inst.client_code
           : inst.client_id && String(inst.client_id).trim().length > 0
-          ? String(inst.client_id)
+          ? inst.client_id
           : "";
+      const code = String(rawCode || "").trim();
       if (!code) continue;
       if (!instancesByClient.has(code)) instancesByClient.set(code, []);
       instancesByClient.get(code)!.push(inst);
@@ -318,18 +343,11 @@ const ClientProfilePage: React.FC = () => {
     const result: ClientRow[] = [];
 
     for (const profile of profiles) {
-      const clientCodeRaw =
-        profile.client_code ||
-        profile.code ||
-        profile.client_id ||
-        profile.id ||
-        "";
-      const clientCode = String(clientCodeRaw).trim();
+      const clientCode = getClientCodeFromProfile(profile);
       if (!clientCode) continue;
 
       const clientLabel =
         profile.label || profile.name || profile.code || clientCode;
-
       const taxSystem =
         profile.tax_system ||
         profile.regime ||
@@ -341,7 +359,7 @@ const ClientProfilePage: React.FC = () => {
       const isActive = profile.is_active !== false;
 
       const clientTasks = tasksByClient.get(clientCode) || [];
-      let tasksTotal = clientTasks.length;
+      const tasksTotal = clientTasks.length;
       let tasksOverdue = 0;
       let tasksToday = 0;
       let tasksNew = 0;
@@ -352,7 +370,7 @@ const ClientProfilePage: React.FC = () => {
           tasksNew += 1;
         }
         const dueRaw = t.due_date || t.planned_date;
-        const due = parseIsoDateLike(dueRaw);
+        const due = parseIsoDateLike(dueRaw || null);
         if (!due) continue;
         const dueStr = getDateOnlyString(due);
         if (dueStr < todayStr) {
@@ -385,7 +403,7 @@ const ClientProfilePage: React.FC = () => {
         profile,
         clientCode,
         clientLabel,
-        taxSystem: taxSystem,
+        taxSystem,
         salaryDays,
         isActive,
         tasksTotal,
@@ -412,6 +430,7 @@ const ClientProfilePage: React.FC = () => {
 
   const filteredRows = useMemo(() => {
     let list = rows;
+
     if (filterText.trim()) {
       const q = filterText.trim().toLowerCase();
       list = list.filter((r) => {
@@ -461,6 +480,7 @@ const ClientProfilePage: React.FC = () => {
     const loadControlEvents = async () => {
       setControlEventsLoading(true);
       setControlEventsError(null);
+
       const aggregated: ControlEvent[] = [];
       let errorMessage: string | null = null;
 
@@ -477,7 +497,6 @@ const ClientProfilePage: React.FC = () => {
           const totalMonths = startMonth - 1 + offset;
           const year = startYear + Math.floor(totalMonths / 12);
           const month = (totalMonths % 12) + 1;
-
           const url =
             "/api/control-events/" +
             encodeURIComponent(selectedClientCode) +
@@ -503,7 +522,6 @@ const ClientProfilePage: React.FC = () => {
               }
               continue;
             }
-
             const json = (await resp.json()) as ControlEventsResponse;
             const list = extractControlEvents(json);
             if (list && list.length > 0) {
@@ -534,7 +552,9 @@ const ClientProfilePage: React.FC = () => {
 
   const selectedRow = useMemo(() => {
     if (!selectedClientCode) return null;
-    return rows.find((r) => r.clientCode === selectedClientCode) || null;
+    return (
+      rows.find((r) => r.clientCode === selectedClientCode) || null
+    );
   }, [selectedClientCode, rows]);
 
   const controlEventsSummary = useMemo(() => {
@@ -550,7 +570,6 @@ const ClientProfilePage: React.FC = () => {
     }
 
     const eventsWithDue: { ev: ControlEvent; dueDate: Date }[] = [];
-
     for (const ev of controlEvents) {
       const raw = getControlEventDueRaw(ev);
       const d = parseIsoDateLike(raw);
@@ -565,7 +584,7 @@ const ClientProfilePage: React.FC = () => {
         todayCount: 0,
         next7Count: 0,
         futureCount: 0,
-        importantEvents: [],
+        importantEvents: [] as { ev: ControlEvent; dueDate: Date }[],
       };
     }
 
@@ -577,13 +596,11 @@ const ClientProfilePage: React.FC = () => {
     let todayCount = 0;
     let next7Count = 0;
     let futureCount = 0;
-
     const important: { ev: ControlEvent; dueDate: Date }[] = [];
 
     for (const item of eventsWithDue) {
       const d = item.dueDate;
       const diffDays = getDateDiffInDays(d, todayDate);
-
       if (diffDays < 0) {
         overdueCount += 1;
       } else if (diffDays === 0) {
@@ -611,15 +628,17 @@ const ClientProfilePage: React.FC = () => {
     };
   }, [controlEvents, todayDate]);
 
-  const nearestEventsItems = useMemo<HorizonItem[]>(() => {
+  const nearestEventsItems: HorizonItem[] = useMemo(() => {
     if (!controlEventsSummary.importantEvents.length) {
       return [];
     }
+
     return controlEventsSummary.importantEvents.map((item, idx) => {
       const ev = item.ev;
       const d = item.dueDate;
       const dateStr = getDateOnlyString(d);
       const diff = getDateDiffInDays(d, todayDate);
+
       let highlight: HorizonItem["highlight"] = "normal";
       if (diff < 0) {
         highlight = "overdue";
@@ -628,12 +647,10 @@ const ClientProfilePage: React.FC = () => {
       } else if (diff > 0 && diff <= 7) {
         highlight = "soon";
       }
+
       const title =
-        ev.label ||
-        ev.title ||
-        ev.code ||
-        ev.event_type ||
-        "Event";
+        ev.label || ev.title || ev.code || ev.event_type || "Event";
+
       return {
         id: (ev.id || ev.event_id || ev.code || "ev") + "-" + idx,
         title,
@@ -655,12 +672,12 @@ const ClientProfilePage: React.FC = () => {
     for (const r of rows) {
       const codeLower = r.clientCode.toLowerCase();
       const taxLower = r.taxSystem.toLowerCase();
-
       if (codeLower.startsWith("ip_")) ipCount += 1;
       if (codeLower.startsWith("ooo_")) oooCount += 1;
       if (taxLower.includes("usn")) usnCount += 1;
-      if (taxLower.includes("osno") || taxLower.includes("nds"))
+      if (taxLower.includes("osno") || taxLower.includes("nds")) {
         osnoCount += 1;
+      }
       if (r.salaryDays) salaryCount += 1;
     }
 
@@ -679,7 +696,6 @@ const ClientProfilePage: React.FC = () => {
 
     const overdueTasks = selectedRow.tasksOverdue || 0;
     const todayTasks = selectedRow.tasksToday || 0;
-
     const overdueEvents = controlEventsSummary.overdueCount || 0;
     const todayEvents = controlEventsSummary.todayCount || 0;
     const next7Events = controlEventsSummary.next7Count || 0;
@@ -689,8 +705,10 @@ const ClientProfilePage: React.FC = () => {
 
     let level: "low" | "medium" | "high" = "low";
     let label = "Low risk";
-    let description = "No overdue items. You are on track for this client.";
-    let badgeClasses = "bg-emerald-50 text-emerald-800 border-emerald-200";
+    let description =
+      "No overdue items. You are on track for this client.";
+    let badgeClasses =
+      "bg-emerald-50 text-emerald-800 border-emerald-200";
 
     if (totalOverdue > 0) {
       level = "high";
@@ -706,12 +724,7 @@ const ClientProfilePage: React.FC = () => {
       badgeClasses = "bg-amber-50 text-amber-800 border-amber-200";
     }
 
-    return {
-      level,
-      label,
-      description,
-      badgeClasses,
-    };
+    return { level, label, description, badgeClasses };
   }, [selectedRow, controlEventsSummary]);
 
   const handleOpenTasks = (clientCode: string) => {
@@ -720,18 +733,22 @@ const ClientProfilePage: React.FC = () => {
   };
 
   const handleOpenControlEvents = (clientCode: string) => {
-    const url = `/control-events?client_id=${encodeURIComponent(clientCode)}`;
+    const url = `/control-events?client_id=${encodeURIComponent(
+      clientCode
+    )}`;
     window.location.href = url;
   };
 
   const handleOpenCoverage = (clientCode: string) => {
-    const url = `/coverage?client_code=${encodeURIComponent(clientCode)}`;
+    const url = `/process-coverage?client_code=${encodeURIComponent(
+      clientCode
+    )}`;
     window.location.href = url;
   };
 
-  const handleOpenReglement = (clientCode: string) => {
-    const url = `/reglement?client_code=${encodeURIComponent(clientCode)}`;
-    window.location.href = url;
+  const handleOpenReglement = (_clientCode: string) => {
+    // Send to root route where Reglement overview lives; avoid unknown paths.
+    window.location.href = "/";
   };
 
   const riskTone: StatusPillTone =
@@ -742,46 +759,40 @@ const ClientProfilePage: React.FC = () => {
       : "success";
 
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+    <div className="p-4 space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="text-lg font-semibold text-slate-900">
             Client profiles
           </h1>
-          <p className="text-sm text-slate-600">
-            Central client registry with metrics from client profiles, tasks, process instances
-            and control events (year + 3 months horizon).
+          <p className="text-xs text-slate-600">
+            Central client registry with metrics from client profiles, tasks,
+            process instances and control events (year + 3 months horizon).
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">
+        <div className="flex flex-wrap gap-3 text-xs">
           <div className="flex flex-col">
-            <label className="text-[11px] font-medium text-slate-600">
-              Search
-            </label>
+            <span className="text-[11px] text-slate-500">Search</span>
             <input
-              className="mt-1 rounded-md border border-slate-300 px-2 py-1"
-              placeholder="code, name, tax..."
+              className="h-7 w-40 rounded border border-slate-200 px-2 text-xs"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Name, code, tax..."
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-[11px] font-medium text-slate-600">
-              Tax system
-            </label>
+            <span className="text-[11px] text-slate-500">Tax system</span>
             <input
-              className="mt-1 rounded-md border border-slate-300 px-2 py-1"
-              placeholder="usn, osno..."
+              className="h-7 w-32 rounded border border-slate-200 px-2 text-xs"
               value={filterTaxSystem}
               onChange={(e) => setFilterTaxSystem(e.target.value)}
+              placeholder="usn, osno..."
             />
           </div>
           <div className="flex flex-col">
-            <label className="text-[11px] font-medium text-slate-600">
-              Salary
-            </label>
+            <span className="text-[11px] text-slate-500">Salary</span>
             <select
-              className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1"
+              className="h-7 w-28 rounded border border-slate-200 px-2 text-xs"
               value={filterHasSalary}
               onChange={(e) =>
                 setFilterHasSalary(e.target.value as "" | "yes" | "no")
@@ -793,11 +804,9 @@ const ClientProfilePage: React.FC = () => {
             </select>
           </div>
           <div className="flex flex-col">
-            <label className="text-[11px] font-medium text-slate-600">
-              Activity
-            </label>
+            <span className="text-[11px] text-slate-500">Activity</span>
             <select
-              className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1"
+              className="h-7 w-28 rounded border border-slate-200 px-2 text-xs"
               value={filterActive}
               onChange={(e) =>
                 setFilterActive(
@@ -810,455 +819,329 @@ const ClientProfilePage: React.FC = () => {
               <option value="inactive">Inactive only</option>
             </select>
           </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 text-xs md:grid-cols-5">
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:col-span-1">
-          <div className="text-slate-500">Clients total</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">
-            {stats.total}
+          <div className="flex flex-col rounded-md border border-slate-200 bg-slate-50 px-3 py-1">
+            <span className="text-[10px] text-slate-500">Clients total</span>
+            <span className="text-sm font-semibold text-slate-900">
+              {stats.total}
+            </span>
           </div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:col-span-1">
-          <div className="text-slate-500">IP</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">
-            {stats.ipCount}
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:col-span-1">
-          <div className="text-slate-500">OOO</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">
-            {stats.oooCount}
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:col-span-1">
-          <div className="text-slate-500">USN</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">
-            {stats.usnCount}
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:col-span-1">
-          <div className="text-slate-500">OSNO / VAT</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">
-            {stats.osnoCount}
-          </div>
-        </div>
-      </div>
+      </header>
 
       {loading && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="text-xs text-slate-500">
           Loading client profiles, tasks and instances...
         </div>
       )}
-
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
           {error}
         </div>
       )}
-
       {!loading && !error && rows.length === 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600">
+        <div className="text-xs text-slate-500">
           No client profiles loaded from /api/internal/client-profiles.
         </div>
       )}
 
       {filteredRows.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {/* Left: clients list */}
-          <SectionCard
-            title="Clients"
-            subtitle="Client list with basic metrics to choose cockpit focus."
-            variant="default"
-          >
-            <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-100">
-              <div className="grid grid-cols-7 gap-2 border-b border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
-                <div className="col-span-2">Client</div>
-                <div>Tax</div>
-                <div className="text-right">Tasks total</div>
-                <div className="text-right">Overdue</div>
-                <div className="text-right">Today</div>
-                <div className="text-right">Last period</div>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {filteredRows.map((row) => {
-                  const isActiveRow =
-                    selectedClientCode === row.clientCode;
-                  const baseRow =
-                    "grid grid-cols-7 gap-2 px-2 py-1.5 text-[11px] cursor-pointer";
-                  const rowClass = isActiveRow
-                    ? "bg-emerald-50"
-                    : "hover:bg-slate-50";
-                  const secondaryText = isActiveRow
-                    ? "text-[10px] text-emerald-700"
-                    : "text-[10px] text-slate-500";
+          <SectionCard title="Clients" subtitle="Sorted by risk and workload.">
+            <div className="mb-2 grid grid-cols-5 gap-2 text-[10px] text-slate-500">
+              <div>Client</div>
+              <div>Tax</div>
+              <div className="text-right">Tasks total</div>
+              <div className="text-right">Overdue</div>
+              <div className="text-right">Today</div>
+            </div>
+            <div className="max-h-[420px] space-y-1 overflow-auto">
+              {filteredRows.map((row) => {
+                const isActiveRow = selectedClientCode === row.clientCode;
+                const rowClass = isActiveRow
+                  ? "bg-emerald-50"
+                  : "hover:bg-slate-50";
+                const secondaryText = isActiveRow
+                  ? "text-[10px] text-emerald-700"
+                  : "text-[10px] text-slate-500";
+                const badgeClass =
+                  row.tasksOverdue > 0
+                    ? "bg-red-50 text-red-700"
+                    : row.tasksToday > 0
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-slate-50 text-slate-500";
 
-                  const badgeClass =
-                    row.tasksOverdue > 0
-                      ? "bg-red-50 text-red-700"
-                      : row.tasksToday > 0
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-slate-50 text-slate-500";
-
-                  const regStatusLabel = getStatusLabel(
-                    row.lastReglementStatus
-                  );
-
-                  return (
-                    <div
-                      key={row.clientCode}
-                      className={baseRow + " " + rowClass}
-                      onClick={() =>
-                        setSelectedClientCode(row.clientCode)
-                      }
-                    >
-                      <div className="col-span-2">
-                        <div className="truncate text-xs font-semibold">
-                          {row.clientLabel}
-                        </div>
+                return (
+                  <button
+                    key={row.clientCode}
+                    type="button"
+                    className={
+                      "grid w-full grid-cols-5 gap-2 rounded-md px-2 py-1.5 text-[11px] text-left " +
+                      rowClass
+                    }
+                    onClick={() => setSelectedClientCode(row.clientCode)}
+                  >
+                    <div>
+                      <div className="truncate font-medium text-slate-900">
+                        {row.clientLabel}
+                      </div>
+                      <div className={secondaryText}>{row.clientCode}</div>
+                      {row.salaryDays && (
                         <div className={secondaryText}>
-                          {row.clientCode}
+                          Salary days: {row.salaryDays}
                         </div>
-                        {row.salaryDays && (
-                          <div className={secondaryText}>
-                            Salary days: {row.salaryDays}
-                          </div>
-                        )}
-                      </div>
-                      <div className="truncate text-[11px]">
-                        {row.taxSystem || "-"}
-                      </div>
-                      <div className="text-right text-[11px]">
-                        {row.tasksTotal}
-                      </div>
-                      <div className="text-right text-[11px]">
-                        <span
-                          className={
-                            "rounded-full px-2 py-0.5 " + badgeClass
-                          }
-                        >
-                          {row.tasksOverdue}
-                        </span>
-                      </div>
-                      <div className="text-right text-[11px]">
-                        {row.tasksToday}
-                      </div>
-                      <div className="text-right text-[11px]">
-                        {row.lastReglementPeriod ? (
-                          <span
-                            className={
-                              "inline-flex items-center rounded-full border px-2 py-0.5 " +
-                              getStatusBadgeClasses(
-                                row.lastReglementStatus
-                              )
-                            }
-                          >
-                            {row.lastReglementPeriod} ·{" "}
-                            {regStatusLabel}
-                          </span>
-                        ) : (
-                          "-"
-                        )}
-                      </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="flex items-center text-xs">
+                      {row.taxSystem || "-"}
+                    </div>
+                    <div className="flex items-center justify-end">
+                      {row.tasksTotal}
+                    </div>
+                    <div className="flex items-center justify-end">
+                      <span className={"rounded px-1 " + badgeClass}>
+                        {row.tasksOverdue}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-end">
+                      {row.tasksToday}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </SectionCard>
 
           {/* Right: client cockpit */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Client card
-                </h2>
-                {selectedRow && (
-                  <div className="text-[11px] text-slate-500">
-                    {selectedRow.clientLabel} · {selectedRow.clientCode}
+          <div className="space-y-4">
+            <SectionCard
+              title="Client card"
+              subtitle="Static profile data and navigation."
+              actions={
+                selectedRow && (
+                  <div className="flex flex-wrap gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 hover:bg-slate-100"
+                      onClick={() => handleOpenTasks(selectedRow.clientCode)}
+                    >
+                      Tasks
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 hover:bg-slate-100"
+                      onClick={() =>
+                        handleOpenControlEvents(selectedRow.clientCode)
+                      }
+                    >
+                      Events
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 hover:bg-slate-100"
+                      onClick={() =>
+                        handleOpenCoverage(selectedRow.clientCode)
+                      }
+                    >
+                      Coverage
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 hover:bg-slate-100"
+                      onClick={() =>
+                        handleOpenReglement(selectedRow.clientCode)
+                      }
+                    >
+                      Reglement
+                    </button>
+                    <button
+                      type="button"
+                      className="text-emerald-700 hover:underline"
+                      onClick={() => setShowRaw((v) => !v)}
+                    >
+                      {showRaw ? "Hide raw" : "Show raw"}
+                    </button>
                   </div>
-                )}
-              </div>
-              {selectedRow && (
-                <div className="flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() =>
-                      handleOpenTasks(selectedRow.clientCode)
-                    }
-                  >
-                    Tasks
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() =>
-                      handleOpenControlEvents(selectedRow.clientCode)
-                    }
-                  >
-                    Events
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() =>
-                      handleOpenCoverage(selectedRow.clientCode)
-                    }
-                  >
-                    Coverage
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() =>
-                      handleOpenReglement(selectedRow.clientCode)
-                    }
-                  >
-                    Reglement
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() => setShowRaw((v) => !v)}
-                  >
-                    {showRaw ? "Hide raw" : "Show raw"}
-                  </button>
+                )
+              }
+            >
+              {!selectedRow && (
+                <div className="text-xs text-slate-500">
+                  Select a client in the list to open the cockpit.
                 </div>
               )}
-            </div>
-
-            {selectedRow && (
-              <div className="space-y-3">
-                {/* General */}
-                <SectionCard title="General" variant="muted">
-                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-700">
-                    <div>
-                      <span className="text-slate-500">
-                        Client code:{" "}
-                      </span>
-                      {selectedRow.clientCode}
+              {selectedRow && (
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <div className="text-[11px] text-slate-500">
+                      Client label
                     </div>
-                    <div>
-                      <span className="text-slate-500">
-                        Profile id:{" "}
-                      </span>
-                      {selectedRow.profile.profile_id || "-"}
+                    <div className="text-sm font-semibold text-slate-900">
+                      {selectedRow.clientLabel} · {selectedRow.clientCode}
                     </div>
-                    <div>
-                      <span className="text-slate-500">
-                        Tax system:{" "}
-                      </span>
-                      {selectedRow.taxSystem || "-"}
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Active: </span>
-                      {selectedRow.isActive ? "yes" : "no"}
-                    </div>
-                    {selectedRow.salaryDays && (
-                      <div>
-                        <span className="text-slate-500">
-                          Salary days:{" "}
-                        </span>
-                        {selectedRow.salaryDays}
-                      </div>
-                    )}
                   </div>
-                </SectionCard>
-
-                {/* Risk & compliance */}
-                <SectionCard
-                  title="Risk & compliance"
-                  actions={
-                    <StatusPill label={riskSummary.label} tone={riskTone} />
-                  }
-                >
-                  <div className="text-[11px] text-slate-600">
-                    {riskSummary.description}
-                  </div>
-                  <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] text-slate-700">
+                  <div className="grid gap-2 md:grid-cols-2">
                     <div>
-                      <div className="text-[10px] text-slate-500">
-                        Tasks overdue
+                      <div className="text-[11px] text-slate-500">
+                        Tax system
                       </div>
-                      <div className="font-semibold">
-                        {selectedRow.tasksOverdue}
+                      <div className="text-sm text-slate-900">
+                        {selectedRow.taxSystem || "-"}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500">
-                        Tasks today
+                      <div className="text-[11px] text-slate-500">
+                        Active
                       </div>
-                      <div className="font-semibold">
-                        {selectedRow.tasksToday}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500">
-                        Events overdue
-                      </div>
-                      <div className="font-semibold">
-                        {controlEventsSummary.overdueCount}
+                      <div className="text-sm text-slate-900">
+                        {selectedRow.isActive ? "yes" : "no"}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500">
-                        Events next 7d
+                      <div className="text-[11px] text-slate-500">
+                        Salary days
                       </div>
-                      <div className="font-semibold">
-                        {controlEventsSummary.next7Count}
+                      <div className="text-sm text-slate-900">
+                        {selectedRow.salaryDays || "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">
+                        Last reglement
+                      </div>
+                      <div className="text-sm text-slate-900">
+                        {selectedRow.lastReglementPeriod ? (
+                          <>
+                            <span>{selectedRow.lastReglementPeriod}</span>
+                            <span className="ml-1 rounded-full border px-2 py-0.5 text-[10px]">
+                              {getStatusLabel(selectedRow.lastReglementStatus)}
+                            </span>
+                          </>
+                        ) : (
+                          "No reglement instances"
+                        )}
                       </div>
                     </div>
                   </div>
-                </SectionCard>
-
-                {/* Events & deadlines */}
-                <SectionCard
-                  title="Events & deadlines (year + 3 months)"
-                  actions={
-                    controlEventsLoading ? (
-                      <span className="text-[10px] text-slate-500">
-                        Loading...
-                      </span>
-                    ) : undefined
-                  }
-                >
-                  {controlEventsError && (
-                    <div className="mb-1 text-[11px] text-red-600">
-                      {controlEventsError}
-                    </div>
-                  )}
-                  {!controlEventsLoading &&
-                    !controlEventsError &&
-                    controlEventsSummary.total === 0 && (
-                      <div className="text-[11px] text-slate-600">
-                        No control events found for this client in the next
-                        periods.
-                      </div>
-                    )}
-                  {!controlEventsLoading &&
-                    !controlEventsError &&
-                    controlEventsSummary.total > 0 && (
-                      <div className="space-y-2 text-[11px] text-slate-700">
-                        <div className="grid grid-cols-4 gap-1">
-                          <div>
-                            <div className="text-[10px] text-slate-500">
-                              Overdue
-                            </div>
-                            <div className="font-semibold">
-                              {controlEventsSummary.overdueCount}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-slate-500">
-                              Today
-                            </div>
-                            <div className="font-semibold">
-                              {controlEventsSummary.todayCount}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-slate-500">
-                              Next 7 days
-                            </div>
-                            <div className="font-semibold">
-                              {controlEventsSummary.next7Count}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-slate-500">
-                              Later (up to 3 months)
-                            </div>
-                            <div className="font-semibold">
-                              {controlEventsSummary.futureCount}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="rounded-md bg-slate-50 px-2 py-1">
-                          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                            Nearest events
-                          </div>
-                          <HorizonList
-                            items={nearestEventsItems}
-                            emptyLabel="No nearest events in the next days."
-                          />
-                        </div>
-                      </div>
-                    )}
-                </SectionCard>
-
-                {/* Tasks snapshot */}
-                <SectionCard title="Tasks snapshot" variant="muted">
-                  <div className="grid grid-cols-4 gap-1 text-[11px] text-slate-700">
-                    <div>
-                      <span className="text-slate-500">Total: </span>
-                      {selectedRow.tasksTotal}
-                    </div>
-                    <div>
-                      <span className="text-slate-500">New: </span>
-                      {selectedRow.tasksNew}
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Today: </span>
-                      {selectedRow.tasksToday}
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Overdue: </span>
-                      {selectedRow.tasksOverdue}
-                    </div>
-                  </div>
-                </SectionCard>
-
-                {/* Reglement snapshot */}
-                <SectionCard title="Reglement snapshot" variant="muted">
-                  {selectedRow.lastReglementPeriod ? (
-                    <div className="flex items-center justify-between text-[11px] text-slate-700">
-                      <div>
-                        <span className="text-slate-500">
-                          Last period:{" "}
-                        </span>
-                        {selectedRow.lastReglementPeriod}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-slate-500">
-                          Status:{" "}
-                        </span>
-                        <StatusPill
-                          label={getStatusLabel(
-                            selectedRow.lastReglementStatus
-                          )}
-                          tone={
-                            getStatusKey(selectedRow.lastReglementStatus) ===
-                            "completed"
-                              ? "success"
-                              : getStatusKey(
-                                  selectedRow.lastReglementStatus
-                                ) === "error"
-                              ? "danger"
-                              : "neutral"
-                          }
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-slate-600">
-                      No reglement instances found for this client yet.
-                    </div>
-                  )}
-                </SectionCard>
-
-                {/* Raw profile */}
-                {showRaw && (
-                  <SectionCard title="Raw client profile" variant="dark">
-                    <pre className="max-h-72 overflow-auto text-[11px] text-slate-100">
+                  {showRaw && (
+                    <pre className="max-h-64 overflow-auto rounded bg-slate-900 p-3 text-[11px] text-emerald-50">
                       {formatJson(selectedRow.profile)}
                     </pre>
-                  </SectionCard>
-                )}
+                  )}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title="Risk and compliance"
+              subtitle="Combined view of overdue and near-term events and tasks."
+            >
+              <div className="flex items-center gap-3">
+                <StatusPill tone={riskTone} label={riskSummary.label} />
+                <p className="text-xs text-slate-600">
+                  {riskSummary.description}
+                </p>
               </div>
-            )}
+              <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                <div>
+                  <div className="text-[11px] text-slate-500">
+                    Tasks overdue
+                  </div>
+                  <div className="text-base font-semibold text-red-600">
+                    {selectedRow?.tasksOverdue ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">
+                    Tasks today
+                  </div>
+                  <div className="text-base font-semibold">
+                    {selectedRow?.tasksToday ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">
+                    Events overdue
+                  </div>
+                  <div className="text-base font-semibold text-red-600">
+                    {controlEventsSummary.overdueCount}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">
+                    Events next 7d
+                  </div>
+                  <div className="text-base font-semibold">
+                    {controlEventsSummary.next7Count}
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Nearest control events"
+              subtitle="Important deadlines for this client (overdue, today, next 7 days)."
+            >
+              {controlEventsLoading && (
+                <div className="text-xs text-slate-500">Loading...</div>
+              )}
+              {controlEventsError && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                  {controlEventsError}
+                </div>
+              )}
+              {!controlEventsLoading &&
+                !controlEventsError &&
+                controlEventsSummary.total === 0 && (
+                  <div className="text-xs text-slate-500">
+                    No control events found for this client in the next
+                    periods.
+                  </div>
+                )}
+              {!controlEventsLoading &&
+                !controlEventsError &&
+                controlEventsSummary.total > 0 && (
+                  <div className="space-y-2 text-xs">
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <div className="text-[11px] text-slate-500">
+                          Overdue
+                        </div>
+                        <div className="text-sm font-semibold text-red-600">
+                          {controlEventsSummary.overdueCount}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-500">
+                          Today
+                        </div>
+                        <div className="text-sm font-semibold">
+                          {controlEventsSummary.todayCount}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-500">
+                          Next 7 days
+                        </div>
+                        <div className="text-sm font-semibold">
+                          {controlEventsSummary.next7Count}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-slate-500">
+                          Later (up to 3 months)
+                        </div>
+                        <div className="text-sm font-semibold">
+                          {controlEventsSummary.futureCount}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <HorizonList items={nearestEventsItems} />
+                    </div>
+                  </div>
+                )}
+            </SectionCard>
           </div>
         </div>
       )}
