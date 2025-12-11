@@ -13,6 +13,7 @@ import ClientProcessStepPage from "./pages/ClientProcessStepPage";
 import ClientControlEventPage from "./pages/ClientControlEventPage";
 import ReglementOverviewPage from "./pages/ReglementOverviewPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
+import DayDashboardPage from "./pages/DayDashboardPage";
 
 function navLinkClass(isActive: boolean, accent?: boolean): string {
   const base = "px-2 py-1 rounded-md text-sm no-underline";
@@ -32,6 +33,9 @@ function App() {
             <nav className="flex flex-wrap gap-2">
               <NavLink to="/" end className={({ isActive }) => navLinkClass(isActive, true)}>
                 Reglement
+              </NavLink>
+              <NavLink to="/day" className={({ isActive }) => navLinkClass(isActive, true)}>
+                Day
               </NavLink>
               <NavLink to="/tasks" className={({ isActive }) => navLinkClass(isActive)}>
                 Tasks
@@ -84,6 +88,7 @@ function App() {
         <main className="max-w-6xl mx-auto px-4 py-4">
           <Routes>
             <Route path="/" element={<ReglementOverviewPage />} />
+            <Route path="/day" element={<DayDashboardPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/task-detail" element={<TaskDetailPage />} />
             <Route path="/internal-processes" element={<InternalProcessesPage />} />

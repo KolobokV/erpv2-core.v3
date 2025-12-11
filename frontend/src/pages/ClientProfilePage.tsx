@@ -1,4 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
+import SectionCard from "../components/ui/SectionCard";
+import StatusPill, { StatusPillTone } from "../components/ui/StatusPill";
+import HorizonList, { HorizonItem } from "../components/ui/HorizonList";
 
 type ClientProfile = {
   id?: string;
@@ -192,10 +195,7 @@ function getDateDiffInDays(target: Date, base: Date): number {
 }
 
 function getControlEventDueRaw(ev: ControlEvent): string {
-  return (
-    (ev && (ev.due_date || ev.deadline || ev.date)) ||
-    ""
-  );
+  return (ev && (ev.due_date || ev.deadline || ev.date)) || "";
 }
 
 const ClientProfilePage: React.FC = () => {
@@ -509,7 +509,7 @@ const ClientProfilePage: React.FC = () => {
             if (list && list.length > 0) {
               aggregated.push(...list);
             }
-          } catch (innerError) {
+          } catch {
             if (!errorMessage) {
               errorMessage = "Error while loading control events";
             }
@@ -611,6 +611,39 @@ const ClientProfilePage: React.FC = () => {
     };
   }, [controlEvents, todayDate]);
 
+  const nearestEventsItems = useMemo<HorizonItem[]>(() => {
+    if (!controlEventsSummary.importantEvents.length) {
+      return [];
+    }
+    return controlEventsSummary.importantEvents.map((item, idx) => {
+      const ev = item.ev;
+      const d = item.dueDate;
+      const dateStr = getDateOnlyString(d);
+      const diff = getDateDiffInDays(d, todayDate);
+      let highlight: HorizonItem["highlight"] = "normal";
+      if (diff < 0) {
+        highlight = "overdue";
+      } else if (diff === 0) {
+        highlight = "today";
+      } else if (diff > 0 && diff <= 7) {
+        highlight = "soon";
+      }
+      const title =
+        ev.label ||
+        ev.title ||
+        ev.code ||
+        ev.event_type ||
+        "Event";
+      return {
+        id: (ev.id || ev.event_id || ev.code || "ev") + "-" + idx,
+        title,
+        date: dateStr,
+        category: ev.event_type || undefined,
+        highlight,
+      };
+    });
+  }, [controlEventsSummary, todayDate]);
+
   const stats = useMemo(() => {
     const total = rows.length;
     let ipCount = 0;
@@ -700,6 +733,13 @@ const ClientProfilePage: React.FC = () => {
     const url = `/reglement?client_code=${encodeURIComponent(clientCode)}`;
     window.location.href = url;
   };
+
+  const riskTone: StatusPillTone =
+    riskSummary.level === "high"
+      ? "danger"
+      : riskSummary.level === "medium"
+      ? "warning"
+      : "success";
 
   return (
     <div className="space-y-4 p-4">
@@ -827,15 +867,11 @@ const ClientProfilePage: React.FC = () => {
       {filteredRows.length > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Left: clients list */}
-          <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Clients
-              </h2>
-              <span className="text-[11px] text-slate-500">
-                {filteredRows.length} / {rows.length}
-              </span>
-            </div>
+          <SectionCard
+            title="Clients"
+            subtitle="Client list with basic metrics to choose cockpit focus."
+            variant="default"
+          >
             <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-100">
               <div className="grid grid-cols-7 gap-2 border-b border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
                 <div className="col-span-2">Client</div>
@@ -930,7 +966,7 @@ const ClientProfilePage: React.FC = () => {
                 })}
               </div>
             </div>
-          </div>
+          </SectionCard>
 
           {/* Right: client cockpit */}
           <div className="space-y-3">
@@ -997,11 +1033,8 @@ const ClientProfilePage: React.FC = () => {
             {selectedRow && (
               <div className="space-y-3">
                 {/* General */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[11px] font-semibold text-slate-700">
-                    General
-                  </div>
-                  <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-slate-700">
+                <SectionCard title="General" variant="muted">
+                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-700">
                     <div>
                       <span className="text-slate-500">
                         Client code:{" "}
@@ -1033,24 +1066,16 @@ const ClientProfilePage: React.FC = () => {
                       </div>
                     )}
                   </div>
-                </div>
+                </SectionCard>
 
                 {/* Risk & compliance */}
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[11px] font-semibold text-slate-700">
-                      Risk & compliance
-                    </div>
-                    <span
-                      className={
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] " +
-                        riskSummary.badgeClasses
-                      }
-                    >
-                      {riskSummary.label}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-600">
+                <SectionCard
+                  title="Risk & compliance"
+                  actions={
+                    <StatusPill label={riskSummary.label} tone={riskTone} />
+                  }
+                >
+                  <div className="text-[11px] text-slate-600">
                     {riskSummary.description}
                   </div>
                   <div className="mt-2 grid grid-cols-4 gap-1 text-[11px] text-slate-700">
@@ -1087,29 +1112,28 @@ const ClientProfilePage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </div>
+                </SectionCard>
 
                 {/* Events & deadlines */}
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-[11px] font-semibold text-slate-700">
-                      Events & deadlines (year + 3 months)
-                    </div>
-                    {controlEventsLoading && (
+                <SectionCard
+                  title="Events & deadlines (year + 3 months)"
+                  actions={
+                    controlEventsLoading ? (
                       <span className="text-[10px] text-slate-500">
                         Loading...
                       </span>
-                    )}
-                  </div>
+                    ) : undefined
+                  }
+                >
                   {controlEventsError && (
-                    <div className="mt-1 text-[11px] text-red-600">
+                    <div className="mb-1 text-[11px] text-red-600">
                       {controlEventsError}
                     </div>
                   )}
                   {!controlEventsLoading &&
                     !controlEventsError &&
                     controlEventsSummary.total === 0 && (
-                      <div className="mt-1 text-[11px] text-slate-600">
+                      <div className="text-[11px] text-slate-600">
                         No control events found for this client in the next
                         periods.
                       </div>
@@ -1117,7 +1141,7 @@ const ClientProfilePage: React.FC = () => {
                   {!controlEventsLoading &&
                     !controlEventsError &&
                     controlEventsSummary.total > 0 && (
-                      <div className="mt-1 space-y-1 text-[11px] text-slate-700">
+                      <div className="space-y-2 text-[11px] text-slate-700">
                         <div className="grid grid-cols-4 gap-1">
                           <div>
                             <div className="text-[10px] text-slate-500">
@@ -1152,58 +1176,22 @@ const ClientProfilePage: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        {controlEventsSummary.importantEvents.length > 0 && (
-                          <div className="mt-2 rounded-md bg-slate-50 px-2 py-1">
-                            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                              Nearest events
-                            </div>
-                            <ul className="mt-1 space-y-0.5">
-                              {controlEventsSummary.importantEvents.map(
-                                (item, idx) => {
-                                  const ev = item.ev;
-                                  const d = item.dueDate;
-                                  const dateStr = getDateOnlyString(d);
-                                  const title =
-                                    ev.label ||
-                                    ev.title ||
-                                    ev.code ||
-                                    ev.event_type ||
-                                    "Event";
-                                  return (
-                                    <li
-                                      key={
-                                        (ev.id ||
-                                          ev.event_id ||
-                                          ev.code ||
-                                          "ev") +
-                                        "-" +
-                                        idx
-                                      }
-                                      className="flex items-center justify-between text-[11px]"
-                                    >
-                                      <span className="truncate pr-2">
-                                        {title}
-                                      </span>
-                                      <span className="text-[10px] text-slate-500">
-                                        {dateStr}
-                                      </span>
-                                    </li>
-                                  );
-                                }
-                              )}
-                            </ul>
+                        <div className="rounded-md bg-slate-50 px-2 py-1">
+                          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                            Nearest events
                           </div>
-                        )}
+                          <HorizonList
+                            items={nearestEventsItems}
+                            emptyLabel="No nearest events in the next days."
+                          />
+                        </div>
                       </div>
                     )}
-                </div>
+                </SectionCard>
 
                 {/* Tasks snapshot */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[11px] font-semibold text-slate-700">
-                    Tasks snapshot
-                  </div>
-                  <div className="mt-1 grid grid-cols-4 gap-1 text-[11px] text-slate-700">
+                <SectionCard title="Tasks snapshot" variant="muted">
+                  <div className="grid grid-cols-4 gap-1 text-[11px] text-slate-700">
                     <div>
                       <span className="text-slate-500">Total: </span>
                       {selectedRow.tasksTotal}
@@ -1221,54 +1209,53 @@ const ClientProfilePage: React.FC = () => {
                       {selectedRow.tasksOverdue}
                     </div>
                   </div>
-                </div>
+                </SectionCard>
 
                 {/* Reglement snapshot */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[11px] font-semibold text-slate-700">
-                    Reglement snapshot
-                  </div>
+                <SectionCard title="Reglement snapshot" variant="muted">
                   {selectedRow.lastReglementPeriod ? (
-                    <div className="mt-1 flex items-center justify-between text-[11px] text-slate-700">
+                    <div className="flex items-center justify-between text-[11px] text-slate-700">
                       <div>
                         <span className="text-slate-500">
                           Last period:{" "}
                         </span>
                         {selectedRow.lastReglementPeriod}
                       </div>
-                      <div>
+                      <div className="flex items-center gap-1">
                         <span className="text-slate-500">
                           Status:{" "}
                         </span>
-                        <span
-                          className={
-                            "inline-flex items-center rounded-full border px-2 py-0.5 " +
-                            getStatusBadgeClasses(
-                              selectedRow.lastReglementStatus
-                            )
+                        <StatusPill
+                          label={getStatusLabel(
+                            selectedRow.lastReglementStatus
+                          )}
+                          tone={
+                            getStatusKey(selectedRow.lastReglementStatus) ===
+                            "completed"
+                              ? "success"
+                              : getStatusKey(
+                                  selectedRow.lastReglementStatus
+                                ) === "error"
+                              ? "danger"
+                              : "neutral"
                           }
-                        >
-                          {getStatusLabel(selectedRow.lastReglementStatus)}
-                        </span>
+                        />
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-1 text-[11px] text-slate-600">
+                    <div className="text-[11px] text-slate-600">
                       No reglement instances found for this client yet.
                     </div>
                   )}
-                </div>
+                </SectionCard>
 
                 {/* Raw profile */}
                 {showRaw && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-900 px-3 py-2">
-                    <div className="text-[11px] font-semibold text-slate-200">
-                      Raw client profile
-                    </div>
-                    <pre className="mt-1 max-h-72 overflow-auto text-[11px] text-slate-100">
+                  <SectionCard title="Raw client profile" variant="dark">
+                    <pre className="max-h-72 overflow-auto text-[11px] text-slate-100">
                       {formatJson(selectedRow.profile)}
                     </pre>
-                  </div>
+                  </SectionCard>
                 )}
               </div>
             )}
