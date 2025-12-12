@@ -1,0 +1,34 @@
+import React, { useMemo } from "react";
+import { useLocation } from "react-router-dom";
+import { getClientFromLocation } from "../v27/clientContext";
+import { buildV27Bundle } from "../v27/bridge";
+import { V27DerivedPanel } from "../components/V27DerivedPanel";
+
+export default function DayDashboardPage() {
+  const loc = useLocation();
+  const clientId = getClientFromLocation(loc);
+
+  const bundle = useMemo(() => {
+    if (!clientId) return null;
+    return buildV27Bundle(clientId);
+  }, [clientId]);
+
+  return (
+    <div className="p-4 space-y-4">
+      {bundle ? (
+        <V27DerivedPanel
+          title="V27: risks today (profile-based)"
+          clientId={bundle.clientId}
+          derived={bundle.derived}
+          risks={bundle.risks}
+        />
+      ) : null}
+
+      <div className="rounded-xl border p-4">
+        <div className="text-sm text-muted-foreground">
+          This is a safe wrapper placeholder. Replace with v26 Day UX integration in the next megablock if needed.
+        </div>
+      </div>
+    </div>
+  );
+}

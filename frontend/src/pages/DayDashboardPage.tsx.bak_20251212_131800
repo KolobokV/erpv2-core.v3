@@ -224,7 +224,7 @@ const DayDashboardPage: React.FC = () => {
   const todayLabel = useMemo(() => {
     const weekday = today.toLocaleDateString(undefined, { weekday: "long" });
     const dateStr = today.toISOString().slice(0, 10);
-    return `${weekday} · ${dateStr}`;
+    return `${weekday} В· ${dateStr}`;
   }, [today]);
 
   const overdueTotal = aggregates.overdueTasks + aggregates.overdueEvents;
@@ -278,7 +278,6 @@ const DayDashboardPage: React.FC = () => {
       )}
 
       {!loading && !error && (
-        <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <SectionCard
               title="Tasks today"
@@ -401,7 +400,6 @@ const DayDashboardPage: React.FC = () => {
               <HorizonList items={combinedHorizon} />
             </SectionCard>
           </div>
-        </>
       )}
     </div>
   );

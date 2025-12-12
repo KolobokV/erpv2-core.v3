@@ -1,0 +1,23 @@
+TABLET REPORT
+FREEZE: C:\Users\User\Desktop\ERP\_savepoints\ERP_CORE_simple_20251212_114318.zip
+TEMP: C:\Users\User\AppData\Local\Temp\erpv2_restore_20251212_131147
+TIME: 2025-12-12T13:12:40
+
+FILE: C:\Users\User\Desktop\ERP\ERPv2_front_stage1\src\pages\ReglementPage.tsx
+LEN: 17428
+EXPORT: default name ReglementPage
+RETURN: at approx line 207
+RETURN: at approx line 318
+RETURN: at approx line 446
+FILE: C:\Users\User\Desktop\ERP\ERPv2_front_stage1\src\pages\ProcessCoveragePage.tsx
+LEN: 7079
+EXPORT: default name ProcessCoveragePage
+RETURN: at approx line 43
+RETURN: at approx line 64
+RETURN: at approx line 65
+FILE: C:\Users\User\Desktop\ERP\ERPv2_front_stage1\src\pages\DayDashboardPage.tsx
+LEN: 13481
+EXPORT: default name DayDashboardPage
+RETURN: at approx line 44
+RETURN: at approx line 45
+RETURN: at approx line 52

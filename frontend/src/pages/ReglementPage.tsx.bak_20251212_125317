@@ -382,7 +382,7 @@ const ReglementPage: React.FC<Props> = ({ initialClient, onClientPicked }) => {
             <div className="mt-1 text-lg font-semibold text-slate-900">{nextAction}</div>
             <div className="mt-1 text-xs text-slate-600">
               process: {selectedProcess ? safeStr(selectedProcess.period || "-") : "none"}
-              {" Р’В· "}
+              {" В· "}
               profile: {selectedProcess ? safeStr(selectedProcess.profile_code || selectedProcess.profile_id || "-") : "-"}
             </div>
           </div>

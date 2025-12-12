@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { V27InlinePanel } from "../components/V27InlinePanel";
 
 /* =======================
    Types
@@ -40,7 +41,10 @@ type ClientCoverageRow = {
 function getClientFromSearch(search: string): string {
   try {
     const sp = new URLSearchParams(search || "");
-    return (sp.get("client") || "").trim();
+    return (
+    <>
+      <V27InlinePanel title="V27: derived coverage baseline" />
+sp.get("client") || "").trim();
   } catch {
     return "";
   }
@@ -61,8 +65,14 @@ function clearClientFromUrl(pathname: string, search: string): string {
 function toInstances(data: InstancesResponse): InstanceInfo[] {
   if (!data) return [];
   if (Array.isArray(data)) return data;
-  if (Array.isArray((data as any).items)) return (data as any).items;
-  if (Array.isArray((data as any).instances)) return (data as any).instances;
+  if (Array.isArray((data as any).items)) return (
+    <>
+      <V27InlinePanel title="V27: derived coverage baseline" />
+data as any).items;
+  if (Array.isArray((data as any).instances)) return (
+    <>
+      <V27InlinePanel title="V27: derived coverage baseline" />
+data as any).instances;
   return [];
 }
 
@@ -75,7 +85,10 @@ function clientLabel(inst: InstanceInfo): string {
 }
 
 function statusKey(status?: string): string {
-  return (status || "").toLowerCase();
+  return (
+    <>
+      <V27InlinePanel title="V27: derived coverage baseline" />
+status || "").toLowerCase();
 }
 
 function buildCoverage(instances: InstanceInfo[]): ClientCoverageRow[] {
@@ -148,7 +161,10 @@ const ProcessCoveragePage: React.FC = () => {
       .catch((e) => mounted && setError(e?.message || "Load error"))
       .finally(() => mounted && setLoading(false));
 
-    return () => {
+    return (
+    <>
+      <V27InlinePanel title="V27: derived coverage baseline" />
+) => {
       mounted = false;
     };
   }, []);
@@ -169,7 +185,9 @@ const ProcessCoveragePage: React.FC = () => {
   }, [instances, selectedClientKey]);
 
   return (
-    <div className="space-y-4 p-4">
+    <>
+      <V27InlinePanel title="V27: derived coverage baseline" />
+<div className="space-y-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Process coverage</h1>
 
