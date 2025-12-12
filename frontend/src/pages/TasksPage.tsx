@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SectionCard from "../components/ui/SectionCard";
 import TaskCard from "../components/ui/TaskCard";
+import { loadMaterializedTasksV27 } from "../v27/profileStore";
 
 function safeStr(v: any): string {
   return v === null || v === undefined ? "" : String(v);
@@ -32,6 +33,20 @@ function clearClientFromUrl(pathname: string, search: string): string {
   }
 }
 
+function localTaskToUi(t: any, clientId: string): any {
+  const due = safeStr(t?.due_date);
+  const deadlineIso = due ? due + "T00:00:00.000Z" : new Date().toISOString();
+  return {
+    id: safeStr(t?.id),
+    title: safeStr(t?.title || "Untitled"),
+    status: safeStr(t?.status || "open"),
+    deadline: deadlineIso,
+    client_code: clientId,
+    source: "v27_local",
+    v27_readonly: true,
+  };
+}
+
 const TasksPage: React.FC = () => {
   const [tasks, setTasks] = useState<any[]>([]);
 
@@ -43,83 +58,92 @@ const TasksPage: React.FC = () => {
     const resp = await fetch("/api/tasks");
     const json = await resp.json();
     const arr = Array.isArray(json) ? json : json.tasks || [];
-    setTasks(arr);
+    setTasks(Array.isArray(arr) ? arr : []);
   };
 
   useEffect(() => {
     loadTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const today = new Date();
+  const mergedTasks = useMemo(() => {
+    const c = safeStr(client);
+    if (!c) return tasks || [];
 
-  const addDays = (date: any, days: number) => {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d.toISOString();
-  };
+    const backend = (tasks || []).filter((t: any) => getClientKey(t) === c);
 
-  const changeStatus = async (task: any, status: string) => {
-    await fetch(`/api/tasks/${task.id}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    loadTasks();
-  };
+    const localRes = loadMaterializedTasksV27(c);
+    const localItems = localRes?.items || [];
+    const localUi = localItems.map((t: any) => localTaskToUi(t, c));
 
-  const deferTask = async (task: any, days: number) => {
-    const base = task.deadline || new Date().toISOString();
-    const newDL = addDays(base, days);
+    const seen = new Set<string>();
+    const merged: any[] = [];
 
-    await fetch(`/api/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deadline: newDL }),
-    });
+    for (const t of backend) {
+      const id = safeStr(t?.id);
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        merged.push(t);
+      }
+    }
+    for (const t of localUi) {
+      const id = safeStr(t?.id);
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        merged.push(t);
+      }
+    }
 
-    loadTasks();
-  };
-
-  const filteredTasks = useMemo(() => {
-    if (!client) return tasks;
-    return tasks.filter((t) => getClientKey(t) === client);
+    merged.sort((a: any, b: any) => safeStr(a?.deadline).localeCompare(safeStr(b?.deadline)));
+    return merged;
   }, [tasks, client]);
 
-  const buckets = useMemo(() => {
-    const map: any = { overdue: [], today: [], next7: [], future: [] };
+  const filtered = useMemo(() => {
+    const c = safeStr(client);
+    if (!c) return tasks || [];
+    return mergedTasks;
+  }, [tasks, mergedTasks, client]);
 
-    filteredTasks.forEach((t: any) => {
-      if (!t.deadline) {
-        map.future.push(t);
-        return;
-      }
-      const d = new Date(t.deadline);
-      const diff = Math.floor((d.getTime() - today.getTime()) / 86400000);
-      if (diff < 0) map.overdue.push(t);
-      else if (diff === 0) map.today.push(t);
-      else if (diff <= 7) map.next7.push(t);
-      else map.future.push(t);
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const overdue = useMemo(() => {
+    return (filtered || []).filter((t: any) => safeStr(t?.deadline).slice(0, 10) < todayIso);
+  }, [filtered, todayIso]);
+
+  const dueSoon = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    const d7 = d.toISOString().slice(0, 10);
+    return (filtered || []).filter((t: any) => {
+      const dl = safeStr(t?.deadline).slice(0, 10);
+      return dl >= todayIso && dl <= d7;
     });
+  }, [filtered, todayIso]);
 
-    return map;
-  }, [filteredTasks]);
+  const completed = useMemo(() => {
+    return (filtered || []).filter((t: any) => safeStr(t?.status) === "completed");
+  }, [filtered]);
 
-  const renderBucket = (title: string, list: any[]) => (
+  const renderList = (title: string, list: any[]) => (
     <SectionCard title={title}>
       {list.length === 0 ? (
-        <div className="text-xs text-slate-500">No tasks</div>
+        <div className="text-sm text-slate-500">No items</div>
       ) : (
         <div className="space-y-2">
-          {list.map((t: any) => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              onStart={() => changeStatus(t, "in_progress")}
-              onComplete={() => changeStatus(t, "completed")}
-              onReopen={() => changeStatus(t, "new")}
-              onDefer={(task: any, days: number) => deferTask(task, days)}
-            />
-          ))}
+          {list.map((t: any) => {
+            const isLocal = safeStr(t?.source) === "v27_local" || t?.v27_readonly === true;
+            return (
+              <TaskCard
+                key={safeStr(t?.id)}
+                task={t}
+                badge={isLocal ? "V27" : undefined}
+                onStart={undefined}
+                onComplete={undefined}
+                onReopen={undefined}
+                onDefer={undefined}
+              />
+            );
+          })}
         </div>
       )}
     </SectionCard>
@@ -130,26 +154,27 @@ const TasksPage: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold text-slate-900">Tasks Board V3</h1>
 
-        {client && (
-          <div className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
-            <span className="text-slate-500">client</span>
-            <span className="font-medium">{client}</span>
-            <button
-              type="button"
-              className="rounded-full px-1 text-[11px] text-slate-500 hover:bg-slate-100"
-              title="Clear client context"
-              onClick={() => nav(clearClientFromUrl(loc.pathname, loc.search))}
-            >
-              x
-            </button>
-          </div>
-        )}
+        {client ? (
+          <button
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+            onClick={() => nav(clearClientFromUrl(loc.pathname, loc.search))}
+          >
+            Clear client filter
+          </button>
+        ) : null}
       </div>
 
-      {renderBucket("Overdue", buckets.overdue)}
-      {renderBucket("Today", buckets.today)}
-      {renderBucket("Next 7 days", buckets.next7)}
-      {renderBucket("Future", buckets.future)}
+      {client ? (
+        <div className="text-sm text-slate-600">
+          client filter: <span className="font-mono">{client}</span>
+        </div>
+      ) : (
+        <div className="text-sm text-slate-500">Select client via ?client=</div>
+      )}
+
+      {renderList("Overdue", overdue)}
+      {renderList("Due soon (7 days)", dueSoon)}
+      {renderList("Completed", completed)}
     </div>
   );
 };

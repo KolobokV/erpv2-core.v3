@@ -25,10 +25,7 @@ export default function V27InspectorPage() {
             <NavLink className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" to="/client-profile">
               Open Client Profile
             </NavLink>
-            <a
-              className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-              href="/v27-inspector?client=ip_usn_dr"
-            >
+            <a className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" href="/v27-inspector?client=ip_usn_dr">
               Demo: ip_usn_dr
             </a>
           </div>
@@ -65,7 +62,7 @@ export default function V27InspectorPage() {
             </NavLink>
             <NavLink
               className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-              to={"/?client=" + encodeURIComponent(bundle.clientId)}
+              to={"/reglement?client=" + encodeURIComponent(bundle.clientId)}
             >
               Reglement
             </NavLink>
@@ -73,12 +70,7 @@ export default function V27InspectorPage() {
         </div>
       </div>
 
-      <V27DerivedPanel
-        title="V27: derived obligations and risks (read-only)"
-        clientId={bundle.clientId}
-        derived={bundle.derived}
-        risks={bundle.risks}
-      />
+      <V27DerivedPanel title="V27: derived obligations and risks (read-only)" clientId={bundle.clientId} derived={bundle.derived} risks={bundle.risks} />
     </div>
   );
 }

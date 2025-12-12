@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { RiskBadge } from "./RiskBadge";
 import { fetchTasksAll, TaskItem } from "../api/taskApi";
 import { fetchProcessInstances, ProcessInstance } from "../api/internalProcessesApi";
-import { loadMaterializedTasksV27, materializeFromDerivedV27, resetMaterializedTasksV27, V27MaterializedTask } from "../v27/profileStore";
 
 type DerivedLike =
   | Array<any>
@@ -35,23 +34,17 @@ function pickTitle(it: any): string {
   );
 }
 
-function pickCadence(it: any): string {
-  return (
-    (typeof it?.cadence === "string" && it.cadence) ||
-    (typeof it?.period === "string" && it.period) ||
-    (typeof it?.freq === "string" && it.freq) ||
-    (typeof it?.schedule === "string" && it.schedule) ||
-    ""
-  );
-}
-
 function pickTag(it: any): string {
   const domain =
     (typeof it?.domain === "string" && it.domain) ||
     (typeof it?.group === "string" && it.group) ||
     (typeof it?.type === "string" && it.type) ||
     "";
-  const cadence = pickCadence(it);
+  const cadence =
+    (typeof it?.cadence === "string" && it.cadence) ||
+    (typeof it?.period === "string" && it.period) ||
+    (typeof it?.freq === "string" && it.freq) ||
+    "";
   const right =
     (typeof it?.tag === "string" && it.tag) ||
     (typeof it?.right === "string" && it.right) ||
@@ -109,16 +102,6 @@ function isMatch(taskTitle: string, derivedTitle: string): boolean {
   return false;
 }
 
-function toTaskItemLocal(t: V27MaterializedTask): TaskItem {
-  return {
-    id: t.id,
-    client: t.client,
-    title: t.title,
-    status: t.status,
-    due_date: t.due_date,
-  } as any;
-}
-
 export function V27DerivedPanel(props: {
   title: string;
   clientId: string;
@@ -133,26 +116,6 @@ export function V27DerivedPanel(props: {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [localInfo, setLocalInfo] = useState<{ count: number; lastAction: string; lastError: string | null }>({
-    count: 0,
-    lastAction: "none",
-    lastError: null,
-  });
-
-  const derivedForMaterialize = useMemo(() => {
-    return derivedItems.map((it) => ({ title: pickTitle(it), cadence: pickCadence(it) }));
-  }, [derivedItems]);
-
-  const reloadLocalOnly = () => {
-    const res = loadMaterializedTasksV27(props.clientId);
-    if (!res.ok) {
-      setLocalInfo({ count: 0, lastAction: "local_read_error", lastError: String(res.error || "error") });
-      return [];
-    }
-    setLocalInfo((x) => ({ ...x, count: res.items.length }));
-    return res.items;
-  };
-
   useEffect(() => {
     let mounted = true;
 
@@ -165,29 +128,11 @@ export function V27DerivedPanel(props: {
         if (!mounted) return;
 
         const client = props.clientId;
+        const t = (tAll?.items || []).filter((x) => String(x?.client || "") === String(client));
+        const p = (pAll || []).filter((x) => String(x?.client_profile_id || "") === String(client));
 
-        const backendTasks = (tAll?.items || []).filter((x) => String(x?.client || "") === String(client));
-        const backendProc = (pAll || []).filter((x) => String(x?.client_profile_id || "") === String(client));
-
-        const localRes = loadMaterializedTasksV27(client);
-        const localItems = localRes.ok ? localRes.items : [];
-        setLocalInfo((x) => ({
-          ...x,
-          count: localItems.length,
-          lastError: localRes.ok ? null : String(localRes.error || "local_error"),
-        }));
-
-        const localTasks = localItems.map(toTaskItemLocal);
-
-        const merged = [...backendTasks];
-        const seen = new Set<string>(merged.map((x) => String((x as any).id)));
-        localTasks.forEach((lt) => {
-          const id = String((lt as any).id);
-          if (!seen.has(id)) merged.push(lt);
-        });
-
-        setTasks(merged);
-        setProc(backendProc);
+        setTasks(t);
+        setProc(p);
       } catch (e: any) {
         if (!mounted) return;
         setErr(e?.message ? String(e.message) : "Reality check load failed");
@@ -214,14 +159,19 @@ export function V27DerivedPanel(props: {
 
   const mismatch = useMemo(() => {
     const derivedTitles = derivedItems.map((it) => pickTitle(it));
+    const presentIdx = new Set<number>();
 
     const present: Array<{ title: string; matches: TaskItem[] }> = [];
     const missing: Array<{ title: string }> = [];
 
-    derivedTitles.forEach((dt) => {
+    derivedTitles.forEach((dt, i) => {
       const matches = tasks.filter((t) => isMatch(t.title, dt));
-      if (matches.length > 0) present.push({ title: dt, matches });
-      else missing.push({ title: dt });
+      if (matches.length > 0) {
+        presentIdx.add(i);
+        present.push({ title: dt, matches });
+      } else {
+        missing.push({ title: dt });
+      }
     });
 
     const unexpected: TaskItem[] = tasks.filter((t) => {
@@ -230,50 +180,6 @@ export function V27DerivedPanel(props: {
 
     return { present, missing, unexpected };
   }, [derivedItems, tasks]);
-
-  const onMaterializeLocal = () => {
-    try {
-      const res = materializeFromDerivedV27(props.clientId, derivedForMaterialize);
-      if (!res.ok) {
-        setLocalInfo((x) => ({ ...x, lastAction: "materialize_error", lastError: String(res.error || "error") }));
-        return;
-      }
-      const items = reloadLocalOnly();
-      setLocalInfo((x) => ({
-        ...x,
-        count: items.length,
-        lastAction: "materialized_local created=" + String(res.created) + " updated=" + String(res.updated),
-        lastError: null,
-      }));
-
-      const localTasks = items.map(toTaskItemLocal);
-      setTasks((prev) => {
-        const merged = [...prev];
-        const seen = new Set<string>(merged.map((x) => String((x as any).id)));
-        localTasks.forEach((lt) => {
-          const id = String((lt as any).id);
-          if (!seen.has(id)) merged.push(lt);
-        });
-        return merged;
-      });
-    } catch (e: any) {
-      setLocalInfo((x) => ({ ...x, lastAction: "materialize_exception", lastError: String(e?.message || e) }));
-    }
-  };
-
-  const onResetLocal = () => {
-    try {
-      const res = resetMaterializedTasksV27(props.clientId);
-      if (!res.ok) {
-        setLocalInfo((x) => ({ ...x, lastAction: "reset_error", lastError: String(res.error || "error") }));
-        return;
-      }
-      setLocalInfo({ count: 0, lastAction: "reset_local", lastError: null });
-      setTasks((prev) => prev.filter((t: any) => !String(t?.id || "").startsWith("v27_")));
-    } catch (e: any) {
-      setLocalInfo((x) => ({ ...x, lastAction: "reset_exception", lastError: String(e?.message || e) }));
-    }
-  };
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white">
@@ -319,25 +225,6 @@ export function V27DerivedPanel(props: {
                 </div>
               ) : null}
 
-              <div className="rounded-md border border-slate-200 px-3 py-2 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs text-slate-500">local materialization</div>
-                  <div className="text-sm">
-                    count: <span className="font-semibold">{localInfo.count}</span> · last:{" "}
-                    <span className="font-mono text-xs">{localInfo.lastAction}</span>
-                    {localInfo.lastError ? <span className="text-red-700"> · err: {localInfo.lastError}</span> : null}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" onClick={onMaterializeLocal}>
-                    Materialize (local)
-                  </button>
-                  <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" onClick={onResetLocal}>
-                    Reset (local)
-                  </button>
-                </div>
-              </div>
-
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-md border border-slate-200 px-3 py-2">
                   <div className="text-xs text-slate-500">tasks</div>
@@ -359,7 +246,9 @@ export function V27DerivedPanel(props: {
               </div>
 
               <div className="rounded-md border border-slate-200">
-                <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">mismatch (derived vs tasks)</div>
+                <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">
+                  mismatch (derived vs tasks)
+                </div>
 
                 <div className="px-3 py-3 space-y-3">
                   <div className="grid gap-3 md:grid-cols-3">
@@ -395,11 +284,33 @@ export function V27DerivedPanel(props: {
                       <div className="text-xs font-semibold">unexpected tasks (top 10)</div>
                       <div className="mt-1 space-y-1">
                         {mismatch.unexpected.slice(0, 10).map((t) => (
-                          <div key={String((t as any).id)} className="flex items-center justify-between gap-3">
+                          <div key={String(t.id)} className="flex items-center justify-between gap-3">
                             <div className="text-sm">{t.title}</div>
                             <div className="text-xs text-slate-500">
-                              {String((t as any).status || "?") +
-                                ((t as any).due_date ? " · " + String((t as any).due_date).slice(0, 10) : "")}
+                              {(t.status || "?") + (t.due_date ? " · " + String(t.due_date).slice(0, 10) : "")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {mismatch.present.length > 0 ? (
+                    <div className="rounded-md border border-slate-200 px-3 py-2">
+                      <div className="text-xs font-semibold">present (top 10)</div>
+                      <div className="mt-1 space-y-2">
+                        {mismatch.present.slice(0, 10).map((p, i) => (
+                          <div key={i} className="rounded-md border border-slate-200 px-3 py-2">
+                            <div className="text-sm font-semibold">{p.title}</div>
+                            <div className="mt-1 space-y-1">
+                              {p.matches.slice(0, 3).map((t) => (
+                                <div key={String(t.id)} className="flex items-center justify-between gap-3">
+                                  <div className="text-sm text-slate-700">{t.title}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {(t.status || "?") + (t.due_date ? " · " + String(t.due_date).slice(0, 10) : "")}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ))}
@@ -411,13 +322,13 @@ export function V27DerivedPanel(props: {
 
               {tasks.length > 0 ? (
                 <div className="rounded-md border border-slate-200">
-                  <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">sample tasks (up to 10)</div>
+                  <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">sample tasks (up to 5)</div>
                   <div className="divide-y">
-                    {tasks.slice(0, 10).map((t: any) => (
+                    {tasks.slice(0, 5).map((t) => (
                       <div key={String(t.id)} className="px-3 py-2 flex items-center justify-between gap-3">
                         <div className="text-sm">{t.title}</div>
                         <div className="text-xs text-slate-500">
-                          {String(t.status || "?") + (t.due_date ? " · " + String(t.due_date).slice(0, 10) : " · no due")}
+                          {(t.status || "?") + (t.due_date ? " · " + String(t.due_date).slice(0, 10) : " · no due")}
                         </div>
                       </div>
                     ))}
@@ -429,10 +340,10 @@ export function V27DerivedPanel(props: {
                 <div className="rounded-md border border-slate-200">
                   <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">sample processes (up to 5)</div>
                   <div className="divide-y">
-                    {proc.slice(0, 5).map((p: any) => (
+                    {proc.slice(0, 5).map((p) => (
                       <div key={String(p.id)} className="px-3 py-2 flex items-center justify-between gap-3">
                         <div className="text-sm">def: {p.definition_id} · id: {shortId(p.id)}</div>
-                        <div className="text-xs text-slate-500">{String(p.status || "?") + " · " + String(p.period_key || "no period")}</div>
+                        <div className="text-xs text-slate-500">{(p.status || "?") + " · " + (p.period_key || "no period")}</div>
                       </div>
                     ))}
                   </div>
@@ -447,7 +358,7 @@ export function V27DerivedPanel(props: {
             <div className="px-3 py-2 text-sm font-semibold border-b border-slate-200">Risks</div>
             <div className="divide-y">
               {riskItems.map((r, idx) => (
-                <div key={String((r as any)?.code || idx)} className="px-3 py-2 flex items-center justify-between gap-3">
+                <div key={String(r?.code || idx)} className="px-3 py-2 flex items-center justify-between gap-3">
                   <div className="text-sm">{normalizeRiskText(r)}</div>
                   <div className="text-xs text-slate-500 whitespace-nowrap">
                     {normalizeRiskCode(r)} · {normalizeRiskSeverity(r)}

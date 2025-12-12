@@ -108,16 +108,9 @@ export default function V27InspectorPage() {
             <NavLink className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" to={"/client-profile?client=" + qClient}>
               Client Profile
             </NavLink>
-
-            {/*
-              IMPORTANT:
-              Reglement route is "/" in App.tsx (no "/reglement" route).
-              Keep client context by attaching query to "/".
-            */}
-            <NavLink className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" to={"/?client=" + qClient}>
+            <NavLink className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" to={"/reglement?client=" + qClient}>
               Reglement
             </NavLink>
-
             <NavLink className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" to={"/tasks?client=" + qClient}>
               Tasks
             </NavLink>
@@ -128,7 +121,9 @@ export default function V27InspectorPage() {
       <div className="rounded-xl border border-slate-200 bg-white">
         <div className="p-4 border-b border-slate-200">
           <div className="text-base font-semibold">V27: suggested actions (read-only)</div>
-          <div className="mt-1 text-sm text-slate-500">This is a proposal layer derived from profile obligations. No writes.</div>
+          <div className="mt-1 text-sm text-slate-500">
+            This is a proposal layer derived from profile obligations. No writes.
+          </div>
         </div>
 
         <div className="p-4">
@@ -136,7 +131,9 @@ export default function V27InspectorPage() {
             <div className="text-sm text-slate-500">No suggestions. Derived list is empty.</div>
           ) : (
             <div className="rounded-lg border border-slate-200">
-              <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">Suggested tasks (top {suggested.length})</div>
+              <div className="px-3 py-2 text-xs font-semibold border-b border-slate-200">
+                Suggested tasks (top {suggested.length})
+              </div>
               <div className="divide-y">
                 {suggested.map((s) => (
                   <div key={s.key} className="px-3 py-2 flex items-center justify-between gap-3">
@@ -150,7 +147,12 @@ export default function V27InspectorPage() {
         </div>
       </div>
 
-      <V27DerivedPanel title="V27: derived obligations and risks (read-only)" clientId={bundle.clientId} derived={bundle.derived} risks={bundle.risks} />
+      <V27DerivedPanel
+        title="V27: derived obligations and risks (read-only)"
+        clientId={bundle.clientId}
+        derived={bundle.derived}
+        risks={bundle.risks}
+      />
     </div>
   );
 }
