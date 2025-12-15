@@ -11,12 +11,44 @@ import {
   loadMaterializeMetaV27,
 } from "../v27/profileStore";
 import { deriveRisk } from "../v27/riskPriority";
+import { fetchProcessInstancesV2Safe, type ProcessInstanceV2 } from "../api/processInstancesV2Safe";
+import { addProcessIntent, clearProcessIntents, countProcessIntents, hasProcessIntent, removeProcessIntent } from "../v27/processIntentsStore";
 
 type UiTask = any;
 type GroupKey = "burning" | "soon" | "calm" | "unknown";
 
-function groupKeyFromTask(t: any): GroupKey {
-  const lvl = t?.derived?.riskLevel;
+function fmtDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return iso;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  } catch {
+    return iso;
+  }
+}
+
+function formatDue(deadline: any): string {
+  const iso = String(deadline ?? "").trim();
+  if (!iso) return "no_deadline";
+  return fmtDate(iso);
+}
+
+function sortByPriorityAndTitle(a: any, b: any): number {
+  const pa = String(a?.derived?.riskLevel ?? "unknown");
+  const pb = String(b?.derived?.riskLevel ?? "unknown");
+  const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, unknown: 9 };
+  const da = order[pa] ?? 9;
+  const db = order[pb] ?? 9;
+  if (da !== db) return da - db;
+  const ta = String(a?.title ?? "");
+  const tb = String(b?.title ?? "");
+  return ta.localeCompare(tb);
+}
+
+function riskToGroup(lvl: string): GroupKey {
   if (lvl === "critical") return "burning";
   if (lvl === "high") return "soon";
   if (lvl === "medium" || lvl === "low") return "calm";
@@ -31,10 +63,10 @@ function groupTitle(key: GroupKey, count: number): string {
 }
 
 function groupHint(key: GroupKey): string {
-  if (key === "burning") return "Overdue or due today. Must be handled first.";
-  if (key === "soon") return "Due within 1 day. Keep in focus.";
+  if (key === "burning") return "Overdue or due today. Must be handled now.";
+  if (key === "soon") return "Due soon. Plan and execute.";
   if (key === "calm") return "Not urgent. Plan and batch.";
-  return "No risk info. Needs review.";
+  return "Low signal or unknown risk.";
 }
 
 function pillStyle(level: string): React.CSSProperties {
@@ -52,46 +84,46 @@ function pillStyle(level: string): React.CSSProperties {
   if (level === "high") return { ...base, border: "1px solid rgba(255,160,80,0.75)" };
   if (level === "medium") return { ...base, border: "1px solid rgba(255,220,120,0.65)" };
   if (level === "low") return { ...base, border: "1px solid rgba(140,220,140,0.55)" };
-  return { ...base, border: "1px solid rgba(200,200,200,0.35)" };
+  return base;
 }
 
-function cardStyle(key: GroupKey): React.CSSProperties {
-  const base: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 12,
-    padding: 12,
+function tinyPill(ok: boolean): React.CSSProperties {
+  return {
+    display: "inline-block",
+    padding: "2px 8px",
+    borderRadius: 999,
+    fontSize: 12,
+    border: ok ? "1px solid rgba(120,220,120,0.45)" : "1px solid rgba(255,160,80,0.55)",
+    opacity: 0.95,
+    whiteSpace: "nowrap",
   };
-
-  if (key === "burning") return { ...base, border: "1px solid rgba(255,80,80,0.35)" };
-  if (key === "soon") return { ...base, border: "1px solid rgba(255,160,80,0.30)" };
-  if (key === "calm") return { ...base, border: "1px solid rgba(140,220,140,0.22)" };
-  return base;
 }
 
 function sectionStyle(key: GroupKey): React.CSSProperties {
   const base: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 14,
     padding: 12,
   };
 
-  if (key === "burning") return { ...base, border: "1px solid rgba(255,80,80,0.22)" };
-  if (key === "soon") return { ...base, border: "1px solid rgba(255,160,80,0.20)" };
-  if (key === "calm") return { ...base, border: "1px solid rgba(140,220,140,0.16)" };
+  if (key === "burning") return { ...base, border: "1px solid rgba(255,80,80,0.35)" };
+  if (key === "soon") return { ...base, border: "1px solid rgba(255,160,80,0.35)" };
+  if (key === "calm") return { ...base, border: "1px solid rgba(140,220,140,0.22)" };
   return base;
 }
 
-function sortByPriorityAndTitle(a: any, b: any): number {
-  const pa = a?.derived?.priority ?? "p9";
-  const pb = b?.derived?.priority ?? "p9";
-  const cmp = String(pa).localeCompare(String(pb));
-  if (cmp !== 0) return cmp;
-  return String(a?.title ?? "").localeCompare(String(b?.title ?? ""));
-}
+function cardStyle(key: GroupKey): React.CSSProperties {
+  const base: React.CSSProperties = {
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    padding: 12,
+    opacity: 0.98,
+  };
 
-function formatDue(deadline?: string | null): string {
-  if (!deadline) return "no due";
-  return String(deadline).slice(0, 10);
+  if (key === "burning") return { ...base, border: "1px solid rgba(255,80,80,0.22)" };
+  if (key === "soon") return { ...base, border: "1px solid rgba(255,160,80,0.22)" };
+  if (key === "calm") return { ...base, border: "1px solid rgba(140,220,140,0.14)" };
+  return base;
 }
 
 export default function TasksPage() {
@@ -104,12 +136,51 @@ export default function TasksPage() {
   const [bundleJson, setBundleJson] = useState<string>("");
   const [showBundle, setShowBundle] = useState<boolean>(false);
 
+  const [procItems, setProcItems] = useState<ProcessInstanceV2[]>([]);
+  const [procLoading, setProcLoading] = useState<boolean>(false);
+  const [procError, setProcError] = useState<string>("");
+
+  const [intentRev, setIntentRev] = useState<number>(0);
+  const intentCount = useMemo(() => countProcessIntents(clientId), [clientId, intentRev]);
+
+  async function refreshProcesses() {
+    if (!clientId) {
+      setProcItems([]);
+      setProcError("");
+      return;
+    }
+    setProcLoading(true);
+    setProcError("");
+    try {
+      const resp = await fetchProcessInstancesV2Safe();
+      const items = Array.isArray(resp?.items) ? resp.items : [];
+      const cid = String(clientId).trim().toLowerCase();
+      const filtered = items.filter((x: any) => {
+        const ck = String(x?.client_key ?? "").trim().toLowerCase();
+        return ck === cid || ck.endsWith(":" + cid) || ck.includes(cid);
+      });
+      setProcItems(filtered);
+    } catch (e: any) {
+      setProcItems([]);
+      setProcError(String(e?.message ?? "fetch_failed"));
+    } finally {
+      setProcLoading(false);
+    }
+  }
+
   useEffect(() => {
     const materialized = loadMaterializedTasksV27(clientId);
     const enriched = materialized
       .map((t: any) => {
         const risk = deriveRisk(t.deadline);
-        return { ...t, derived: risk };
+        return {
+          ...t,
+          derived: {
+            ...t.derived,
+            riskLevel: risk?.level ?? "unknown",
+            daysToDeadline: typeof risk?.daysToDeadline === "number" ? risk.daysToDeadline : null,
+          },
+        };
       })
       .sort(sortByPriorityAndTitle);
 
@@ -120,46 +191,47 @@ export default function TasksPage() {
     setTasks(enriched);
     setMeta(loadMaterializeMetaV27(clientId));
     setBundleJson(JSON.stringify(bundle, null, 2));
+
+    setIntentRev((x) => x + 1);
+    void refreshProcesses();
   }, [clientId]);
 
   function onMaterializeLocal() {
     const currentTasks = loadMaterializedTasksV27(clientId);
     const bundle: any = buildV27Bundle(clientId, currentTasks);
     const derived = Array.isArray(bundle?.derived) ? bundle.derived : [];
-
-    const created = materializeFromDerivedV27(clientId, derived);
-
-    const enriched = created
-      .map((t: any) => {
-        const risk = deriveRisk(t.deadline);
-        return { ...t, derived: risk };
-      })
-      .sort(sortByPriorityAndTitle);
-
-    const nextBundle: any = buildV27Bundle(clientId, enriched);
-
-    setDerivedCount(derived.length);
-    setTasks(enriched);
+    materializeFromDerivedV27(clientId, derived);
     setMeta(loadMaterializeMetaV27(clientId));
+    const nextTasks = loadMaterializedTasksV27(clientId).map((t: any) => {
+      const risk = deriveRisk(t.deadline);
+      return { ...t, derived: { ...t.derived, riskLevel: risk?.level ?? "unknown", daysToDeadline: risk?.daysToDeadline ?? null } };
+    });
+    setTasks(nextTasks.sort(sortByPriorityAndTitle));
+
+    const nextBundle: any = buildV27Bundle(clientId, nextTasks);
+    setDerivedCount(Array.isArray(nextBundle?.derived) ? nextBundle.derived.length : 0);
     setBundleJson(JSON.stringify(nextBundle, null, 2));
   }
 
   function onResetLocal() {
     resetMaterializedTasksV27(clientId);
-
-    const bundle: any = buildV27Bundle(clientId, []);
-    const derived = Array.isArray(bundle?.derived) ? bundle.derived : [];
-
-    setDerivedCount(derived.length);
-    setTasks([]);
     setMeta(loadMaterializeMetaV27(clientId));
+    setTasks([]);
+    const bundle: any = buildV27Bundle(clientId, []);
+    setDerivedCount(Array.isArray(bundle?.derived) ? bundle.derived.length : 0);
     setBundleJson(JSON.stringify(bundle, null, 2));
   }
 
   const groups = useMemo(() => {
     const g: Record<GroupKey, UiTask[]> = { burning: [], soon: [], calm: [], unknown: [] };
-    for (const t of tasks) g[groupKeyFromTask(t)].push(t);
-    for (const k of Object.keys(g) as GroupKey[]) g[k] = g[k].slice().sort(sortByPriorityAndTitle);
+    for (const t of tasks) {
+      const lvl = String(t?.derived?.riskLevel ?? "unknown");
+      g[riskToGroup(lvl)].push(t);
+    }
+    g.burning.sort(sortByPriorityAndTitle);
+    g.soon.sort(sortByPriorityAndTitle);
+    g.calm.sort(sortByPriorityAndTitle);
+    g.unknown.sort(sortByPriorityAndTitle);
     return g;
   }, [tasks]);
 
@@ -214,22 +286,57 @@ export default function TasksPage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              <div>process read</div>
+              <div>
+                instances: {procItems.length} | {procLoading ? "loading" : procError ? `error:${procError}` : "ok"}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              <div>process queue</div>
+              <div>queued: {intentCount}</div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <button onClick={onMaterializeLocal} style={{ padding: "6px 10px", borderRadius: 10 }}>
                 Materialize (local)
               </button>
               <button onClick={onResetLocal} style={{ padding: "6px 10px", borderRadius: 10 }}>
                 Reset (local)
               </button>
+              <button
+                onClick={() => void refreshProcesses()}
+                style={{ padding: "6px 10px", borderRadius: 10 }}
+                disabled={!clientId || procLoading}
+              >
+                Refresh processes
+              </button>
+              <button
+                onClick={() => {
+                  if (!clientId) return;
+                  clearProcessIntents(clientId);
+                  setIntentRev((x) => x + 1);
+                }}
+                style={{ padding: "6px 10px", borderRadius: 10 }}
+                disabled={!clientId}
+              >
+                Clear queue
+              </button>
+              <button
+                onClick={() => {
+                  if (!clientId) return;
+                  window.location.href = `/processes?client=${encodeURIComponent(clientId)}`;
+                }}
+                style={{ padding: "6px 10px", borderRadius: 10 }}
+                disabled={!clientId}
+              >
+                Open processes
+              </button>
               <button onClick={() => setShowBundle((v) => !v)} style={{ padding: "6px 10px", borderRadius: 10 }}>
                 {showBundle ? "Hide bundle" : "Show bundle"}
               </button>
             </div>
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>tasks</div>
-            <div style={{ fontSize: 18, fontWeight: 800 }}>{tasks.length}</div>
           </div>
         </div>
 
@@ -268,6 +375,41 @@ export default function TasksPage() {
                             reason: {t.reason}
                           </div>
                         ) : null}
+
+                        <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <span style={tinyPill(procItems.length > 0)}>{procItems.length > 0 ? "proc" : "no-proc"}</span>
+                          <span style={tinyPill(hasProcessIntent(clientId, t.key ?? ""))}>
+                            {hasProcessIntent(clientId, t.key ?? "") ? "queued" : "not-queued"}
+                          </span>
+
+                          <button
+                            onClick={() => {
+                              if (!clientId) return;
+                              const k2 = String(t.key ?? "").trim();
+                              if (!k2) return;
+                              addProcessIntent(clientId, k2);
+                              setIntentRev((x) => x + 1);
+                            }}
+                            style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.95 }}
+                            disabled={!clientId || !t?.key}
+                          >
+                            Queue process (stub)
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              if (!clientId) return;
+                              const k2 = String(t.key ?? "").trim();
+                              if (!k2) return;
+                              removeProcessIntent(clientId, k2);
+                              setIntentRev((x) => x + 1);
+                            }}
+                            style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.85 }}
+                            disabled={!clientId || !t?.key}
+                          >
+                            Unqueue
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

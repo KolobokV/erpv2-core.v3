@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { UpBackBar } from "../components/UpBackBar";
 import { ClientTasksSummaryCard } from "../components/ClientTasksSummaryCard";
+import ClientCoverageSummaryCard from "../components/ClientCoverageSummaryCard";
 import { RiskBadge } from "../v27/RiskBadge";
 
 import type { ClientProfileV27, TaxSystemV27, VatModeV27, LegalEntityTypeV27 } from "../v27/types";
@@ -18,6 +19,7 @@ import {
   resetMaterializedTasksV27,
   loadMaterializeMetaV27,
 } from "../v27/profileStore";
+import { clearProcessIntents, countProcessIntents } from "../v27/processIntentsStore";
 
 function clampInt(x: any, min: number, max: number): number {
   const n = typeof x === "number" ? x : parseInt(String(x ?? ""), 10);
@@ -115,6 +117,9 @@ export default function ClientProfilePage() {
   const [tasksRev, setTasksRev] = useState<number>(0);
   const [tasksMeta, setTasksMeta] = useState<any>(() => loadMaterializeMetaV27(clientId));
 
+  const [intentRev, setIntentRev] = useState<number>(0);
+  const intentCount = useMemo(() => countProcessIntents(clientId), [clientId, intentRev]);
+
   useEffect(() => {
     const loaded = normalizeClientProfileV27(loadClientProfileV27(clientId), clientId);
     setProfile(loaded);
@@ -123,6 +128,7 @@ export default function ClientProfilePage() {
 
     setTasksMeta(loadMaterializeMetaV27(clientId));
     setTasksRev((x) => x + 1);
+    setIntentRev((x) => x + 1);
 
     if (hasClient) setOpenClientId(String(clientId));
   }, [clientId, hasClient]);
@@ -273,6 +279,7 @@ export default function ClientProfilePage() {
         ) : null}
 
         <ClientTasksSummaryCard clientId={clientId} title="Tasks" rev={tasksRev} />
+        <ClientCoverageSummaryCard clientId={clientId} title="Process coverage (local)" rev={tasksRev} />
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button onClick={doMaterializeLocalTasks} disabled={!hasClient} style={{ padding: "6px 10px", borderRadius: 10 }}>
@@ -281,8 +288,24 @@ export default function ClientProfilePage() {
           <button onClick={doResetLocalTasks} disabled={!hasClient} style={{ padding: "6px 10px", borderRadius: 10 }}>
             Reset tasks (local)
           </button>
+          <button
+            onClick={() => {
+              if (!hasClient) return;
+              clearProcessIntents(clientId);
+              setIntentRev((x) => x + 1);
+              setToast("Queue cleared");
+              window.setTimeout(() => setToast(""), 1200);
+            }}
+            disabled={!hasClient}
+            style={{ padding: "6px 10px", borderRadius: 10 }}
+          >
+            Clear process queue
+          </button>
           <div style={{ fontSize: 12, opacity: 0.8 }}>
             meta: count={tasksMeta?.count ?? 0} last={tasksMeta?.last_materialize_error ?? "-"}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>
+            process queue: {intentCount}
           </div>
         </div>
 
