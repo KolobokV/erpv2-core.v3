@@ -13,17 +13,11 @@ export type ClientProfileV27 = {
     vatMode: VatMode;
   };
 
-  employees: {
-    hasPayroll: boolean;
-    headcount: number;
-    payrollDates: number[];
-  };
-
-  operations: {
-    bankAccounts: number;
-    cashRegister: boolean;
-    ofd: boolean;
-    foreignOps: boolean;
+  payroll: {
+    enabled: boolean;
+    payDays: number[];
+    hasVacationPay: boolean;
+    hasSickPay: boolean;
   };
 
   specialFlags: {
@@ -47,19 +41,16 @@ export type ClientProfileV27 = {
 export type ReglementItemDerived = {
   key: string;
   title: string;
-  source: "TAX" | "PAYROLL" | "BANK" | "SPECIAL";
+  source: "TAX" | "PAYROLL" | "SPECIAL" | "OTHER";
   reason: string;
-  periodicity: "MONTHLY" | "QUARTERLY" | "YEARLY" | "ON_DEMAND";
+  periodicity: "MONTHLY" | "QUARTERLY" | "YEARLY" | "ADHOC";
 };
 
-export type RiskKind = "MISSING" | "OVERDUE" | "INCONSISTENT" | "OVERLOAD";
-
 export type RiskItem = {
-  kind: RiskKind;
-  key: string;
+  code: string;
   title: string;
-  details: string;
-  severity: 1 | 2 | 3 | 4 | 5;
+  message: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
 };
 
 export const makeDefaultClientProfileV27 = (clientId: string): ClientProfileV27 => {
@@ -71,16 +62,11 @@ export const makeDefaultClientProfileV27 = (clientId: string): ClientProfileV27 
       taxSystem: "USN_DR",
       vatMode: "NONE"
     },
-    employees: {
-      hasPayroll: false,
-      headcount: 0,
-      payrollDates: []
-    },
-    operations: {
-      bankAccounts: 1,
-      cashRegister: false,
-      ofd: false,
-      foreignOps: false
+    payroll: {
+      enabled: false,
+      payDays: [],
+      hasVacationPay: false,
+      hasSickPay: false
     },
     specialFlags: {
       tourismTax: false,

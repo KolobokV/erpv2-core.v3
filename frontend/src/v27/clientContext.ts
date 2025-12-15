@@ -1,22 +1,41 @@
-import { Location } from "react-router-dom";
+import type { Location } from "react-router-dom";
 
-export const getClientFromSearch = (search: string): string | null => {
-  const sp = new URLSearchParams(search || "");
-  const v = sp.get("client");
-  if (!v) return null;
-  const t = v.trim();
-  if (t.length === 0) return null;
-  return t;
-};
+function getSearchParam(search: string, key: string): string {
+  try {
+    const sp = new URLSearchParams(search || "");
+    const v = sp.get(key);
+    return v ? String(v) : "";
+  } catch {
+    return "";
+  }
+}
 
-export const setClientInSearch = (search: string, clientId: string | null): string => {
-  const sp = new URLSearchParams(search || "");
-  if (!clientId) sp.delete("client");
-  else sp.set("client", clientId);
-  const out = sp.toString();
-  return out.length ? "?" + out : "";
-};
+export function getClientFromLocation(location: Location): string {
+  const a = getSearchParam(location.search, "client");
+  if (a) return a;
+  const b = getSearchParam(location.search, "clientId");
+  if (b) return b;
+  return "";
+}
 
-export const getClientFromLocation = (loc: Location): string | null => {
-  return getClientFromSearch(loc.search || "");
-};
+export function getClientIdFromUrl(): string {
+  try {
+    const u = new URL(window.location.href);
+    return u.searchParams.get("client") || u.searchParams.get("clientId") || "";
+  } catch {
+    return "";
+  }
+}
+
+export function withClientInUrl(path: string, clientId: string): string {
+  if (!clientId) return path;
+  try {
+    const u = new URL(path, window.location.origin);
+    if (!u.searchParams.get("client")) u.searchParams.set("client", clientId);
+    return u.pathname + "?" + u.searchParams.toString();
+  } catch {
+    const hasQ = path.includes("?");
+    const sep = hasQ ? "&" : "?";
+    return path + sep + "client=" + encodeURIComponent(clientId);
+  }
+}

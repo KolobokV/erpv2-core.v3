@@ -3,8 +3,13 @@ import { ClientProfileV27, ReglementItemDerived } from "./types";
 export const deriveReglementV27 = (p: ClientProfileV27): ReglementItemDerived[] => {
   const out: ReglementItemDerived[] = [];
 
+  const taxSystem = String((p as any)?.legal?.taxSystem || "");
+  const vatMode = String((p as any)?.legal?.vatMode || "NONE");
+  const hasPayroll = Boolean((p as any)?.employees?.hasPayroll);
+  const tourismTax = Boolean((p as any)?.specialFlags?.tourismTax);
+
   // TAX
-  if (p.legal.taxSystem === "USN_DR" || p.legal.taxSystem === "USN_DO") {
+  if (taxSystem === "USN_DR" || taxSystem === "USN_DO") {
     out.push({
       key: "tax.usn.advance",
       title: "USN advance payment",
@@ -13,25 +18,23 @@ export const deriveReglementV27 = (p: ClientProfileV27): ReglementItemDerived[] 
       periodicity: "QUARTERLY"
     });
     out.push({
-      key: "tax.usn.declaration",
-      title: "USN declaration",
+      key: "tax.usn.year",
+      title: "USN annual declaration",
       source: "TAX",
       reason: "legal.taxSystem=USN_*",
       periodicity: "YEARLY"
     });
-  }
-
-  if (p.legal.taxSystem === "OSNO") {
+  } else {
     out.push({
-      key: "tax.osno.cit",
-      title: "Corporate income tax",
+      key: "tax.osno.profit",
+      title: "Profit tax reporting",
       source: "TAX",
       reason: "legal.taxSystem=OSNO",
       periodicity: "QUARTERLY"
     });
   }
 
-  if (p.legal.vatMode !== "NONE") {
+  if (vatMode !== "NONE") {
     out.push({
       key: "tax.vat.reporting",
       title: "VAT reporting",
@@ -42,17 +45,10 @@ export const deriveReglementV27 = (p: ClientProfileV27): ReglementItemDerived[] 
   }
 
   // PAYROLL
-  if (p.employees.hasPayroll) {
+  if (hasPayroll) {
     out.push({
-      key: "payroll.salary.run",
-      title: "Payroll run",
-      source: "PAYROLL",
-      reason: "employees.hasPayroll=true",
-      periodicity: "MONTHLY"
-    });
-    out.push({
-      key: "payroll.reports",
-      title: "Payroll reports",
+      key: "payroll.salary",
+      title: "Payroll processing",
       source: "PAYROLL",
       reason: "employees.hasPayroll=true",
       periodicity: "MONTHLY"
@@ -69,7 +65,7 @@ export const deriveReglementV27 = (p: ClientProfileV27): ReglementItemDerived[] 
   });
 
   // SPECIAL
-  if (p.specialFlags.tourismTax) {
+  if (tourismTax) {
     out.push({
       key: "special.tourism.tax",
       title: "Tourism tax",

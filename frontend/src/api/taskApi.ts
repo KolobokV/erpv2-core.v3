@@ -1,77 +1,60 @@
-export interface TaskItem {
-  id: number | string;
-  title: string;
-  assignee?: string | null;
-  client?: string | null;
-  status?: string | null;
-  due_date?: string | null;
-  source?: string | null;
-}
+type Json = any;
 
-export interface TasksResponse {
-  items: TaskItem[];
-  total?: number;
-  active?: number;
-}
+const DEFAULT_CANDIDATES = [
+  "http://localhost:8000",
+  "http://127.0.0.1:8000",
+  "http://host.docker.internal:8000"
+];
 
-export interface TasksReportItem {
-  assignee: string;
-  total: number;
-  active: number;
-  done: number;
-}
-
-export interface TasksReportResponse {
-  date?: string;
-  items: TasksReportItem[];
-}
-
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE || "http://host.docker.internal:8000";
-
-async function getJson<T>(path: string): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`);
-  if (!resp.ok) {
-    throw new Error(`Request failed with status code ${resp.status}`);
+function pickBaseUrl(): string {
+  try {
+    const w: any = typeof window !== "undefined" ? window : null;
+    const v = w?.localStorage?.getItem("ERP_API_BASE");
+    if (v && typeof v === "string" && v.trim().length > 0) return v.trim();
+  } catch {
+    // ignore
   }
-  return (await resp.json()) as T;
+  return DEFAULT_CANDIDATES[0];
 }
 
-function normalizeTasksResponse(raw: any): TasksResponse {
-  if (Array.isArray(raw)) {
-    return { items: raw, total: raw.length };
+async function tryFetchJson(url: string, timeoutMs: number): Promise<{ ok: boolean; data?: Json; error?: string }> {
+  const ctrl = new AbortController();
+  const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return { ok: false, error: "http_" + res.status };
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.name || e?.message || e) };
+  } finally {
+    window.clearTimeout(t);
   }
-  const items = Array.isArray(raw?.items) ? raw.items : [];
-  const total = typeof raw?.total === "number" ? raw.total : items.length;
-  const active = typeof raw?.active === "number" ? raw.active : undefined;
-  return { items, total, active };
 }
 
-export async function fetchTasksToday(): Promise<TasksResponse> {
-  const raw = await getJson<any>("/api/tasks/today");
-  return normalizeTasksResponse(raw);
-}
+async function getJson(path: string): Promise<Json> {
+  const base = pickBaseUrl();
+  const url1 = base + path;
 
-export async function fetchTasksAll(): Promise<TasksResponse> {
-  const raw = await getJson<any>("/api/tasks");
-  return normalizeTasksResponse(raw);
-}
+  // 1) First try selected base (default localhost)
+  const r1 = await tryFetchJson(url1, 3500);
+  if (r1.ok) return r1.data;
 
-export async function fetchTasksReportToday(): Promise<TasksReportResponse> {
-  const raw = await getJson<any>("/api/tasks/report/today_by_assignee");
-  if (Array.isArray(raw)) {
-    return { items: raw as TasksReportItem[] };
+  // 2) Fallbacks
+  for (const cand of DEFAULT_CANDIDATES) {
+    if (cand === base) continue;
+    const r = await tryFetchJson(cand + path, 3500);
+    if (r.ok) return r.data;
   }
-  return {
-    date: typeof raw?.date === "string" ? raw.date : undefined,
-    items: Array.isArray(raw?.items) ? (raw.items as TasksReportItem[]) : [],
-  };
+
+  // 3) Final: return a safe shape to avoid UI crash
+  return { ok: false, error: "api_unreachable", detail: r1.error || "timeout", items: [] };
 }
 
-export async function downloadTasksCsv(): Promise<Blob> {
-  const resp = await fetch(`${API_BASE}/api/tasks/export`);
-  if (!resp.ok) {
-    throw new Error(`Request failed with status code ${resp.status}`);
-  }
-  return await resp.blob();
+export async function fetchTasksAll(): Promise<any[]> {
+  const j = await getJson("/api/tasks");
+  if (Array.isArray(j)) return j;
+  if (j && Array.isArray(j.items)) return j.items;
+  return [];
 }

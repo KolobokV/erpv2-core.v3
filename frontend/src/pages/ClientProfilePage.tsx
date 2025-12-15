@@ -1,381 +1,244 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { ClientProfileV27 } from "../v27/types";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import { PageShell } from "../components/PageShell";
+import { UpBackBar } from "../components/UpBackBar";
+import { RiskBadge } from "../v27/RiskBadge";
+
+import type { ClientProfileV27, TaxSystemV27, VatModeV27, LegalEntityTypeV27 } from "../v27/types";
 import { deriveReglementV27 } from "../v27/deriveReglement";
-import { computeRisksV27 } from "../v27/riskEngine";
-import { RiskBadge, RiskList } from "../components/RiskBadge";
-import {
-  getClientProfileKeyV27,
-  loadClientProfileV27,
-  resetClientProfileV27,
-  saveClientProfileV27,
-  tryReadRawClientProfileV27
-} from "../v27/profileStore";
+import { evaluateClientRiskV27 } from "../v27/riskEngine";
+import { getClientFromLocation } from "../v27/clientContext";
+import { loadClientProfileV27, resetClientProfileV27, saveClientProfileV27 } from "../v27/profileStore";
 
-function useQueryParam(name: string): string | null {
-  const loc = useLocation();
-  return useMemo(() => {
-    const sp = new URLSearchParams(loc.search);
-    const v = sp.get(name);
-    return v && v.trim().length > 0 ? v : null;
-  }, [loc.search, name]);
-}
-
-function clampInt(v: any, min: number, max: number): number {
-  const n = Number(v);
+function clampInt(x: any, min: number, max: number): number {
+  const n = typeof x === "number" ? x : parseInt(String(x ?? ""), 10);
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
-type SaveDiag = {
-  status: "idle" | "ok" | "err";
-  message: string;
-  key: string;
-  size: number;
-  atIso: string;
-};
+function makeDefaultClientProfileV27Local(clientId: string): ClientProfileV27 {
+  const now = new Date().toISOString();
+  return {
+    clientId,
+    legal: { entityType: "IP", taxSystem: "USN_DR", vatMode: "NONE" },
+    employees: { hasPayroll: false, headcount: 0, payrollDates: [] },
+    operations: { bankAccounts: 1, cashRegister: false, ofd: false, foreignOps: false },
+    specialFlags: { tourismTax: false, excise: false, controlledTransactions: false },
+    updatedAtIso: now
+  };
+}
+
+function normalizeClientProfileV27(input: any, clientId: string): ClientProfileV27 {
+  const base = makeDefaultClientProfileV27Local(clientId);
+  const obj = input && typeof input === "object" ? input : {};
+
+  const legal = obj.legal && typeof obj.legal === "object" ? obj.legal : {};
+  const employees = obj.employees && typeof obj.employees === "object" ? obj.employees : {};
+  const operations = obj.operations && typeof obj.operations === "object" ? obj.operations : {};
+  const specialFlags = obj.specialFlags && typeof obj.specialFlags === "object" ? obj.specialFlags : {};
+
+  const taxSystem: TaxSystemV27 =
+    legal.taxSystem === "USN_DR" || legal.taxSystem === "USN_DO" || legal.taxSystem === "OSNO"
+      ? legal.taxSystem
+      : base.legal.taxSystem;
+
+  const entityType: LegalEntityTypeV27 =
+    legal.entityType === "IP" || legal.entityType === "OOO" ? legal.entityType : base.legal.entityType;
+
+  const vatMode: VatModeV27 =
+    legal.vatMode === "NONE" || legal.vatMode === "VAT_5" || legal.vatMode === "VAT_20"
+      ? legal.vatMode
+      : base.legal.vatMode;
+
+  const headcount = clampInt(employees.headcount, 0, 5000);
+  const payrollDatesRaw = Array.isArray(employees.payrollDates) ? employees.payrollDates : base.employees.payrollDates;
+  const payrollDates = payrollDatesRaw.map((n: any) => clampInt(n, 1, 31)).filter((n: number) => Number.isFinite(n));
+  const hasPayroll = !!employees.hasPayroll;
+
+  const bankAccounts = clampInt(operations.bankAccounts, 0, 50);
+  const cashRegister = !!operations.cashRegister;
+  const ofd = !!operations.ofd;
+  const foreignOps = !!operations.foreignOps;
+
+  const tourismTax = !!specialFlags.tourismTax;
+  const excise = !!specialFlags.excise;
+  const controlledTransactions = !!specialFlags.controlledTransactions;
+
+  const updatedAtIso =
+    typeof obj.updatedAtIso === "string" && obj.updatedAtIso.trim().length > 0
+      ? obj.updatedAtIso
+      : base.updatedAtIso;
+
+  return {
+    clientId,
+    legal: { entityType, taxSystem, vatMode },
+    employees: { hasPayroll, headcount, payrollDates },
+    operations: { bankAccounts, cashRegister, ofd, foreignOps },
+    specialFlags: { tourismTax, excise, controlledTransactions },
+    updatedAtIso
+  };
+}
+
+function toggleInArray(xs: number[], value: number): number[] {
+  const set = new Set(xs);
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
+  return Array.from(set).sort((a, b) => a - b);
+}
 
 export default function ClientProfilePage() {
-  const clientId = useQueryParam("client") || "all";
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [profile, setProfile] = useState<ClientProfileV27>(() => loadClientProfileV27(clientId));
+  const clientId = useMemo(() => getClientFromLocation(location), [location]);
+
+  const [profile, setProfile] = useState<ClientProfileV27>(() =>
+    normalizeClientProfileV27(loadClientProfileV27(clientId), clientId)
+  );
+
   const [savedAt, setSavedAt] = useState<string>(profile.updatedAtIso);
-
-  const [diag, setDiag] = useState<SaveDiag>(() => ({
-    status: "idle",
-    message: "No actions yet",
-    key: getClientProfileKeyV27(clientId),
-    size: 0,
-    atIso: new Date().toISOString()
-  }));
+  const [saving, setSaving] = useState<boolean>(false);
+  const [toast, setToast] = useState<string>("");
 
   useEffect(() => {
-    const loaded = loadClientProfileV27(clientId);
+    const loaded = normalizeClientProfileV27(loadClientProfileV27(clientId), clientId);
     setProfile(loaded);
     setSavedAt(loaded.updatedAtIso);
-
-    setDiag({
-      status: "idle",
-      message: "Loaded",
-      key: getClientProfileKeyV27(clientId),
-      size: 0,
-      atIso: new Date().toISOString()
-    });
+    setToast("");
   }, [clientId]);
 
   const derived = useMemo(() => deriveReglementV27(profile), [profile]);
-  const risks = useMemo(() => computeRisksV27(profile, derived), [profile, derived]);
+  const risk = useMemo(() => evaluateClientRiskV27(profile, derived), [profile, derived]);
 
-  function update(next: ClientProfileV27) {
-    setProfile(next);
+  function update(mut: (p: ClientProfileV27) => ClientProfileV27) {
+    setProfile((prev) => normalizeClientProfileV27(mut(prev), clientId));
   }
 
   function doSave() {
-    const res = saveClientProfileV27(profile);
-    if (res.ok) {
-      setSavedAt(new Date().toISOString());
-      setDiag({
-        status: "ok",
-        message: "Saved to localStorage",
-        key: res.key,
-        size: res.size,
-        atIso: new Date().toISOString()
-      });
-    } else {
-      setDiag({
-        status: "err",
-        message: res.error || "Save failed",
-        key: res.key,
-        size: res.size,
-        atIso: new Date().toISOString()
-      });
+    setSaving(true);
+    try {
+      const next = { ...profile, updatedAtIso: new Date().toISOString() };
+      saveClientProfileV27(next);
+      setProfile(next);
+      setSavedAt(next.updatedAtIso);
+      setToast("Saved");
+      window.setTimeout(() => setToast(""), 1200);
+    } finally {
+      setSaving(false);
     }
   }
 
   function doReset() {
-    const rr = resetClientProfileV27(clientId);
-    setProfile(rr.profile);
-    setSavedAt(rr.profile.updatedAtIso);
-
-    setDiag({
-      status: rr.result.ok ? "ok" : "err",
-      message: rr.result.ok ? "Reset + saved" : (rr.result.error || "Reset save failed"),
-      key: rr.result.key,
-      size: rr.result.size,
-      atIso: new Date().toISOString()
-    });
+    resetClientProfileV27(clientId);
+    const fresh = normalizeClientProfileV27(loadClientProfileV27(clientId), clientId);
+    setProfile(fresh);
+    setSavedAt(fresh.updatedAtIso);
+    setToast("Reset");
+    window.setTimeout(() => setToast(""), 1200);
   }
 
-  const storageProbe = useMemo(() => {
-    const res = tryReadRawClientProfileV27(clientId);
-    const key = getClientProfileKeyV27(clientId);
-    return {
-      ok: res.ok,
-      key,
-      exists: res.ok && !!res.raw,
-      rawLen: res.raw ? res.raw.length : 0,
-      error: res.error || ""
-    };
-  }, [clientId, savedAt, diag.atIso]);
-
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-xl font-semibold flex items-center">
-            Client Profile
-            <RiskBadge count={risks.length} />
+    <PageShell>
+      <UpBackBar
+        title={`Client Profile: ${clientId || "-"}`}
+        onUp={() => navigate("/")}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <RiskBadge score={risk.score} label={risk.label} />
+            <button onClick={doReset} disabled={saving}>Reset</button>
+            <button onClick={doSave} disabled={saving}>Save</button>
           </div>
-          <div className="text-sm text-muted-foreground">
-            Client: <span className="font-mono">{clientId}</span> · Updated: <span className="font-mono">{savedAt}</span>
-          </div>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <button className="rounded-md border px-3 py-2 text-sm" onClick={doReset}>
-            Reset
-          </button>
-          <button className="rounded-md border px-3 py-2 text-sm" onClick={doSave}>
-            Save
-          </button>
-        </div>
-      </div>
+      <div style={{ padding: 12, display: "grid", gap: 12 }}>
+        <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Legal</h3>
 
-      <div className="rounded-xl border p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium">Storage diagnostics</div>
-          <div className="text-xs text-muted-foreground font-mono">{diag.atIso}</div>
-        </div>
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
+            <div>Entity type</div>
+            <select
+              value={profile.legal.entityType}
+              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, entityType: e.target.value as LegalEntityTypeV27 } }))}
+            >
+              <option value="IP">IP</option>
+              <option value="OOO">OOO</option>
+            </select>
 
-        <div className="mt-2 grid grid-cols-1 xl:grid-cols-4 gap-2 text-xs">
-          <div className="rounded-lg border p-2">
-            <div className="text-muted-foreground">lastAction</div>
-            <div className="font-mono">{diag.status}</div>
-            <div className="font-mono break-all">{diag.message}</div>
-          </div>
+            <div>Tax system</div>
+            <select
+              value={profile.legal.taxSystem}
+              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, taxSystem: e.target.value as TaxSystemV27 } }))}
+            >
+              <option value="USN_DR">USN_DR</option>
+              <option value="USN_DO">USN_DO</option>
+              <option value="OSNO">OSNO</option>
+            </select>
 
-          <div className="rounded-lg border p-2">
-            <div className="text-muted-foreground">key</div>
-            <div className="font-mono break-all">{diag.key}</div>
-            <div className="text-muted-foreground">size</div>
-            <div className="font-mono">{diag.size}</div>
-          </div>
-
-          <div className="rounded-lg border p-2">
-            <div className="text-muted-foreground">probeOk</div>
-            <div className="font-mono">{String(storageProbe.ok)}</div>
-            <div className="text-muted-foreground">exists</div>
-            <div className="font-mono">{String(storageProbe.exists)}</div>
-          </div>
-
-          <div className="rounded-lg border p-2">
-            <div className="text-muted-foreground">rawLen</div>
-            <div className="font-mono">{storageProbe.rawLen}</div>
-            <div className="text-muted-foreground">error</div>
-            <div className="font-mono break-all">{storageProbe.error || "-"}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="rounded-xl border p-4 space-y-4">
-          <div className="font-medium">Legal</div>
-
-          <div className="grid grid-cols-1 gap-3">
-            <label className="space-y-1">
-              <div className="text-xs text-muted-foreground">Entity type</div>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={profile.legal.entityType}
-                onChange={(e) => update({ ...profile, legal: { ...profile.legal, entityType: e.target.value as any } })}
-              >
-                <option value="IP">IP</option>
-                <option value="OOO">OOO</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs text-muted-foreground">Tax system</div>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={profile.legal.taxSystem}
-                onChange={(e) => update({ ...profile, legal: { ...profile.legal, taxSystem: e.target.value as any } })}
-              >
-                <option value="USN_DR">USN_DR</option>
-                <option value="USN_DO">USN_DO</option>
-                <option value="OSNO">OSNO</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs text-muted-foreground">VAT mode</div>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={profile.legal.vatMode}
-                onChange={(e) => update({ ...profile, legal: { ...profile.legal, vatMode: e.target.value as any } })}
-              >
-                <option value="NONE">NONE</option>
-                <option value="VAT_5">VAT_5</option>
-                <option value="VAT_20">VAT_20</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="border-t pt-4 space-y-3">
-            <div className="font-medium">Employees</div>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={profile.employees.hasPayroll}
-                onChange={(e) => update({ ...profile, employees: { ...profile.employees, hasPayroll: e.target.checked } })}
-              />
-              Payroll enabled
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs text-muted-foreground">Headcount</div>
-              <input
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={profile.employees.headcount}
-                onChange={(e) => update({ ...profile, employees: { ...profile.employees, headcount: clampInt(e.target.value, 0, 5000) } })}
-              />
-            </label>
-
-            <label className="space-y-1">
-              <div className="text-xs text-muted-foreground">Payroll dates (comma-separated)</div>
-              <input
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={profile.employees.payrollDates.join(",")}
-                onChange={(e) => {
-                  const parts = e.target.value
-                    .split(",")
-                    .map(s => s.trim())
-                    .filter(Boolean)
-                    .map(s => clampInt(s, 1, 31));
-                  update({ ...profile, employees: { ...profile.employees, payrollDates: parts } });
-                }}
-              />
-            </label>
-          </div>
-
-          <div className="border-t pt-4 space-y-3">
-            <div className="font-medium">Operations</div>
-
-            <label className="space-y-1">
-              <div className="text-xs text-muted-foreground">Bank accounts</div>
-              <input
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={profile.operations.bankAccounts}
-                onChange={(e) => update({ ...profile, operations: { ...profile.operations, bankAccounts: clampInt(e.target.value, 0, 100) } })}
-              />
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={profile.operations.cashRegister}
-                  onChange={(e) => update({ ...profile, operations: { ...profile.operations, cashRegister: e.target.checked } })}
-                />
-                Cash register
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={profile.operations.ofd}
-                  onChange={(e) => update({ ...profile, operations: { ...profile.operations, ofd: e.target.checked } })}
-                />
-                OFD
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={profile.operations.foreignOps}
-                  onChange={(e) => update({ ...profile, operations: { ...profile.operations, foreignOps: e.target.checked } })}
-                />
-                Foreign ops
-              </label>
-            </div>
-          </div>
-
-          <div className="border-t pt-4 space-y-3">
-            <div className="font-medium">Special flags</div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={profile.specialFlags.tourismTax}
-                  onChange={(e) => update({ ...profile, specialFlags: { ...profile.specialFlags, tourismTax: e.target.checked } })}
-                />
-                Tourism tax
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={profile.specialFlags.excise}
-                  onChange={(e) => update({ ...profile, specialFlags: { ...profile.specialFlags, excise: e.target.checked } })}
-                />
-                Excise
-              </label>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={profile.specialFlags.controlledTransactions}
-                  onChange={(e) => update({ ...profile, specialFlags: { ...profile.specialFlags, controlledTransactions: e.target.checked } })}
-                />
-                Controlled tx
-              </label>
-            </div>
+            <div>VAT mode</div>
+            <select
+              value={profile.legal.vatMode}
+              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, vatMode: e.target.value as VatModeV27 } }))}
+            >
+              <option value="NONE">NONE</option>
+              <option value="VAT_5">VAT_5</option>
+              <option value="VAT_20">VAT_20</option>
+            </select>
           </div>
         </div>
 
-        <div className="rounded-xl border p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-medium">Derived reglement</div>
-            <div className="text-xs text-muted-foreground">{derived.length} items</div>
-          </div>
+        <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Employees</h3>
 
-          {derived.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No derived items</div>
-          ) : (
-            <div className="space-y-2">
-              {derived.map(it => (
-                <div key={it.key} className="rounded-lg border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium">{it.title}</div>
-                    <div className="text-xs text-muted-foreground">{it.source} · {it.periodicity}</div>
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    reason: <span className="font-mono">{it.reason}</span>
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    key: <span className="font-mono">{it.key}</span>
-                  </div>
-                </div>
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={profile.employees.hasPayroll}
+              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, hasPayroll: e.target.checked } }))}
+            />
+            Has payroll
+          </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center", marginTop: 10 }}>
+            <div>Headcount</div>
+            <input
+              type="number"
+              value={profile.employees.headcount}
+              min={0}
+              max={5000}
+              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, headcount: clampInt(e.target.value, 0, 5000) } }))}
+            />
+
+            <div>Payroll dates</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[5, 10, 15, 20, 25].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => update((p) => ({ ...p, employees: { ...p.employees, payrollDates: toggleInArray(p.employees.payrollDates, d) } }))}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #444",
+                    background: profile.employees.payrollDates.includes(d) ? "#2a2a2a" : "transparent"
+                  }}
+                >
+                  {d}
+                </button>
               ))}
             </div>
-          )}
+          </div>
         </div>
 
-        <div className="rounded-xl border p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-medium">Risk engine</div>
-            <div className="text-xs text-muted-foreground">{risks.length} risks</div>
-          </div>
+        <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Derived (preview)</h3>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(derived, null, 2)}</pre>
+        </div>
 
-          <RiskList risks={risks} />
-
-          <div className="border-t pt-3 text-xs text-muted-foreground">
-            Note: In v27.B we will compare derived items with backend data to detect missing and overdue.
-          </div>
+        <div style={{ opacity: 0.7, fontSize: 12 }}>
+          SavedAt: {savedAt} {toast ? ` | ${toast}` : ""}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

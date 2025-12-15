@@ -1,55 +1,89 @@
-import { ClientProfileV27, makeDefaultClientProfileV27 } from "./types";
+import type { ClientProfileV27, ReglementItemDerived } from "./types";
 
-const LS_PREFIX = "erpv2.v27.clientProfile.";
+/* ========= TYPES ========= */
 
-export const getClientProfileKeyV27 = (clientId: string): string => {
-  return LS_PREFIX + clientId;
+export type V27TaskLocal = {
+  id: string;
+  title: string;
+  source: "v27_derived";
+  completed: boolean;
 };
 
-export const tryReadRawClientProfileV27 = (clientId: string): { ok: boolean; raw: string | null; error?: string } => {
-  const key = getClientProfileKeyV27(clientId);
-  try {
-    const raw = window.localStorage.getItem(key);
-    return { ok: true, raw };
-  } catch (e: any) {
-    return { ok: false, raw: null, error: String(e?.message || e) };
-  }
-};
+/* ========= KEYS ========= */
 
-export const loadClientProfileV27 = (clientId: string): ClientProfileV27 => {
-  const res = tryReadRawClientProfileV27(clientId);
-  if (!res.ok || !res.raw) return makeDefaultClientProfileV27(clientId);
+const keyProfile = (clientId: string) => "v27_profile_" + clientId;
+const keyTasks = (clientId: string) => "v27_tasks_" + clientId;
 
+/* ========= STORAGE HELPERS ========= */
+
+function readJson(key: string): any {
   try {
-    const parsed = JSON.parse(res.raw) as ClientProfileV27;
-    if (!parsed || parsed.clientId !== clientId) return makeDefaultClientProfileV27(clientId);
-    return parsed;
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
   } catch {
-    return makeDefaultClientProfileV27(clientId);
+    return null;
   }
-};
+}
 
-export const saveClientProfileV27 = (profile: ClientProfileV27): { ok: boolean; key: string; size: number; error?: string } => {
-  const key = getClientProfileKeyV27(profile.clientId);
-  const safe: ClientProfileV27 = { ...profile, updatedAtIso: new Date().toISOString() };
+function writeJson(key: string, value: any) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
 
-  let raw = "";
-  try {
-    raw = JSON.stringify(safe);
-  } catch (e: any) {
-    return { ok: false, key, size: 0, error: "json_error:" + String(e?.message || e) };
-  }
+function removeKey(key: string) {
+  localStorage.removeItem(key);
+}
 
-  try {
-    window.localStorage.setItem(key, raw);
-    return { ok: true, key, size: raw.length };
-  } catch (e: any) {
-    return { ok: false, key, size: raw.length, error: "storage_error:" + String(e?.message || e) };
-  }
-};
+/* ========= PROFILE ========= */
 
-export const resetClientProfileV27 = (clientId: string): { profile: ClientProfileV27; result: { ok: boolean; key: string; size: number; error?: string } } => {
-  const fresh = makeDefaultClientProfileV27(clientId);
-  const result = saveClientProfileV27(fresh);
-  return { profile: fresh, result };
-};
+export function loadClientProfileV27(clientId: string): ClientProfileV27 {
+  const raw = readJson(keyProfile(clientId));
+  return raw ?? {
+    clientId,
+    legal: { entityType: "IP", taxSystem: "USN_DR", vatMode: "NONE" },
+    employees: { hasPayroll: false, headcount: 0, payrollDates: [] },
+    operations: { bankAccounts: 1, cashRegister: false, ofd: false, foreignOps: false },
+    specialFlags: { tourismTax: false, excise: false, controlledTransactions: false },
+    updatedAtIso: new Date().toISOString()
+  };
+}
+
+export function saveClientProfileV27(profile: ClientProfileV27): ClientProfileV27 {
+  writeJson(keyProfile(profile.clientId), profile);
+  return profile;
+}
+
+export function resetClientProfileV27(clientId: string) {
+  removeKey(keyProfile(clientId));
+  return { ok: true };
+}
+
+/* ========= DERIVED → LOCAL TASKS ========= */
+
+export function materializeFromDerivedV27(
+  clientId: string,
+  derived: ReglementItemDerived[]
+): V27TaskLocal[] {
+  const tasks: V27TaskLocal[] = (derived || []).map((d) => ({
+    id: "v27_" + d.key,
+    title: d.title,
+    source: "v27_derived",
+    completed: false
+  }));
+
+  writeJson(keyTasks(clientId), tasks);
+  return tasks;
+}
+
+export function loadMaterializedTasksV27(clientId: string): V27TaskLocal[] {
+  return readJson(keyTasks(clientId)) ?? [];
+}
+
+/**
+ * Reset (delete) all locally materialized v27 tasks for client.
+ * Local only. Safe to call multiple times.
+ */
+export function resetMaterializedTasksV27(clientId: string): { ok: boolean; key: string } {
+  const key = keyTasks(clientId);
+  removeKey(key);
+  return { ok: true, key };
+}

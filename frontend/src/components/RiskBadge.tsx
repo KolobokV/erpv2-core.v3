@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { RiskItem } from "../v27/types";
 
 export const RiskBadge: React.FC<{ count: number }> = ({ count }) => {
