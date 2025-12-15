@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageShell } from "../components/PageShell";
 import { UpBackBar } from "../components/UpBackBar";
+import { ClientTasksSummaryCard } from "../components/ClientTasksSummaryCard";
 import { RiskBadge } from "../v27/RiskBadge";
 
 import type { ClientProfileV27, TaxSystemV27, VatModeV27, LegalEntityTypeV27 } from "../v27/types";
@@ -153,6 +154,8 @@ export default function ClientProfilePage() {
       />
 
       <div style={{ padding: 12, display: "grid", gap: 12 }}>
+        <ClientTasksSummaryCard clientId={clientId} title="Tasks" />
+
         <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
           <h3 style={{ marginTop: 0 }}>Legal</h3>
 
@@ -185,59 +188,137 @@ export default function ClientProfilePage() {
               <option value="VAT_5">VAT_5</option>
               <option value="VAT_20">VAT_20</option>
             </select>
+
+            <div>Updated</div>
+            <div style={{ opacity: 0.8 }}>{savedAt}</div>
           </div>
         </div>
 
         <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
           <h3 style={{ marginTop: 0 }}>Employees</h3>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
+            <div>Has payroll</div>
             <input
               type="checkbox"
               checked={profile.employees.hasPayroll}
               onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, hasPayroll: e.target.checked } }))}
             />
-            Has payroll
-          </label>
 
-          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center", marginTop: 10 }}>
             <div>Headcount</div>
             <input
               type="number"
               value={profile.employees.headcount}
-              min={0}
-              max={5000}
               onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, headcount: clampInt(e.target.value, 0, 5000) } }))}
             />
 
             <div>Payroll dates</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {[5, 10, 15, 20, 25].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => update((p) => ({ ...p, employees: { ...p.employees, payrollDates: toggleInArray(p.employees.payrollDates, d) } }))}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #444",
-                    background: profile.employees.payrollDates.includes(d) ? "#2a2a2a" : "transparent"
-                  }}
-                >
-                  {d}
-                </button>
-              ))}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+                const on = profile.employees.payrollDates.includes(day);
+                return (
+                  <button
+                    key={day}
+                    style={{ opacity: on ? 1 : 0.4 }}
+                    onClick={() =>
+                      update((p) => ({
+                        ...p,
+                        employees: { ...p.employees, payrollDates: toggleInArray(p.employees.payrollDates, day) }
+                      }))
+                    }
+                  >
+                    {day}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
         <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Derived (preview)</h3>
-          <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(derived, null, 2)}</pre>
+          <h3 style={{ marginTop: 0 }}>Operations</h3>
+
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
+            <div>Bank accounts</div>
+            <input
+              type="number"
+              value={profile.operations.bankAccounts}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, bankAccounts: clampInt(e.target.value, 0, 50) } }))}
+            />
+
+            <div>Cash register</div>
+            <input
+              type="checkbox"
+              checked={profile.operations.cashRegister}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, cashRegister: e.target.checked } }))}
+            />
+
+            <div>OFD</div>
+            <input
+              type="checkbox"
+              checked={profile.operations.ofd}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, ofd: e.target.checked } }))}
+            />
+
+            <div>Foreign ops</div>
+            <input
+              type="checkbox"
+              checked={profile.operations.foreignOps}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, foreignOps: e.target.checked } }))}
+            />
+          </div>
         </div>
 
-        <div style={{ opacity: 0.7, fontSize: 12 }}>
-          SavedAt: {savedAt} {toast ? ` | ${toast}` : ""}
+        <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Special flags</h3>
+
+          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
+            <div>Tourism tax</div>
+            <input
+              type="checkbox"
+              checked={profile.specialFlags.tourismTax}
+              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, tourismTax: e.target.checked } }))}
+            />
+
+            <div>Excise</div>
+            <input
+              type="checkbox"
+              checked={profile.specialFlags.excise}
+              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, excise: e.target.checked } }))}
+            />
+
+            <div>Controlled transactions</div>
+            <input
+              type="checkbox"
+              checked={profile.specialFlags.controlledTransactions}
+              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, controlledTransactions: e.target.checked } }))}
+            />
+          </div>
         </div>
+
+        <div style={{ border: "1px solid #333", borderRadius: 10, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Derived</h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {derived.map((d) => (
+              <span key={d.key} style={{ border: "1px solid #444", borderRadius: 999, padding: "3px 10px", opacity: 0.95 }}>
+                {d.title}
+              </span>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <details>
+              <summary style={{ cursor: "pointer" }}>Derived json</summary>
+              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(derived, null, 2)}</pre>
+            </details>
+          </div>
+        </div>
+
+        {toast ? (
+          <div style={{ opacity: 0.85, fontSize: 12 }}>
+            toast: {toast}
+          </div>
+        ) : null}
       </div>
     </PageShell>
   );
