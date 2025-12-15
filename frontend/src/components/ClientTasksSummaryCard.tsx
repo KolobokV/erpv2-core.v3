@@ -6,6 +6,7 @@ import { deriveRisk } from "../v27/riskPriority";
 type Props = {
   clientId: string;
   title?: string;
+  rev?: number;
 };
 
 function pill(level: string): React.CSSProperties {
@@ -43,7 +44,7 @@ function fmtDate(deadline?: string | null): string {
 }
 
 export function ClientTasksSummaryCard(props: Props) {
-  const { clientId, title } = props;
+  const { clientId, title, rev } = props;
 
   const summary = useMemo(() => {
     const tasks = loadMaterializedTasksV27(clientId) as any[];
@@ -86,7 +87,7 @@ export function ClientTasksSummaryCard(props: Props) {
       other,
       next3: dueList.slice(0, 3),
     };
-  }, [clientId]);
+  }, [clientId, rev]);
 
   const href = `/tasks?client=${encodeURIComponent(clientId)}`;
 
@@ -112,7 +113,7 @@ export function ClientTasksSummaryCard(props: Props) {
       <div style={{ marginTop: 10, opacity: 0.85, fontSize: 12, fontWeight: 700 }}>Next deadlines</div>
       {summary.next3.length === 0 ? (
         <div style={{ marginTop: 6, opacity: 0.75, fontSize: 12 }}>
-          No local tasks yet. Use "Materialize (local)" on Tasks page.
+          No local tasks yet. Use "Materialize (local)" on Tasks page or from Client Profile.
         </div>
       ) : (
         <div style={{ marginTop: 6, display: "grid", gap: 6 }}>

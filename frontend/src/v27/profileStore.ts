@@ -2,12 +2,6 @@ import type { ClientProfileV27, ReglementItemDerived } from "./types";
 
 /* ========= TYPES ========= */
 
-export type V27MaterializeMeta = {
-  count: number;
-  last_materialize_at_iso: string | null;
-  last_materialize_error: string | null;
-};
-
 export type V27TaskLocal = {
   id: string;
   key: string;
@@ -20,11 +14,17 @@ export type V27TaskLocal = {
   created_at_iso: string;
 };
 
+export type V27MaterializeMeta = {
+  count: number;
+  last_materialize_at_iso: string | null;
+  last_materialize_error: string | null;
+};
+
 /* ========= KEYS ========= */
 
 const keyProfile = (clientId: string) => "v27_profile_" + clientId;
 const keyTasks = (clientId: string) => "v27_tasks_" + clientId;
-const keyMeta = (clientId: string) => "v27_materialize_meta_" + clientId;
+const keyMeta = (clientId: string) => "v27_tasks_meta_" + clientId;
 
 /* ========= STORAGE HELPERS ========= */
 
@@ -45,116 +45,39 @@ function removeKey(key: string) {
   localStorage.removeItem(key);
 }
 
-/* ========= DATE HELPERS ========= */
+/* ========= META ========= */
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
+function normalizeMeta(x: any): V27MaterializeMeta {
+  const obj = x && typeof x === "object" ? x : {};
+  return {
+    count: typeof obj.count === "number" ? obj.count : 0,
+    last_materialize_at_iso: typeof obj.last_materialize_at_iso === "string" ? obj.last_materialize_at_iso : null,
+    last_materialize_error: typeof obj.last_materialize_error === "string" ? obj.last_materialize_error : null,
+  };
 }
 
-function toIsoDateOnly(d: Date): string {
-  const y = d.getFullYear();
-  const m = pad2(d.getMonth() + 1);
-  const day = pad2(d.getDate());
-  return `${y}-${m}-${day}`;
+export function loadMaterializeMetaV27(clientId: string): V27MaterializeMeta {
+  const raw = readJson(keyMeta(clientId));
+  if (!raw) return { count: 0, last_materialize_at_iso: null, last_materialize_error: null };
+  return normalizeMeta(raw);
 }
 
-function addMonths(d: Date, months: number): Date {
-  const x = new Date(d.getTime());
-  const y = x.getFullYear();
-  const m = x.getMonth() + months;
-  x.setFullYear(y, m, 1);
-  return x;
-}
-
-function endOfMonth(d: Date): Date {
-  const x = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return x;
-}
-
-function quarterOfMonth0(m0: number): number {
-  if (m0 <= 2) return 1;
-  if (m0 <= 5) return 2;
-  if (m0 <= 8) return 3;
-  return 4;
-}
-
-function quarterEndMonth0(q: number): number {
-  if (q === 1) return 2;
-  if (q === 2) return 5;
-  if (q === 3) return 8;
-  return 11;
-}
-
-/*
-  Compute deadlines (best-effort, frontend-only).
-  Rules are intentionally simple and deterministic.
-*/
-function computeDeadlineIso(key: string, periodicity?: string): string | null {
-  const now = new Date();
-
-  // Specific keys (preferred)
-  if (key === "tax.usn.advance") {
-    // USN advance: 25th of month following quarter end
-    const q = quarterOfMonth0(now.getMonth());
-    const qEndM0 = quarterEndMonth0(q);
-    const qEnd = new Date(now.getFullYear(), qEndM0, 1);
-    const dueBase = addMonths(qEnd, 1);
-    const due = new Date(dueBase.getFullYear(), dueBase.getMonth(), 25);
-    return toIsoDateOnly(due);
-  }
-
-  if (key === "tax.usn.year") {
-    // USN annual declaration: Apr 30 next year (generic)
-    const due = new Date(now.getFullYear() + 1, 3, 30);
-    return toIsoDateOnly(due);
-  }
-
-  if (key === "bank.statement.request") {
-    // Request statement: 5th of next month (generic operational)
-    const dueBase = addMonths(new Date(now.getFullYear(), now.getMonth(), 1), 1);
-    const due = new Date(dueBase.getFullYear(), dueBase.getMonth(), 5);
-    return toIsoDateOnly(due);
-  }
-
-  // Fallback by periodicity if key unknown
-  if (periodicity === "MONTHLY") {
-    const dueBase = addMonths(new Date(now.getFullYear(), now.getMonth(), 1), 1);
-    const due = new Date(dueBase.getFullYear(), dueBase.getMonth(), 5);
-    return toIsoDateOnly(due);
-  }
-
-  if (periodicity === "QUARTERLY") {
-    const q = quarterOfMonth0(now.getMonth());
-    const qEndM0 = quarterEndMonth0(q);
-    const qEnd = new Date(now.getFullYear(), qEndM0, 1);
-    const dueBase = addMonths(qEnd, 1);
-    const due = new Date(dueBase.getFullYear(), dueBase.getMonth(), 25);
-    return toIsoDateOnly(due);
-  }
-
-  if (periodicity === "YEARLY") {
-    const due = new Date(now.getFullYear() + 1, 3, 30);
-    return toIsoDateOnly(due);
-  }
-
-  // No deadline known
-  return null;
+function saveMaterializeMetaV27(clientId: string, meta: V27MaterializeMeta) {
+  writeJson(keyMeta(clientId), meta);
 }
 
 /* ========= PROFILE ========= */
 
 export function loadClientProfileV27(clientId: string): ClientProfileV27 {
   const raw = readJson(keyProfile(clientId));
-  return (
-    raw ?? {
-      clientId,
-      legal: { entityType: "IP", taxSystem: "USN_DR", vatMode: "NONE" },
-      employees: { hasPayroll: false, headcount: 0, payrollDates: [] },
-      operations: { bankAccounts: 1, cashRegister: false, ofd: false, foreignOps: false },
-      specialFlags: { tourismTax: false, excise: false, controlledTransactions: false },
-      updatedAtIso: new Date().toISOString(),
-    }
-  );
+  return raw ?? {
+    clientId,
+    legal: { entityType: "IP", taxSystem: "USN_DR", vatMode: "NONE" },
+    employees: { hasPayroll: false, headcount: 0, payrollDates: [] },
+    operations: { bankAccounts: 1, cashRegister: false, ofd: false, foreignOps: false },
+    specialFlags: { tourismTax: false, excise: false, controlledTransactions: false },
+    updatedAtIso: new Date().toISOString()
+  };
 }
 
 export function saveClientProfileV27(profile: ClientProfileV27): ClientProfileV27 {
@@ -167,30 +90,80 @@ export function resetClientProfileV27(clientId: string) {
   return { ok: true };
 }
 
-/* ========= META ========= */
-
-export function loadMaterializeMetaV27(clientId: string): V27MaterializeMeta {
-  const raw = readJson(keyMeta(clientId));
-  return (
-    raw ?? {
-      count: 0,
-      last_materialize_at_iso: null,
-      last_materialize_error: null,
-    }
-  );
-}
-
-function saveMaterializeMetaV27(clientId: string, meta: V27MaterializeMeta): V27MaterializeMeta {
-  writeJson(keyMeta(clientId), meta);
-  return meta;
-}
-
 /* ========= DERIVED -> LOCAL TASKS ========= */
 
 function safeKeyFromDerived(d: any, idx: number): string {
-  const k = String(d?.key ?? "").trim();
+  const k = typeof d?.key === "string" ? d.key.trim() : "";
   if (k) return k;
-  return "derived.unknown." + String(idx);
+  return "derived_" + String(idx);
+}
+
+function dateOnlyIso(dt: Date): string {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addMonths(base: Date, months: number): Date {
+  const d = new Date(base.getTime());
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function computeDeadlineIso(key: string, periodicity?: string): string | null {
+  const now = new Date();
+  const p = String(periodicity ?? "").toUpperCase();
+
+  // MONTHLY: 5th of next month
+  if (p === "MONTHLY" || key.includes("bank.statement")) {
+    const n = addMonths(new Date(now.getFullYear(), now.getMonth(), 1), 1);
+    const due = new Date(n.getFullYear(), n.getMonth(), 5);
+    return dateOnlyIso(due);
+  }
+
+  // QUARTERLY: 25th of next quarter first month (USN advance)
+  if (p === "QUARTERLY" || key.includes("tax.usn.advance")) {
+    const m = now.getMonth() + 1; // 1..12
+    let dueY = now.getFullYear();
+    let dueM = 1;
+
+    if (m <= 3) dueM = 4;       // Apr
+    else if (m <= 6) dueM = 7;  // Jul
+    else if (m <= 9) dueM = 10; // Oct
+    else { dueM = 1; dueY = dueY + 1; } // Jan next year
+
+    const due = new Date(dueY, dueM - 1, 25);
+    return dateOnlyIso(due);
+  }
+
+  // YEARLY: Apr 30 of next year (USN annual)
+  if (p === "YEARLY" || key.includes("tax.usn.year")) {
+    const y = now.getFullYear() + 1;
+    const due = new Date(y, 3, 30); // Apr=3
+    return dateOnlyIso(due);
+  }
+
+  return null;
+}
+
+function normalizeTasksArray(x: any): V27TaskLocal[] {
+  if (!Array.isArray(x)) return [];
+  return x.filter(Boolean).map((t: any) => {
+    const key = typeof t?.key === "string" ? t.key : "";
+    const created = typeof t?.created_at_iso === "string" ? t.created_at_iso : new Date().toISOString();
+    return {
+      id: String(t?.id ?? ("v27_" + key)),
+      key: String(key),
+      title: String(t?.title ?? key),
+      source: "v27_derived",
+      periodicity: typeof t?.periodicity === "string" ? t.periodicity : undefined,
+      reason: typeof t?.reason === "string" ? t.reason : undefined,
+      deadline: typeof t?.deadline === "string" ? t.deadline : (t?.deadline === null ? null : undefined),
+      completed: !!t?.completed,
+      created_at_iso: created,
+    } as V27TaskLocal;
+  });
 }
 
 function dedupeByKey(tasks: V27TaskLocal[]): V27TaskLocal[] {
@@ -201,6 +174,12 @@ function dedupeByKey(tasks: V27TaskLocal[]): V27TaskLocal[] {
   return Array.from(map.values());
 }
 
+/**
+ * Materialize (merge) tasks from derived.
+ * - preserves existing completed + created_at_iso
+ * - updates title/periodicity/reason/deadline from current derived
+ * - idempotent: repeated runs produce same result (except timestamps in meta)
+ */
 export function materializeFromDerivedV27(clientId: string, derived: ReglementItemDerived[]): V27TaskLocal[] {
   const nowIso = new Date().toISOString();
 
@@ -215,11 +194,19 @@ export function materializeFromDerivedV27(clientId: string, derived: ReglementIt
   }
 
   try {
-    const rawTasks: V27TaskLocal[] = (derived || []).map((d: any, idx: number) => {
+    const existing = normalizeTasksArray(readJson(keyTasks(clientId)));
+    const byKey = new Map<string, V27TaskLocal>();
+    for (const t of existing) byKey.set(t.key, t);
+
+    const incoming: V27TaskLocal[] = (derived || []).map((d: any, idx: number) => {
       const key = safeKeyFromDerived(d, idx);
       const periodicity = String(d?.periodicity ?? "").trim() || undefined;
       const reason = String(d?.reason ?? "").trim() || undefined;
       const deadline = computeDeadlineIso(key, periodicity);
+
+      const prev = byKey.get(key);
+      const completed = prev ? !!prev.completed : false;
+      const created_at_iso = prev ? prev.created_at_iso : nowIso;
 
       return {
         id: "v27_" + key,
@@ -229,12 +216,12 @@ export function materializeFromDerivedV27(clientId: string, derived: ReglementIt
         periodicity,
         reason,
         deadline,
-        completed: false,
-        created_at_iso: nowIso,
+        completed,
+        created_at_iso,
       };
     });
 
-    const tasks = dedupeByKey(rawTasks);
+    const tasks = dedupeByKey(incoming);
 
     writeJson(keyTasks(clientId), tasks);
 
@@ -259,9 +246,13 @@ export function materializeFromDerivedV27(clientId: string, derived: ReglementIt
 
 export function loadMaterializedTasksV27(clientId: string): V27TaskLocal[] {
   const v = readJson(keyTasks(clientId));
-  return Array.isArray(v) ? v : [];
+  return normalizeTasksArray(v);
 }
 
+/**
+ * Reset (delete) all locally materialized v27 tasks for client.
+ * Local only. Safe to call multiple times.
+ */
 export function resetMaterializedTasksV27(clientId: string): { ok: boolean; key: string } {
   const k = keyTasks(clientId);
   removeKey(k);
