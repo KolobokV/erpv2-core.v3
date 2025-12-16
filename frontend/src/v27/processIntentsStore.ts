@@ -1,96 +1,157 @@
+import { useEffect, useMemo, useState } from "react";
+
 export type ProcessIntent = {
+  clientId: string;
   taskKey: string;
-  createdAtIso: string;
 };
 
-type StoreShape = {
-  v: number;
-  byClient: Record<string, Record<string, ProcessIntent>>;
-};
+const STORAGE_KEY = "erpv2.processIntents.v27";
+const EVENT_NAME = "erpv2.processIntents.changed";
 
-const LS_KEY = "erpv2_v27_process_intents_v1";
-const DEFAULT: StoreShape = { v: 1, byClient: {} };
-
-function safeParse(json: string | null): any {
-  if (!json) return null;
+function safeParse(raw: string | null): ProcessIntent[] {
+  if (!raw) return [];
   try {
-    return JSON.parse(json);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x: any) => x && typeof x.clientId === "string" && typeof x.taskKey === "string"
+    );
   } catch {
-    return null;
+    return [];
   }
 }
 
-function loadStore(): StoreShape {
-  const raw = safeParse(localStorage.getItem(LS_KEY));
-  if (!raw || typeof raw !== "object") return { ...DEFAULT };
-  const byClient = raw.byClient && typeof raw.byClient === "object" ? raw.byClient : {};
-  return { v: 1, byClient };
+function readAll(): ProcessIntent[] {
+  return safeParse(localStorage.getItem(STORAGE_KEY));
 }
 
-function saveStore(s: StoreShape) {
-  localStorage.setItem(LS_KEY, JSON.stringify(s));
+function writeAll(items: ProcessIntent[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  window.dispatchEvent(new Event(EVENT_NAME));
 }
 
-function normClientId(clientId: string): string {
-  return String(clientId ?? "").trim();
+function keyOf(i: ProcessIntent): string {
+  return `${i.clientId}::${i.taskKey}`;
 }
 
-function normTaskKey(taskKey: string): string {
-  return String(taskKey ?? "").trim();
+function normalizeArgs(a: any, b?: any): ProcessIntent | null {
+  if (a && typeof a === "object" && typeof a.clientId === "string" && typeof a.taskKey === "string") {
+    return { clientId: a.clientId, taskKey: a.taskKey };
+  }
+  if (typeof a === "string" && typeof b === "string") {
+    const clientId = String(a).trim();
+    const taskKey = String(b).trim();
+    if (!clientId || !taskKey) return null;
+    return { clientId, taskKey };
+  }
+  return null;
 }
 
-export function listProcessIntents(clientId: string): ProcessIntent[] {
-  const cid = normClientId(clientId);
+export function getProcessIntents(): ProcessIntent[] {
+  return readAll();
+}
+
+export function getProcessIntentsByClient(clientId: string): ProcessIntent[] {
+  const cid = String(clientId ?? "").trim();
   if (!cid) return [];
-  const s = loadStore();
-  const m = s.byClient[cid];
-  if (!m || typeof m !== "object") return [];
-  return Object.values(m).sort((a, b) => String(a.createdAtIso).localeCompare(String(b.createdAtIso)));
+  return readAll().filter(x => x.clientId === cid);
 }
 
-export function countProcessIntents(clientId: string): number {
-  return listProcessIntents(clientId).length;
+export function countProcessIntents(clientId?: string | null): number {
+  const items = readAll();
+  const cid = String(clientId ?? "").trim();
+  if (!cid) return items.length;
+  return items.filter(x => x.clientId === cid).length;
 }
 
-export function hasProcessIntent(clientId: string, taskKey: string): boolean {
-  const cid = normClientId(clientId);
-  const k = normTaskKey(taskKey);
-  if (!cid || !k) return false;
-  const s = loadStore();
-  return !!s.byClient?.[cid]?.[k];
+export function hasProcessIntent(a: any, b?: any): boolean {
+  const intent = normalizeArgs(a, b);
+  if (!intent) return false;
+  const k = keyOf(intent);
+  return readAll().some(x => keyOf(x) === k);
 }
 
-export function addProcessIntent(clientId: string, taskKey: string): void {
-  const cid = normClientId(clientId);
-  const k = normTaskKey(taskKey);
-  if (!cid || !k) return;
+export function addProcessIntent(a: any, b?: any): void {
+  const intent = normalizeArgs(a, b);
+  if (!intent) return;
+  const items = readAll();
+  const k = keyOf(intent);
+  if (items.some(x => keyOf(x) === k)) return;
+  writeAll([...items, intent]);
+}
 
-  const s = loadStore();
-  if (!s.byClient[cid]) s.byClient[cid] = {};
-  if (!s.byClient[cid][k]) {
-    s.byClient[cid][k] = { taskKey: k, createdAtIso: new Date().toISOString() };
-    saveStore(s);
+export function removeProcessIntent(a: any, b?: any): void {
+  const intent = normalizeArgs(a, b);
+  if (!intent) return;
+  const k = keyOf(intent);
+  writeAll(readAll().filter(x => keyOf(x) !== k));
+}
+
+export function clearProcessIntents(clientId?: any): void {
+  const cid = String(clientId ?? "").trim();
+  if (!cid) {
+    writeAll([]);
+    return;
   }
+  writeAll(readAll().filter(x => x.clientId !== cid));
 }
 
-export function removeProcessIntent(clientId: string, taskKey: string): void {
-  const cid = normClientId(clientId);
-  const k = normTaskKey(taskKey);
-  if (!cid || !k) return;
+export async function realizeProcessIntent(a: any, b?: any): Promise<"created" | "exists"> {
+  const intent = normalizeArgs(a, b);
+  if (!intent) throw new Error("intent_invalid");
 
-  const s = loadStore();
-  if (s.byClient?.[cid]?.[k]) {
-    delete s.byClient[cid][k];
-    saveStore(s);
-  }
+  const res = await fetch("/api/internal/process-intents/realize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(intent),
+  });
+
+  if (!res.ok) throw new Error("intent_realize_failed");
+
+  const data = await res.json();
+  removeProcessIntent(intent);
+  return data.status;
 }
 
-export function clearProcessIntents(clientId: string): void {
-  const cid = normClientId(clientId);
+export async function realizeAllForClient(clientId: string): Promise<void> {
+  const cid = String(clientId ?? "").trim();
   if (!cid) return;
-  const s = loadStore();
-  if (s.byClient[cid]) {
-    delete s.byClient[cid];
-    saveStore(s);
+
+  const intents = getProcessIntentsByClient(cid);
+  for (const it of intents) {
+    try {
+      await realizeProcessIntent(it);
+    } catch {
+      // best-effort, keep going
+    }
   }
+  clearProcessIntents(cid);
+}
+
+export function useProcessIntents() {
+  const [items, setItems] = useState<ProcessIntent[]>(() => readAll());
+
+  useEffect(() => {
+    const onChange = () => setItems(readAll());
+    window.addEventListener(EVENT_NAME, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(EVENT_NAME, onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+
+  return useMemo(() => {
+    return {
+      items,
+      byClient: getProcessIntentsByClient,
+      count: countProcessIntents,
+      has: hasProcessIntent,
+      add: addProcessIntent,
+      remove: removeProcessIntent,
+      clear: clearProcessIntents,
+      realize: realizeProcessIntent,
+      realizeAll: realizeAllForClient,
+    };
+  }, [items]);
 }

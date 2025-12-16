@@ -1,22 +1,22 @@
-import { safeFetchJson } from "./safeFetch";
+export type ProcessInstanceV2 = any;
 
-export type ProcessInstanceV2 = {
-  instance_id?: string;
-  client_key?: string;
-  profile_key?: string;
-  period?: string;
-  status?: string;
+type Resp = {
+  items?: any[];
 };
 
-export type ProcessInstancesV2Response = {
-  items: ProcessInstanceV2[];
-};
+function withTrailingSlash(url: string): string {
+  const u = String(url || "").trim();
+  if (!u) return u;
+  if (u.endsWith("/")) return u;
+  return u + "/";
+}
 
-const EMPTY: ProcessInstancesV2Response = { items: [] };
-
-export async function fetchProcessInstancesV2Safe() {
-  return safeFetchJson<ProcessInstancesV2Response>(
-    "/api/internal/process-instances-v2",
-    EMPTY
-  );
+export async function fetchProcessInstancesV2Safe(): Promise<Resp> {
+  const url = withTrailingSlash("/api/internal/process-instances-v2");
+  const res = await fetch(url, { method: "GET" });
+  if (!res.ok) {
+    throw new Error("process_instances_fetch_failed");
+  }
+  const data = await res.json();
+  return data || {};
 }

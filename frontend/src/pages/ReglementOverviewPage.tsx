@@ -8,21 +8,23 @@ import {
 
 type UiState = "idle" | "loading" | "ready";
 
+type MetaShape = { state: string; status: number };
+
+function safeMeta(resp: any): MetaShape {
+  const status = typeof resp?.status === "number" ? resp.status : 0;
+  const st = String(resp?.meta?.state ?? "").trim();
+  if (st) return { state: st, status };
+  if (status === 0) return { state: "offline", status: 0 };
+  if (status === 404) return { state: "missing", status };
+  return { state: "error", status };
+}
+
 export default function ReglementOverviewPage() {
   const [uiState, setUiState] = useState<UiState>("idle");
 
-  const [profilesMeta, setProfilesMeta] = useState<{ state: string; status: number }>({
-    state: "idle",
-    status: 0,
-  });
-  const [tasksMeta, setTasksMeta] = useState<{ state: string; status: number }>({
-    state: "idle",
-    status: 0,
-  });
-  const [instancesMeta, setInstancesMeta] = useState<{ state: string; status: number }>({
-    state: "idle",
-    status: 0,
-  });
+  const [profilesMeta, setProfilesMeta] = useState<MetaShape>({ state: "idle", status: 0 });
+  const [tasksMeta, setTasksMeta] = useState<MetaShape>({ state: "idle", status: 0 });
+  const [instancesMeta, setInstancesMeta] = useState<MetaShape>({ state: "idle", status: 0 });
 
   const [profilesCount, setProfilesCount] = useState<number>(0);
   const [tasksCount, setTasksCount] = useState<number>(0);
@@ -34,21 +36,45 @@ export default function ReglementOverviewPage() {
     async function load() {
       setUiState("loading");
 
-      const [p, t, i] = await Promise.all([
-        fetchClientProfilesSafe(),
-        fetchTasksSafe(),
-        fetchProcessInstancesV2Safe(),
-      ]);
+      let p: any = null;
+      let t: any = null;
+      let i: any = null;
+
+      try {
+        [p, t, i] = await Promise.all([
+          fetchClientProfilesSafe(),
+          fetchTasksSafe(),
+          fetchProcessInstancesV2Safe(),
+        ]);
+      } catch (e) {
+        if (cancelled) return;
+        setProfilesMeta({ state: "error", status: 0 });
+        setTasksMeta({ state: "error", status: 0 });
+        setInstancesMeta({ state: "error", status: 0 });
+        setProfilesCount(0);
+        setTasksCount(0);
+        setInstancesCount(0);
+        setUiState("ready");
+        return;
+      }
 
       if (cancelled) return;
 
-      setProfilesMeta({ state: p.meta.state, status: p.status });
-      setTasksMeta({ state: t.meta.state, status: t.status });
-      setInstancesMeta({ state: i.meta.state, status: i.status });
+      const pm = safeMeta(p);
+      const tm = safeMeta(t);
+      const im = safeMeta(i);
 
-      setProfilesCount(Array.isArray(p.data.items) ? p.data.items.length : 0);
-      setTasksCount(Array.isArray(t.data.tasks) ? t.data.tasks.length : 0);
-      setInstancesCount(Array.isArray(i.data.items) ? i.data.items.length : 0);
+      setProfilesMeta(pm);
+      setTasksMeta(tm);
+      setInstancesMeta(im);
+
+      const pItems = p?.data?.items;
+      const tTasks = t?.data?.tasks;
+      const iItems = i?.data?.items;
+
+      setProfilesCount(Array.isArray(pItems) ? pItems.length : 0);
+      setTasksCount(Array.isArray(tTasks) ? tTasks.length : 0);
+      setInstancesCount(Array.isArray(iItems) ? iItems.length : 0);
 
       setUiState("ready");
     }
@@ -61,10 +87,10 @@ export default function ReglementOverviewPage() {
   }, []);
 
   const healthText = useMemo(() => {
-    const fmt = (label: string, meta: { state: string; status: number }) => {
+    const fmt = (label: string, meta: MetaShape) => {
       if (meta.state === "ok") return `${label}: ok`;
       if (meta.state === "missing") return `${label}: missing (404)`;
-      if (meta.status === 0) return `${label}: offline`;
+      if (meta.state === "offline" || meta.status === 0) return `${label}: offline`;
       return `${label}: error (${meta.status})`;
     };
 

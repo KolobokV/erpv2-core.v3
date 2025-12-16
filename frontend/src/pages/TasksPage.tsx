@@ -12,7 +12,15 @@ import {
 } from "../v27/profileStore";
 import { deriveRisk } from "../v27/riskPriority";
 import { fetchProcessInstancesV2Safe, type ProcessInstanceV2 } from "../api/processInstancesV2Safe";
-import { addProcessIntent, clearProcessIntents, countProcessIntents, hasProcessIntent, removeProcessIntent } from "../v27/processIntentsStore";
+import {
+  addProcessIntent,
+  clearProcessIntents,
+  countProcessIntents,
+  hasProcessIntent,
+  removeProcessIntent,
+  realizeProcessIntent,
+  realizeAllForClient,
+} from "../v27/processIntentsStore";
 
 type UiTask = any;
 type GroupKey = "burning" | "soon" | "calm" | "unknown";
@@ -143,6 +151,8 @@ export default function TasksPage() {
   const [intentRev, setIntentRev] = useState<number>(0);
   const intentCount = useMemo(() => countProcessIntents(clientId), [clientId, intentRev]);
 
+  const [bulkBusy, setBulkBusy] = useState<boolean>(false);
+
   async function refreshProcesses() {
     if (!clientId) {
       setProcItems([]);
@@ -220,6 +230,36 @@ export default function TasksPage() {
     const bundle: any = buildV27Bundle(clientId, []);
     setDerivedCount(Array.isArray(bundle?.derived) ? bundle.derived.length : 0);
     setBundleJson(JSON.stringify(bundle, null, 2));
+  }
+
+  async function onRealizeOne(taskKey: string) {
+    if (!clientId) return;
+    const k2 = String(taskKey ?? "").trim();
+    if (!k2) return;
+
+    try {
+      await realizeProcessIntent(clientId, k2);
+      setIntentRev((x) => x + 1);
+      await refreshProcesses();
+    } catch (e: any) {
+      setProcError(String(e?.message ?? "realize_failed"));
+      setIntentRev((x) => x + 1);
+    }
+  }
+
+  async function onRealizeAll() {
+    if (!clientId) return;
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      await realizeAllForClient(clientId);
+      setIntentRev((x) => x + 1);
+      await refreshProcesses();
+    } catch (e) {
+      console.error("bulk_realize_failed", e);
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   const groups = useMemo(() => {
@@ -313,6 +353,13 @@ export default function TasksPage() {
                 Refresh processes
               </button>
               <button
+                onClick={() => void onRealizeAll()}
+                style={{ padding: "6px 10px", borderRadius: 10 }}
+                disabled={!clientId || intentCount === 0 || bulkBusy}
+              >
+                {bulkBusy ? "Realize queued..." : "Realize queued"}
+              </button>
+              <button
                 onClick={() => {
                   if (!clientId) return;
                   clearProcessIntents(clientId);
@@ -359,6 +406,9 @@ export default function TasksPage() {
                     const dtag = typeof days === "number" ? `D${days}` : "D?";
                     const due = formatDue(t?.deadline);
 
+                    const tk = String(t?.key ?? "").trim();
+                    const isQueued = !!clientId && !!tk && hasProcessIntent(clientId, tk);
+
                     return (
                       <div key={t.id} style={cardStyle(k)}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -378,9 +428,7 @@ export default function TasksPage() {
 
                         <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                           <span style={tinyPill(procItems.length > 0)}>{procItems.length > 0 ? "proc" : "no-proc"}</span>
-                          <span style={tinyPill(hasProcessIntent(clientId, t.key ?? ""))}>
-                            {hasProcessIntent(clientId, t.key ?? "") ? "queued" : "not-queued"}
-                          </span>
+                          <span style={tinyPill(isQueued)}>{isQueued ? "queued" : "not-queued"}</span>
 
                           <button
                             onClick={() => {
@@ -393,7 +441,19 @@ export default function TasksPage() {
                             style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.95 }}
                             disabled={!clientId || !t?.key}
                           >
-                            Queue process (stub)
+                            Queue
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              const k2 = String(t.key ?? "").trim();
+                              if (!k2) return;
+                              void onRealizeOne(k2);
+                            }}
+                            style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.95 }}
+                            disabled={!clientId || !t?.key || procLoading}
+                          >
+                            Realize
                           </button>
 
                           <button
