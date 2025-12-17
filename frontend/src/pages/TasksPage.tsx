@@ -3,27 +3,26 @@ import { useLocation } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { UpBackBar } from "../components/UpBackBar";
 import { getClientFromLocation } from "../v27/clientContext";
-import { buildV27Bundle } from "../v27/bridge";
-import {
-  loadMaterializedTasksV27,
-  materializeFromDerivedV27,
-  resetMaterializedTasksV27,
-  loadMaterializeMetaV27,
-} from "../v27/profileStore";
 import { deriveRisk } from "../v27/riskPriority";
 import { fetchProcessInstancesV2Safe, type ProcessInstanceV2 } from "../api/processInstancesV2Safe";
 import {
+  loadMaterializedTasksV27,
+  loadMaterializeMetaV27,
+} from "../v27/profileStore";
+import {
   addProcessIntent,
-  clearProcessIntents,
-  countProcessIntents,
   hasProcessIntent,
-  removeProcessIntent,
   realizeProcessIntent,
-  realizeAllForClient,
 } from "../v27/processIntentsStore";
+import { t } from "../i18n/t";
 
 type UiTask = any;
 type GroupKey = "burning" | "soon" | "calm" | "unknown";
+
+function useQuery() {
+  const { search } = useLocation();
+  return useMemo(() => new URLSearchParams(search), [search]);
+}
 
 function fmtDate(iso: string): string {
   try {
@@ -36,12 +35,6 @@ function fmtDate(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-function formatDue(deadline: any): string {
-  const iso = String(deadline ?? "").trim();
-  if (!iso) return "no_deadline";
-  return fmtDate(iso);
 }
 
 function sortByPriorityAndTitle(a: any, b: any): number {
@@ -63,130 +56,28 @@ function riskToGroup(lvl: string): GroupKey {
   return "unknown";
 }
 
-function groupTitle(key: GroupKey, count: number): string {
-  if (key === "burning") return `Burning (${count})`;
-  if (key === "soon") return `Soon (${count})`;
-  if (key === "calm") return `Calm (${count})`;
-  return `Other (${count})`;
-}
-
-function groupHint(key: GroupKey): string {
-  if (key === "burning") return "Overdue or due today. Must be handled now.";
-  if (key === "soon") return "Due soon. Plan and execute.";
-  if (key === "calm") return "Not urgent. Plan and batch.";
-  return "Low signal or unknown risk.";
-}
-
-function pillStyle(level: string): React.CSSProperties {
-  const base: React.CSSProperties = {
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: 999,
-    fontSize: 12,
-    border: "1px solid rgba(255,255,255,0.18)",
-    opacity: 0.95,
-    whiteSpace: "nowrap",
-  };
-
-  if (level === "critical") return { ...base, border: "1px solid rgba(255,80,80,0.75)" };
-  if (level === "high") return { ...base, border: "1px solid rgba(255,160,80,0.75)" };
-  if (level === "medium") return { ...base, border: "1px solid rgba(255,220,120,0.65)" };
-  if (level === "low") return { ...base, border: "1px solid rgba(140,220,140,0.55)" };
-  return base;
-}
-
-function tinyPill(ok: boolean): React.CSSProperties {
-  return {
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: 999,
-    fontSize: 12,
-    border: ok ? "1px solid rgba(120,220,120,0.45)" : "1px solid rgba(255,160,80,0.55)",
-    opacity: 0.95,
-    whiteSpace: "nowrap",
-  };
-}
-
-function sectionStyle(key: GroupKey): React.CSSProperties {
-  const base: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 14,
-    padding: 12,
-  };
-
-  if (key === "burning") return { ...base, border: "1px solid rgba(255,80,80,0.35)" };
-  if (key === "soon") return { ...base, border: "1px solid rgba(255,160,80,0.35)" };
-  if (key === "calm") return { ...base, border: "1px solid rgba(140,220,140,0.22)" };
-  return base;
-}
-
-function cardStyle(key: GroupKey): React.CSSProperties {
-  const base: React.CSSProperties = {
-    border: "1px solid rgba(255,255,255,0.10)",
-    borderRadius: 14,
-    padding: 12,
-    opacity: 0.98,
-  };
-
-  if (key === "burning") return { ...base, border: "1px solid rgba(255,80,80,0.22)" };
-  if (key === "soon") return { ...base, border: "1px solid rgba(255,160,80,0.22)" };
-  if (key === "calm") return { ...base, border: "1px solid rgba(140,220,140,0.14)" };
-  return base;
-}
-
 export default function TasksPage() {
   const location = useLocation();
+  const query = useQuery();
   const clientId = useMemo(() => getClientFromLocation(location), [location]);
 
-  const [derivedCount, setDerivedCount] = useState<number>(0);
+  const qPriority = query.get("priority");
+  const qDue = query.get("due");
+  const qGroup = query.get("group");
+
   const [tasks, setTasks] = useState<UiTask[]>([]);
-  const [meta, setMeta] = useState<any>({ count: 0, last_materialize_error: null });
-  const [bundleJson, setBundleJson] = useState<string>("");
-  const [showBundle, setShowBundle] = useState<boolean>(false);
-
+  const [meta, setMeta] = useState<any>({ count: 0 });
   const [procItems, setProcItems] = useState<ProcessInstanceV2[]>([]);
-  const [procLoading, setProcLoading] = useState<boolean>(false);
-  const [procError, setProcError] = useState<string>("");
-
   const [intentRev, setIntentRev] = useState<number>(0);
-  const intentCount = useMemo(() => countProcessIntents(clientId), [clientId, intentRev]);
-
-  const [bulkBusy, setBulkBusy] = useState<boolean>(false);
-
-  async function refreshProcesses() {
-    if (!clientId) {
-      setProcItems([]);
-      setProcError("");
-      return;
-    }
-    setProcLoading(true);
-    setProcError("");
-    try {
-      const resp = await fetchProcessInstancesV2Safe();
-      const items = Array.isArray(resp?.items) ? resp.items : [];
-      const cid = String(clientId).trim().toLowerCase();
-      const filtered = items.filter((x: any) => {
-        const ck = String(x?.client_key ?? "").trim().toLowerCase();
-        return ck === cid || ck.endsWith(":" + cid) || ck.includes(cid);
-      });
-      setProcItems(filtered);
-    } catch (e: any) {
-      setProcItems([]);
-      setProcError(String(e?.message ?? "fetch_failed"));
-    } finally {
-      setProcLoading(false);
-    }
-  }
 
   useEffect(() => {
-    const materialized = loadMaterializedTasksV27(clientId);
-    const enriched = materialized
-      .map((t: any) => {
-        const risk = deriveRisk(t.deadline);
+    const materialized = loadMaterializedTasksV27(clientId)
+      .map((x: any) => {
+        const risk = deriveRisk(x.deadline);
         return {
-          ...t,
+          ...x,
           derived: {
-            ...t.derived,
+            ...x.derived,
             riskLevel: risk?.level ?? "unknown",
             daysToDeadline: typeof risk?.daysToDeadline === "number" ? risk.daysToDeadline : null,
           },
@@ -194,296 +85,130 @@ export default function TasksPage() {
       })
       .sort(sortByPriorityAndTitle);
 
-    const bundle: any = buildV27Bundle(clientId, enriched);
-    const derived = Array.isArray(bundle?.derived) ? bundle.derived : [];
-
-    setDerivedCount(derived.length);
-    setTasks(enriched);
+    setTasks(materialized);
     setMeta(loadMaterializeMetaV27(clientId));
-    setBundleJson(JSON.stringify(bundle, null, 2));
+
+    fetchProcessInstancesV2Safe()
+      .then((resp) => setProcItems(Array.isArray(resp?.items) ? resp.items : []))
+      .catch(() => setProcItems([]));
 
     setIntentRev((x) => x + 1);
-    void refreshProcesses();
   }, [clientId]);
 
-  function onMaterializeLocal() {
-    const currentTasks = loadMaterializedTasksV27(clientId);
-    const bundle: any = buildV27Bundle(clientId, currentTasks);
-    const derived = Array.isArray(bundle?.derived) ? bundle.derived : [];
-    materializeFromDerivedV27(clientId, derived);
-    setMeta(loadMaterializeMetaV27(clientId));
-    const nextTasks = loadMaterializedTasksV27(clientId).map((t: any) => {
-      const risk = deriveRisk(t.deadline);
-      return { ...t, derived: { ...t.derived, riskLevel: risk?.level ?? "unknown", daysToDeadline: risk?.daysToDeadline ?? null } };
-    });
-    setTasks(nextTasks.sort(sortByPriorityAndTitle));
+  const filteredTasks = useMemo(() => {
+    let out = [...tasks];
 
-    const nextBundle: any = buildV27Bundle(clientId, nextTasks);
-    setDerivedCount(Array.isArray(nextBundle?.derived) ? nextBundle.derived.length : 0);
-    setBundleJson(JSON.stringify(nextBundle, null, 2));
-  }
-
-  function onResetLocal() {
-    resetMaterializedTasksV27(clientId);
-    setMeta(loadMaterializeMetaV27(clientId));
-    setTasks([]);
-    const bundle: any = buildV27Bundle(clientId, []);
-    setDerivedCount(Array.isArray(bundle?.derived) ? bundle.derived.length : 0);
-    setBundleJson(JSON.stringify(bundle, null, 2));
-  }
-
-  async function onRealizeOne(taskKey: string) {
-    if (!clientId) return;
-    const k2 = String(taskKey ?? "").trim();
-    if (!k2) return;
-
-    try {
-      await realizeProcessIntent(clientId, k2);
-      setIntentRev((x) => x + 1);
-      await refreshProcesses();
-    } catch (e: any) {
-      setProcError(String(e?.message ?? "realize_failed"));
-      setIntentRev((x) => x + 1);
+    if (qPriority) {
+      out = out.filter((x) => String(x?.priority ?? "").toLowerCase() === qPriority.toLowerCase());
     }
-  }
 
-  async function onRealizeAll() {
-    if (!clientId) return;
-    if (bulkBusy) return;
-    setBulkBusy(true);
-    try {
-      await realizeAllForClient(clientId);
-      setIntentRev((x) => x + 1);
-      await refreshProcesses();
-    } catch (e) {
-      console.error("bulk_realize_failed", e);
-    } finally {
-      setBulkBusy(false);
+    if (qDue) {
+      out = out.filter((x) => {
+        const d = x?.derived?.daysToDeadline;
+        if (typeof d !== "number") return false;
+        if (qDue === "today") return d === 0;
+        if (qDue === "overdue") return d < 0;
+        if (qDue === "next7") return d >= 0 && d <= 7;
+        return true;
+      });
     }
-  }
 
-  const groups = useMemo(() => {
-    const g: Record<GroupKey, UiTask[]> = { burning: [], soon: [], calm: [], unknown: [] };
-    for (const t of tasks) {
-      const lvl = String(t?.derived?.riskLevel ?? "unknown");
-      g[riskToGroup(lvl)].push(t);
+    if (qGroup) {
+      out = out.filter((x) => riskToGroup(String(x?.derived?.riskLevel ?? "unknown")) === qGroup);
     }
-    g.burning.sort(sortByPriorityAndTitle);
-    g.soon.sort(sortByPriorityAndTitle);
-    g.calm.sort(sortByPriorityAndTitle);
-    g.unknown.sort(sortByPriorityAndTitle);
-    return g;
-  }, [tasks]);
 
-  const summary = useMemo(() => {
-    return {
-      burning: groups.burning.length,
-      soon: groups.soon.length,
-      calm: groups.calm.length,
-      unknown: groups.unknown.length,
-    };
-  }, [groups]);
+    return out;
+  }, [tasks, qPriority, qDue, qGroup]);
 
-  const showEmptyHint = derivedCount > 0 && tasks.length === 0;
+  const title = clientId ? `${t("tasks.title")}: ${clientId}` : t("tasks.title");
 
   return (
     <PageShell>
-      <UpBackBar title={`Tasks: ${clientId || "-"}`} />
+      <UpBackBar title={title} />
 
       <div style={{ padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>Reality check (tasks + processes)</div>
-          <div style={{ opacity: 0.75 }}>{clientId ? "ok" : "client missing"}</div>
-        </div>
-
-        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <span style={pillStyle("critical")}>burning: {summary.burning}</span>
-          <span style={pillStyle("high")}>soon: {summary.soon}</span>
-          <span style={pillStyle("low")}>calm: {summary.calm}</span>
-          <span style={pillStyle("unknown")}>other: {summary.unknown}</span>
-        </div>
-
-        <div
-          style={{
-            marginTop: 10,
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 14,
-            padding: 12,
-            opacity: 0.98,
-          }}
-        >
-          <div style={{ opacity: 0.9 }}>
-            {showEmptyHint
-              ? "Derived exists, but no tasks found for this client. Use local materialization to preview UX wiring."
-              : "State looks consistent."}
+        {(qPriority || qDue || qGroup) && (
+          <div
+            style={{
+              marginBottom: 10,
+              padding: 10,
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 10,
+              fontSize: 12,
+              opacity: 0.85,
+            }}
+          >
+            {t("common.activeFilters")}{" "}
+            {t("tasks.filtersPrefix")}{" "}
+            {qPriority ? t("tasks.priority", { v: qPriority }) : ""}
+            {qDue ? " " + t("tasks.due", { v: qDue }) : ""}
+            {qGroup ? " " + t("tasks.group", { v: qGroup }) : ""}
+            <span
+              style={{ marginLeft: 12, cursor: "pointer", textDecoration: "underline" }}
+              onClick={() => {
+                window.location.href = "/tasks";
+              }}
+            >
+              {t("common.clear")}
+            </span>
           </div>
+        )}
 
-          <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>
-              <div>local materialization</div>
-              <div>
-                count: {meta?.count ?? 0} | last: {meta?.last_materialize_error ?? "-"}
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, opacity: 0.85 }}>
-              <div>process read</div>
-              <div>
-                instances: {procItems.length} | {procLoading ? "loading" : procError ? `error:${procError}` : "ok"}
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, opacity: 0.85 }}>
-              <div>process queue</div>
-              <div>queued: {intentCount}</div>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <button onClick={onMaterializeLocal} style={{ padding: "6px 10px", borderRadius: 10 }}>
-                Materialize (local)
-              </button>
-              <button onClick={onResetLocal} style={{ padding: "6px 10px", borderRadius: 10 }}>
-                Reset (local)
-              </button>
-              <button
-                onClick={() => void refreshProcesses()}
-                style={{ padding: "6px 10px", borderRadius: 10 }}
-                disabled={!clientId || procLoading}
-              >
-                Refresh processes
-              </button>
-              <button
-                onClick={() => void onRealizeAll()}
-                style={{ padding: "6px 10px", borderRadius: 10 }}
-                disabled={!clientId || intentCount === 0 || bulkBusy}
-              >
-                {bulkBusy ? "Realize queued..." : "Realize queued"}
-              </button>
-              <button
-                onClick={() => {
-                  if (!clientId) return;
-                  clearProcessIntents(clientId);
-                  setIntentRev((x) => x + 1);
-                }}
-                style={{ padding: "6px 10px", borderRadius: 10 }}
-                disabled={!clientId}
-              >
-                Clear queue
-              </button>
-              <button
-                onClick={() => {
-                  if (!clientId) return;
-                  window.location.href = `/processes?client=${encodeURIComponent(clientId)}`;
-                }}
-                style={{ padding: "6px 10px", borderRadius: 10 }}
-                disabled={!clientId}
-              >
-                Open processes
-              </button>
-              <button onClick={() => setShowBundle((v) => !v)} style={{ padding: "6px 10px", borderRadius: 10 }}>
-                {showBundle ? "Hide bundle" : "Show bundle"}
-              </button>
-            </div>
-          </div>
+        <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
+          {t("tasks.showing", { shown: filteredTasks.length, total: tasks.length })}
         </div>
 
-        <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-          {(["burning", "soon", "calm", "unknown"] as GroupKey[]).map((k) => {
-            const items = groups[k];
-            if (items.length === 0) return null;
+        <div style={{ display: "grid", gap: 10 }}>
+          {filteredTasks.map((x: any) => {
+            const lvl = x?.derived?.riskLevel ?? "unknown";
+            const tk = String(x?.key ?? "").trim();
+            const queued = !!clientId && !!tk && hasProcessIntent(clientId, tk);
+
+            const cardTitle = String(x?.title ?? "").trim().length > 0 ? String(x.title) : t("tasks.untitled");
+            const dueText = fmtDate(String(x?.deadline ?? "")) || t("tasks.unknown");
 
             return (
-              <div key={k} style={sectionStyle(k)}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ fontWeight: 800 }}>{groupTitle(k, items.length)}</div>
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{groupHint(k)}</div>
+              <div
+                key={x.id}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 12,
+                  padding: 10,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>{cardTitle}</div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  {t("tasks.cardPriority", { v: String(x?.priority ?? "-") })} |{" "}
+                  {t("tasks.cardRisk", { v: String(lvl) })} |{" "}
+                  {t("tasks.cardDue", { v: dueText })}
                 </div>
 
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                  {items.map((t: any) => {
-                    const level = t?.derived?.riskLevel ?? "unknown";
-                    const days = t?.derived?.daysToDeadline;
-                    const dtag = typeof days === "number" ? `D${days}` : "D?";
-                    const due = formatDue(t?.deadline);
+                <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => {
+                      if (!clientId || !tk) return;
+                      addProcessIntent(clientId, tk);
+                      setIntentRev((v) => v + 1);
+                    }}
+                    disabled={!clientId || !tk}
+                  >
+                    {queued ? t("tasks.queued") : t("tasks.queue")}
+                  </button>
 
-                    const tk = String(t?.key ?? "").trim();
-                    const isQueued = !!clientId && !!tk && hasProcessIntent(clientId, tk);
-
-                    return (
-                      <div key={t.id} style={cardStyle(k)}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                          <div style={{ fontWeight: 800 }}>{t.title}</div>
-                          <div style={pillStyle(level)}>{`${level} | ${dtag} | ${due}`}</div>
-                        </div>
-
-                        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.82 }}>
-                          key: {t.key ?? "-"} | source: {t.source ?? "-"} | periodicity: {t.periodicity ?? "-"}
-                        </div>
-
-                        {t.reason ? (
-                          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.72 }}>
-                            reason: {t.reason}
-                          </div>
-                        ) : null}
-
-                        <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <span style={tinyPill(procItems.length > 0)}>{procItems.length > 0 ? "proc" : "no-proc"}</span>
-                          <span style={tinyPill(isQueued)}>{isQueued ? "queued" : "not-queued"}</span>
-
-                          <button
-                            onClick={() => {
-                              if (!clientId) return;
-                              const k2 = String(t.key ?? "").trim();
-                              if (!k2) return;
-                              addProcessIntent(clientId, k2);
-                              setIntentRev((x) => x + 1);
-                            }}
-                            style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.95 }}
-                            disabled={!clientId || !t?.key}
-                          >
-                            Queue
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              const k2 = String(t.key ?? "").trim();
-                              if (!k2) return;
-                              void onRealizeOne(k2);
-                            }}
-                            style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.95 }}
-                            disabled={!clientId || !t?.key || procLoading}
-                          >
-                            Realize
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              if (!clientId) return;
-                              const k2 = String(t.key ?? "").trim();
-                              if (!k2) return;
-                              removeProcessIntent(clientId, k2);
-                              setIntentRev((x) => x + 1);
-                            }}
-                            style={{ padding: "4px 8px", borderRadius: 10, fontSize: 12, opacity: 0.85 }}
-                            disabled={!clientId || !t?.key}
-                          >
-                            Unqueue
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <button
+                    onClick={() => {
+                      if (!clientId || !tk) return;
+                      void realizeProcessIntent(clientId, tk);
+                    }}
+                    disabled={!clientId || !tk}
+                  >
+                    {t("tasks.realize")}
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
-
-        {showBundle ? (
-          <div style={{ marginTop: 14 }}>
-            <pre style={{ whiteSpace: "pre-wrap", marginTop: 10 }}>{bundleJson}</pre>
-          </div>
-        ) : null}
       </div>
     </PageShell>
   );

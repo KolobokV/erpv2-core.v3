@@ -13,7 +13,6 @@ import ClientProcessStepPage from "./pages/ClientProcessStepPage";
 import ClientControlEventPage from "./pages/ClientControlEventPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DayDashboardPage from "./pages/DayDashboardPage";
-
 import V27InspectorPage from "./pages/V27InspectorPage";
 import ReglementContainerPage from "./pages/ReglementContainerPage";
 import BreadcrumbBar from "./components/ui/BreadcrumbBar";
@@ -40,7 +39,9 @@ function App() {
               <NavLink to="/day" className={({ isActive }) => navLinkClass(isActive)}>
                 Day
               </NavLink>
-<NavLink to="/v27-inspector" className={navLinkClass}>V27</NavLink>
+              <NavLink to="/v27-inspector" className={navLinkClass}>
+                V27
+              </NavLink>
               <NavLink to="/tasks" className={({ isActive }) => navLinkClass(isActive)}>
                 Tasks
               </NavLink>
@@ -74,7 +75,11 @@ function App() {
 
           <Routes>
             <Route path="/" element={<ReglementContainerPage />} />
+
+            {/* Day Dashboard */}
             <Route path="/day" element={<DayDashboardPage />} />
+            <Route path="/day-dashboard" element={<DayDashboardPage />} />
+
             <Route path="/v27-inspector" element={<V27InspectorPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/task-detail" element={<TaskDetailPage />} />
