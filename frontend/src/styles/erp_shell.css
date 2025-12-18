@@ -1,0 +1,146 @@
+:root {
+  --erp-bg: #f8fafc;
+  --erp-panel: #ffffff;
+  --erp-border: rgba(15, 23, 42, 0.12);
+  --erp-text: #0f172a;
+  --erp-muted: rgba(15, 23, 42, 0.65);
+  --erp-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --erp-radius: 16px;
+}
+
+.erp-app {
+  min-height: 100vh;
+  background: var(--erp-bg);
+  color: var(--erp-text);
+}
+
+.erp-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  padding: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.erp-sidebar {
+  background: var(--erp-panel);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--erp-shadow);
+  padding: 12px;
+  height: calc(100vh - 32px);
+  position: sticky;
+  top: 16px;
+  overflow: auto;
+}
+
+.erp-main {
+  min-width: 0;
+}
+
+.erp-topbar {
+  background: var(--erp-panel);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--erp-shadow);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.erp-content {
+  margin-top: 16px;
+}
+
+.erp-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 10px 10px;
+}
+
+.erp-brand-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.erp-brand-sub {
+  font-size: 12px;
+  color: var(--erp-muted);
+}
+
+.erp-nav {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.erp-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--erp-text);
+  border: 1px solid transparent;
+}
+
+.erp-nav a:hover {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.erp-nav a.erp-active {
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.14);
+  font-weight: 600;
+}
+
+.erp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--erp-border);
+  background: rgba(255,255,255,0.7);
+  box-shadow: var(--erp-shadow);
+  font-size: 12px;
+  color: var(--erp-muted);
+}
+
+.erp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--erp-border);
+  background: var(--erp-panel);
+  box-shadow: var(--erp-shadow);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--erp-text);
+}
+
+.erp-btn:hover {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+@media (max-width: 1024px) {
+  .erp-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .erp-sidebar {
+    height: auto;
+    position: relative;
+    top: auto;
+  }
+}

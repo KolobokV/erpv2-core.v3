@@ -1,5 +1,8 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+
+import "./styles/erp_shell.css";
+import { ErpShell, type ErpNavItem } from "./components/layout/ErpShell";
 
 import TasksPage from "./pages/TasksPage";
 import InternalProcessesPage from "./pages/InternalProcessesPage";
@@ -13,88 +16,80 @@ import ClientProcessStepPage from "./pages/ClientProcessStepPage";
 import ClientControlEventPage from "./pages/ClientControlEventPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DayDashboardPage from "./pages/DayDashboardPage";
-import V27InspectorPage from "./pages/V27InspectorPage";
-import ReglementContainerPage from "./pages/ReglementContainerPage";
-import BreadcrumbBar from "./components/ui/BreadcrumbBar";
 
-function navLinkClass(isActive: boolean, accent?: boolean): string {
-  const base = "px-2 py-1 rounded-md text-sm no-underline";
-  if (isActive) {
-    return base + " " + (accent ? "bg-emerald-600 text-white" : "bg-slate-900 text-white");
+function getClientFromUrl(): string | null {
+  try {
+    const u = new URL(window.location.href);
+    const c = u.searchParams.get("client");
+    return c && c.trim().length > 0 ? c.trim() : null;
+  } catch {
+    return null;
   }
-  return base + " text-slate-700 hover:bg-slate-100";
+}
+
+const NAV: ErpNavItem[] = [
+  { to: "/day", label: "\u0414\u0435\u043d\u044c" },
+  { to: "/tasks", label: "\u0417\u0430\u0434\u0430\u0447\u0438" },
+  { to: "/client-profile", label: "\u041a\u043b\u0438\u0435\u043d\u0442" },
+  { to: "/internal-processes", label: "\u041f\u0440\u043e\u0446\u0435\u0441\u0441\u044b" },
+  { to: "/process-coverage", label: "\u041f\u043e\u043a\u0440\u044b\u0442\u0438\u0435" },
+  { to: "/control-events", label: "\u0421\u043e\u0431\u044b\u0442\u0438\u044f" },
+  { to: "/internal-control-events-store", label: "\u0425\u0440\u0430\u043d\u0438\u043b\u0438\u0449\u0435" },
+  { to: "/client-process-overview", label: "\u041e\u0431\u0437\u043e\u0440" },
+  { to: "/process-chains-dev", label: "DEV Chains" },
+];
+
+function RightActions() {
+  const clientId = getClientFromUrl();
+  const hrefDay = clientId ? ("/day?client=" + encodeURIComponent(clientId)) : "/day";
+  const hrefTasks = clientId ? ("/tasks?client=" + encodeURIComponent(clientId)) : "/tasks";
+
+  return (
+    <>
+      <a className="erp-btn" href={hrefDay}>
+        {"\u0414\u0435\u043d\u044c"}
+      </a>
+      <a className="erp-btn" href={hrefTasks}>
+        {"\u0417\u0430\u0434\u0430\u0447\u0438"}
+      </a>
+    </>
+  );
 }
 
 function App() {
+  const clientId = getClientFromUrl();
+
   return (
     <Router>
-      <div className="min-h-screen bg-white text-slate-900">
-        <header className="border-b border-slate-200">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
-            <div className="font-semibold">ERPv2 Reglement</div>
-            <nav className="flex flex-wrap gap-2">
-              <NavLink to="/" className={({ isActive }) => navLinkClass(isActive, true)}>
-                Reglement
-              </NavLink>
-              <NavLink to="/day" className={({ isActive }) => navLinkClass(isActive)}>
-                Day
-              </NavLink>
-              <NavLink to="/v27-inspector" className={navLinkClass}>
-                V27
-              </NavLink>
-              <NavLink to="/tasks" className={({ isActive }) => navLinkClass(isActive)}>
-                Tasks
-              </NavLink>
-              <NavLink to="/internal-processes" className={({ isActive }) => navLinkClass(isActive)}>
-                Processes
-              </NavLink>
-              <NavLink to="/process-coverage" className={({ isActive }) => navLinkClass(isActive)}>
-                Coverage
-              </NavLink>
-              <NavLink to="/client-profile" className={({ isActive }) => navLinkClass(isActive)}>
-                Client profiles
-              </NavLink>
-              <NavLink to="/control-events" className={({ isActive }) => navLinkClass(isActive)}>
-                Control events
-              </NavLink>
-              <NavLink to="/internal-control-events-store" className={({ isActive }) => navLinkClass(isActive)}>
-                Events store
-              </NavLink>
-              <NavLink to="/client-process-overview" className={({ isActive }) => navLinkClass(isActive)}>
-                Client overview
-              </NavLink>
-              <NavLink to="/process-chains-dev" className={({ isActive }) => navLinkClass(isActive)}>
-                Chains dev
-              </NavLink>
-            </nav>
-          </div>
-        </header>
+      <ErpShell
+        title="ERPv2"
+        subtitle="Workday v1"
+        clientId={clientId}
+        nav={NAV}
+        right={<RightActions />}
+      >
+        <Routes>
+          <Route path="/" element={<DayDashboardPage />} />
+          <Route path="/day" element={<DayDashboardPage />} />
 
-        <main className="mx-auto max-w-6xl px-4 py-6">
-          <BreadcrumbBar />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/task/:taskId" element={<TaskDetailPage />} />
 
-          <Routes>
-            <Route path="/" element={<ReglementContainerPage />} />
+          <Route path="/client-profile" element={<ClientProfilePage />} />
 
-            {/* Day Dashboard */}
-            <Route path="/day" element={<DayDashboardPage />} />
-            <Route path="/day-dashboard" element={<DayDashboardPage />} />
+          <Route path="/internal-processes" element={<InternalProcessesPage />} />
+          <Route path="/process-coverage" element={<ProcessCoveragePage />} />
 
-            <Route path="/v27-inspector" element={<V27InspectorPage />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/task-detail" element={<TaskDetailPage />} />
-            <Route path="/internal-processes" element={<InternalProcessesPage />} />
-            <Route path="/process-coverage" element={<ProcessCoveragePage />} />
-            <Route path="/client-profile" element={<ClientProfilePage />} />
-            <Route path="/control-events" element={<ControlEventsPage />} />
-            <Route path="/internal-control-events-store" element={<InternalControlEventsStorePage />} />
-            <Route path="/client-process-overview" element={<ClientProcessOverviewPage />} />
-            <Route path="/client-process-overview/step/:stepId" element={<ClientProcessStepPage />} />
-            <Route path="/client-process-overview/event/:eventId" element={<ClientControlEventPage />} />
-            <Route path="/process-chains-dev" element={<ProcessChainsDevPage />} />
-          </Routes>
-        </main>
-      </div>
+          <Route path="/control-events" element={<ControlEventsPage />} />
+          <Route path="/internal-control-events-store" element={<InternalControlEventsStorePage />} />
+
+          <Route path="/client-process-overview" element={<ClientProcessOverviewPage />} />
+          <Route path="/client-process-overview/step/:stepId" element={<ClientProcessStepPage />} />
+          <Route path="/client-process-overview/event/:eventId" element={<ClientControlEventPage />} />
+
+          <Route path="/process-chains-dev" element={<ProcessChainsDevPage />} />
+        </Routes>
+      </ErpShell>
     </Router>
   );
 }
