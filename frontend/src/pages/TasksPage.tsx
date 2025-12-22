@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { UpBackBar } from "../components/UpBackBar";
 import { getClientFromLocation } from "../v27/clientContext";
@@ -47,6 +47,7 @@ function dueBucket(daysToDeadline: number | null | undefined): DueKey {
 }
 
 function pill(text: string): JSX.Element {
+  // v32.4: unified status style + quick actions (visual only)
   return (
     <span
       style={{
@@ -56,7 +57,7 @@ function pill(text: string): JSX.Element {
         background: "rgba(255,255,255,0.9)",
         borderRadius: 999,
         padding: "2px 8px",
-        fontSize: 12,
+        fontSize: 11,
         color: "rgba(15,23,42,0.75)",
         whiteSpace: "nowrap",
       }}
@@ -66,6 +67,8 @@ function pill(text: string): JSX.Element {
   );
 }
 
+import { STATUS_STYLE } from "../ui/statusStyle";
+
 function badge(text: string, kind: "neutral" | "good" | "warn" | "bad"): JSX.Element {
   const map: Record<string, { bg: string; border: string; color: string }> = {
     neutral: { bg: "rgba(15,23,42,0.03)", border: "rgba(15,23,42,0.10)", color: "rgba(15,23,42,0.80)" },
@@ -74,6 +77,7 @@ function badge(text: string, kind: "neutral" | "good" | "warn" | "bad"): JSX.Ele
     bad: { bg: "rgba(239,68,68,0.10)", border: "rgba(239,68,68,0.25)", color: "rgba(185,28,28,1)" },
   };
   const s = map[kind] || map.neutral;
+  // v32.4: unified status style + quick actions (visual only)
   return (
     <span
       style={{
@@ -83,7 +87,7 @@ function badge(text: string, kind: "neutral" | "good" | "warn" | "bad"): JSX.Ele
         background: s.bg,
         borderRadius: 999,
         padding: "2px 8px",
-        fontSize: 12,
+        fontSize: 11,
         color: s.color,
         whiteSpace: "nowrap",
         fontWeight: 600,
@@ -110,8 +114,27 @@ function groupBadge(group: GroupKey): JSX.Element {
   return badge("unknown", "neutral");
 }
 
+function EmptyTasks() {
+  // v32.4: unified status style + quick actions (visual only)
+  return (
+    <div
+      style={{
+        border: "1px dashed rgba(15,23,42,0.18)",
+        borderRadius: 16,
+        padding: 18,
+        background: "rgba(255,255,255,0.85)",
+        color: "rgba(15,23,42,0.65)",
+        fontSize: 13,
+      }}
+    >
+      {"No tasks for selected filters"}
+    </div>
+  );
+}
+
 export default function TasksPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const query = useQuery();
   const clientId = useMemo(() => getClientFromLocation(location), [location]);
 
@@ -197,9 +220,24 @@ export default function TasksPage() {
     return u.pathname + "?" + u.searchParams.toString();
   };
 
+  const right = (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <a className="erp-btn erp-btn-ghost" href={clientId ? ("/day?client=" + encodeURIComponent(clientId)) : "/day"}>
+        {t("day.title")}
+      </a>
+      <a className="erp-btn erp-btn-ghost" href={clientId ? ("/client-profile?client=" + encodeURIComponent(clientId)) : "/client-profile"}>
+        {"Client"}
+      </a>
+      <button type="button" className="erp-btn erp-btn-sm" onClick={() => navigate("/tasks")}>
+        {t("common.clear")}
+      </button>
+    </div>
+  );
+
+  // v32.4: unified status style + quick actions (visual only)
   return (
     <PageShell>
-      <UpBackBar title={title} />
+      <UpBackBar title={title} onUp={() => navigate("/")} right={right} />
 
       <div style={{ padding: 12 }}>
         <div
@@ -225,7 +263,7 @@ export default function TasksPage() {
                   borderRadius: 12,
                   border: "1px solid rgba(15,23,42,0.14)",
                   padding: "8px 10px",
-                  fontSize: 12,
+                  fontSize: 11,
                   outline: "none",
                 }}
               />
@@ -239,7 +277,7 @@ export default function TasksPage() {
                   borderRadius: 12,
                   border: "1px solid rgba(15,23,42,0.14)",
                   padding: "8px 10px",
-                  fontSize: 12,
+                  fontSize: 11,
                   background: "white",
                 }}
               >
@@ -259,7 +297,7 @@ export default function TasksPage() {
                   borderRadius: 12,
                   border: "1px solid rgba(15,23,42,0.14)",
                   padding: "8px 10px",
-                  fontSize: 12,
+                  fontSize: 11,
                   background: "white",
                 }}
               >
@@ -280,7 +318,7 @@ export default function TasksPage() {
                   borderRadius: 12,
                   border: "1px solid rgba(15,23,42,0.14)",
                   padding: "8px 10px",
-                  fontSize: 12,
+                  fontSize: 11,
                   background: "white",
                 }}
               >
@@ -299,7 +337,7 @@ export default function TasksPage() {
                   borderRadius: 12,
                   border: "1px solid rgba(15,23,42,0.14)",
                   padding: "8px 10px",
-                  fontSize: 12,
+                  fontSize: 11,
                   textDecoration: "none",
                   color: "rgba(15,23,42,0.85)",
                   background: "white",
@@ -310,7 +348,7 @@ export default function TasksPage() {
             </div>
 
             {!clientId ? (
-              <div style={{ fontSize: 12, color: "rgba(15,23,42,0.55)" }}>
+              <div style={{ fontSize: 11, color: "rgba(15,23,42,0.55)" }}>
                 {t("tasks.table.noClientHint")}
               </div>
             ) : null}
@@ -328,16 +366,16 @@ export default function TasksPage() {
           }}
         >
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: 11 }}>
               <thead>
                 <tr style={{ background: "rgba(15,23,42,0.03)" }}>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)" }}>{t("tasks.table.colTask")}</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colDeadline")}</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colPriority")}</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colRisk")}</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colGroup")}</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 110 }}>{t("tasks.table.colIntent")}</th>
-                  <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 220 }}>{t("tasks.table.colActions")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)" }}>{t("tasks.table.colTask")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colDeadline")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colPriority")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colRisk")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 120 }}>{t("tasks.table.colGroup")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 110 }}>{t("tasks.table.colIntent")}</th>
+                  <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid rgba(15,23,42,0.10)", width: 220 }}>{t("tasks.table.colActions")}</th>
                 </tr>
               </thead>
 
@@ -351,34 +389,35 @@ export default function TasksPage() {
                   const due = x?.deadline ? fmtDate(String(x.deadline)) : t("tasks.unknown");
                   const pr = String(x?.priority ?? "-");
 
-                  return (
+                  // v32.4: unified status style + quick actions (visual only)
+  return (
                     <tr key={String(x?.id ?? "") + ":" + key}>
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
                         <div style={{ fontWeight: 700, color: "rgba(15,23,42,0.92)" }}>{title}</div>
                         {key ? <div style={{ marginTop: 2, color: "rgba(15,23,42,0.55)" }}>{key}</div> : null}
                       </td>
 
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
                         {due}
                       </td>
 
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
                         {badge(pr, "neutral")}
                       </td>
 
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
                         {riskBadge(lvl)}
                       </td>
 
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
                         {groupBadge(grp)}
                       </td>
 
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
                         {inQueue ? badge(t("tasks.table.intentYes"), "good") : badge(t("tasks.table.intentNo"), "neutral")}
                       </td>
 
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
+                      <td style={{ padding: 8, borderBottom: "1px solid rgba(15,23,42,0.08)", verticalAlign: "top" }}>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
                             type="button"
@@ -392,7 +431,7 @@ export default function TasksPage() {
                               border: "1px solid rgba(15,23,42,0.14)",
                               background: "white",
                               padding: "8px 10px",
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: 700,
                               cursor: !clientId || !key ? "not-allowed" : "pointer",
                               opacity: !clientId || !key ? 0.5 : 1,
@@ -413,7 +452,7 @@ export default function TasksPage() {
                               border: "1px solid rgba(15,23,42,0.14)",
                               background: "white",
                               padding: "8px 10px",
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: 700,
                               cursor: !clientId || !key ? "not-allowed" : "pointer",
                               opacity: !clientId || !key ? 0.5 : 1,
@@ -429,8 +468,8 @@ export default function TasksPage() {
 
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: 14, color: "rgba(15,23,42,0.60)" }}>
-                      {t("common.failed")}
+                    <td colSpan={7} style={{ padding: 14 }}>
+                      <EmptyTasks />
                     </td>
                   </tr>
                 ) : null}
@@ -439,7 +478,7 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 12, color: "rgba(15,23,42,0.55)" }}>
+        <div style={{ marginTop: 10, fontSize: 11, color: "rgba(15,23,42,0.55)" }}>
           meta.count: {String(meta?.count ?? "-")} | proc.items: {String(procItems?.length ?? 0)}
         </div>
       </div>

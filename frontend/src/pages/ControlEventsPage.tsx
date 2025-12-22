@@ -1,5 +1,6 @@
-﻿import React, { useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { UpBackBar } from "../components/UpBackBar";
 
 type ControlEvent = {
   id?: string;
@@ -90,6 +91,7 @@ function getDueClasses(severity: DueSeverity): string {
 }
 
 const ControlEventsPage: React.FC = () => {
+  const navigate = useNavigate();
   const query = useQuery();
   const clientFromQuery =
     query.get("client_id") || query.get("client_code") || "ip_usn_dr";
@@ -234,6 +236,17 @@ const ControlEventsPage: React.FC = () => {
 
   return (
     <div className="space-y-4 p-4">
+      <UpBackBar
+        title="Control events"
+        onUp={() => navigate("/")}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <a className="erp-btn erp-btn-ghost" href={clientId ? ("/day?client=" + encodeURIComponent(clientId)) : "/day"}>Day</a>
+            <a className="erp-btn erp-btn-ghost" href={clientId ? ("/tasks?client=" + encodeURIComponent(clientId)) : "/tasks"}>Tasks</a>
+            <a className="erp-btn erp-btn-ghost" href={clientId ? ("/client-profile?client=" + encodeURIComponent(clientId)) : "/client-profile"}>Client</a>
+          </div>
+        }
+      />
       <div>
         <h1 className="text-xl font-semibold text-slate-900">
           Control events by client

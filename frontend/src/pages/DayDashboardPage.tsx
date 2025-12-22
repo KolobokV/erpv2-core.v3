@@ -86,7 +86,7 @@ export default function DayDashboardPage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <div className="lg:col-span-7 space-y-6">
-            <TodayFocusBlock tasks={tasks} />
+            <TodayFocusBlock /* v32.1 UX focus: overdue/today visual priority */ tasks={tasks} />
             <GroupedTasksBlock tasks={tasks as any[]} clientId={clientId} />
           </div>
 

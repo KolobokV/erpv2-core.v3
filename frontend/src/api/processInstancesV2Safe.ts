@@ -1,22 +1,23 @@
-export type ProcessInstanceV2 = any;
-
-type Resp = {
-  items?: any[];
+// SAFE MODE PATCHED: suppress console noise on HTTP 500
+export type SafeApiResult<T> = {
+  ok: boolean;
+  items?: T[];
+  error?: string;
 };
 
-function withTrailingSlash(url: string): string {
-  const u = String(url || "").trim();
-  if (!u) return u;
-  if (u.endsWith("/")) return u;
-  return u + "/";
-}
-
-export async function fetchProcessInstancesV2Safe(): Promise<Resp> {
-  const url = withTrailingSlash("/api/internal/process-instances-v2");
-  const res = await fetch(url, { method: "GET" });
-  if (!res.ok) {
-    throw new Error("process_instances_fetch_failed");
+export async function fetchProcessInstancesV2Safe(): Promise<SafeApiResult<any>> {
+  try {
+    const resp = await fetch("/api/internal/process-instances-v2/");
+    if (!resp.ok) {
+      // quiet failure
+      return { ok: false, items: [], error: "HTTP " + resp.status };
+    }
+    const text = await resp.text();
+    if (!text) return { ok: true, items: [] };
+    const data = JSON.parse(text);
+    return { ok: true, items: Array.isArray(data?.items) ? data.items : [] };
+  } catch {
+    // suppress network/json errors
+    return { ok: false, items: [], error: "network" };
   }
-  const data = await res.json();
-  return data || {};
 }

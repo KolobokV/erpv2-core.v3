@@ -1,32 +1,33 @@
-export type SafeFetchMetaState = "ok" | "missing" | "error";
-
-export type SafeFetchResult<T> = {
+export type SafeResult<T> = {
   ok: boolean;
   status: number;
-  data: T;
-  meta: {
-    state: SafeFetchMetaState;
-  };
+  data: T | null;
+  error?: string;
 };
 
-export async function safeFetchJson<T>(
+export async function safeJson<T = any>(
   url: string,
-  fallback: T
-): Promise<SafeFetchResult<T>> {
+  options?: RequestInit
+): Promise<SafeResult<T>> {
   try {
-    const res = await fetch(url);
+    const resp = await fetch(url, options);
+    const status = resp.status;
+    const text = await resp.text();
 
-    if (res.status === 404) {
-      return { ok: false, status: 404, data: fallback, meta: { state: "missing" } };
+    if (!resp.ok) {
+      return { ok: false, status, data: null, error: text || `HTTP ${status}` };
     }
 
-    if (!res.ok) {
-      return { ok: false, status: res.status, data: fallback, meta: { state: "error" } };
+    if (!text) {
+      return { ok: true, status, data: null };
     }
 
-    const json = (await res.json()) as T;
-    return { ok: true, status: res.status, data: json, meta: { state: "ok" } };
-  } catch {
-    return { ok: false, status: 0, data: fallback, meta: { state: "error" } };
+    try {
+      return { ok: true, status, data: JSON.parse(text) as T };
+    } catch {
+      return { ok: false, status, data: null, error: "Invalid JSON response" };
+    }
+  } catch (e: any) {
+    return { ok: false, status: 0, data: null, error: e?.message || "Network error" };
   }
 }

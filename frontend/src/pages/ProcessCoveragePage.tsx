@@ -140,7 +140,12 @@ const ProcessCoveragePage: React.FC = () => {
     setLoading(true);
 
     fetch("/api/internal/process-instances-v2/")
-      .then((r) => r.json())
+      .then(async (r) => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const t = await r.text();
+      if (!t) return null;
+      return JSON.parse(t);
+    })
       .then((j) => {
         if (!mounted) return;
         setInstances(toInstances(j));

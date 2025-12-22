@@ -1,4 +1,6 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { UpBackBar } from "../components/UpBackBar";
 
 type AnyStore = any;
 
@@ -29,6 +31,10 @@ function extractEvents(store: AnyStore): FlatEvent[] {
 }
 
 export default function InternalControlEventsPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const sp = new URLSearchParams(location.search || "");
+  const client = sp.get("client") || sp.get("client_id") || sp.get("client_code") || "";
   const [store, setStore] = useState<AnyStore | null>(null);
   const [events, setEvents] = useState<FlatEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -67,6 +73,17 @@ export default function InternalControlEventsPage() {
 
   return (
     <div style={{ padding: 4 }}>
+      <UpBackBar
+        title="Internal control events"
+        onUp={() => navigate("/")}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <a className="erp-btn erp-btn-ghost" href={client ? ("/day?client=" + encodeURIComponent(client)) : "/day"}>Day</a>
+            <a className="erp-btn erp-btn-ghost" href={client ? ("/tasks?client=" + encodeURIComponent(client)) : "/tasks"}>Tasks</a>
+            <a className="erp-btn erp-btn-ghost" href={client ? ("/client-profile?client=" + encodeURIComponent(client)) : "/client-profile"}>Client</a>
+          </div>
+        }
+      />
       <div
         style={{
           display: "flex",

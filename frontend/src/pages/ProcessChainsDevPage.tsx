@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 type ChainRun = {
   id?: string;
@@ -95,7 +95,12 @@ const ProcessChainsDevPage: React.FC = () => {
       if (!resp.ok) {
         throw new Error("Failed to load chains dev: " + resp.status);
       }
-      const data: RunsResponse = await resp.json();
+      const data: RunsResponse = (async () => {
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const t = await resp.text();
+      if (!t) return null;
+      return JSON.parse(t);
+    })();
       const list = toRunsList(data);
       list.sort((a, b) => {
         const sa = getRunStartedAt(a) || "";
@@ -144,7 +149,12 @@ const ProcessChainsDevPage: React.FC = () => {
       if (!resp.ok) {
         throw new Error("Run failed: " + resp.status);
       }
-      const json = await resp.json();
+      const json = (async () => {
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const t = await resp.text();
+      if (!t) return null;
+      return JSON.parse(t);
+    })();
       const status = (json as any).status || (json as any).result || "ok";
       setRunInfo(`Run completed with status: ${status}`);
       await loadRuns();

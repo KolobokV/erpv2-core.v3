@@ -122,18 +122,68 @@ function instanceHasRisk(i: Instance): boolean {
 const InternalProcessesPage: React.FC = () => {
   const [items, setItems] = useState<Instance[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loc = useLocation();
   const nav = useNavigate();
   const client = useMemo(() => getClientFromSearch(loc.search), [loc.search]);
 
   useEffect(() => {
-    fetch("/api/internal/process-instances-v2/")
-      .then((r) => r.json())
-      .then((j) => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setLoadError(null);
+
+        const r = await fetch("/api/internal/process-instances-v2/");
+
+        if (!r.ok) {
+          const txt = await r.text().catch(() => "");
+          const msg = "HTTP " + String(r.status) + (txt ? ": " + txt.slice(0, 200) : "");
+          if (!cancelled) {
+            setItems([]);
+            setLoadError(msg);
+          }
+          return;
+        }
+
+        const raw = await r.text();
+        if (!raw || raw.trim().length === 0) {
+          if (!cancelled) {
+            setItems([]);
+            setLoadError("Empty response");
+          }
+          return;
+        }
+
+        let j: any = null;
+        try {
+          j = JSON.parse(raw);
+        } catch {
+          if (!cancelled) {
+            setItems([]);
+            setLoadError("Invalid JSON response");
+          }
+          return;
+        }
+
         const list = extractInstances(j);
-        setItems(list);
-      });
+        if (!cancelled) {
+          setItems(list);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setItems([]);
+          setLoadError(String(e?.message || e || "Request failed"));
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -193,6 +243,13 @@ const InternalProcessesPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {loadError ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {"Failed to load process instances: " + loadError}
+          </div>
+        ) : null}
+
 
         <div className="grid lg:grid-cols-2 gap-4">
           {/* ===== Instances list ===== */}

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type ControlEventTemplate = {
   type: string;
@@ -25,7 +25,12 @@ const InternalControlEventsStorePage: React.FC = () => {
         if (!resp.ok) {
           throw new Error("Failed to load templates: " + resp.status);
         }
-        const data = (await resp.json()) as ControlEventTemplate[] | null;
+        const data = ((async () => {
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const t = await resp.text();
+      if (!t) return null;
+      return JSON.parse(t);
+    })()) as ControlEventTemplate[] | null;
         if (!isMounted) return;
 
         if (!data) {
