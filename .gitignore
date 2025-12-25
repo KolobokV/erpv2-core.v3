@@ -1,2 +1,28 @@
-﻿*.bak_*
+﻿# backups
+*.bak_*
 **/*.bak_*
+
+# python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# node
+**/node_modules/
+**/dist/
+**/.vite/
+
+# venv
+**/venv/
+
+# archives and big artifacts
+*.zip
+**/*.zip
+*_savepoints*/
+**/_savepoints/
+**/_backups/
+**/*dump*
+**/*backup*
+
+# local env
+.env
