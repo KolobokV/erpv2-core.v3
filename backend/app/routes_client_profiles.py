@@ -1,50 +1,94 @@
 ﻿import json
-import os
+import uuid
+import logging
+from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
+logger = logging.getLogger(__name__)
 
-CANDIDATE_PATHS = [
-    os.path.join(BASE_DIR, "client_profiles.json"),
-    os.path.join(DATA_DIR, "client_profiles.json"),
-]
+CLIENT_PROFILES_STORE = "client_profiles_store.json"
 
+# Project root (same pattern as in chain_executor_v2)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+STORE_PATH = BASE_DIR / CLIENT_PROFILES_STORE
 
-def _load_profiles() -> List[Dict[str, Any]]:
-    for path in CANDIDATE_PATHS:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and "items" in data:
-                return data["items"]
-            if isinstance(data, list):
-                return data
-    return []
+router = APIRouter(
+    prefix="/api/internal",
+    tags=["internal.client_profiles"],
+)
 
 
-router = APIRouter(prefix="/client-profiles", tags=["client-profiles"])
-
-
-@router.get("")
-def list_client_profiles():
+def _load_profiles() -> Dict[str, Any]:
     """
-    GET /api/internal/client-profiles
+    Load client profiles from JSON store.
+    Expected structure:
+      { "profiles": [ {...}, {...} ] }
     """
-    items = _load_profiles()
-    return {"items": items}
+    if not STORE_PATH.exists():
+        logger.info("Client profiles store not found at %s, using empty list", STORE_PATH)
+        return {"profiles": []}
+
+    try:
+        with STORE_PATH.open("r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except Exception as exc:
+        logger.exception("Failed to load client profiles store %s: %s", STORE_PATH, exc)
+        return {"profiles": []}
+
+    if isinstance(data, dict) and isinstance(data.get("profiles"), list):
+        return data
+
+    logger.warning("Client profiles store has invalid structure, using empty list")
+    return {"profiles": []}
 
 
-@router.get("/{client_id}")
-def get_client_profile(client_id: str):
+def _save_profiles(data: Dict[str, Any]) -> None:
     """
-    GET /api/internal/client-profiles/{client_id}
+    Save client profiles to JSON store with stable UTF-8 encoding.
     """
-    items = _load_profiles()
-    for p in items:
-        pid = str(p.get("id") or p.get("client_id") or "")
-        if pid == client_id:
-            return p
-    raise HTTPException(status_code=404, detail="Client profile not found")
+    try:
+        with STORE_PATH.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.exception("Failed to save client profiles store %s: %s", STORE_PATH, exc)
+        raise
+
+
+@router.get("/client-profiles")
+def list_profiles() -> List[Dict[str, Any]]:
+    store = _load_profiles()
+    return store.get("profiles", [])
+
+
+@router.post("/client-profiles")
+def create_profile(payload: Dict[str, Any]) -> Dict[str, Any]:
+    code = payload.get("code")
+    label = payload.get("label")
+
+    if not code or not label:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    store = _load_profiles()
+    profiles = store.get("profiles", [])
+
+    for p in profiles:
+        if p.get("code") == code:
+            raise HTTPException(status_code=409, detail="Profile already exists")
+
+    new_profile = {
+        "id": str(uuid.uuid4()),
+        "code": code,
+        "label": label,
+        "profile_type": payload.get("profile_type", "default"),
+        "salary_dates": payload.get("salary_dates", []),
+        "has_tourist_tax": payload.get("has_tourist_tax", False),
+        "settings": payload.get("settings", {}),
+    }
+
+    profiles.append(new_profile)
+    store["profiles"] = profiles
+    _save_profiles(store)
+
+    return new_profile

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "client_01",
+    "name": "Test IP USN DR",
+    "tax_regime": "ip_usn_dr",
+    "employees_count": 0,
+    "salary_dates": [],
+    "has_vat": false,
+    "has_tourist_fee": false,
+    "auto_generate_bank_tasks": true,
+    "extra": {}
+  },
+
+  {
+    "id": "client_02",
+    "name": "Test LLC OSNO NDS",
+    "tax_regime": "llc_osno_nds",
+    "employees_count": 3,
+    "salary_dates": [10, 25],
+    "has_vat": true,
+    "has_tourist_fee": false,
+    "auto_generate_bank_tasks": true,
+    "extra": {}
+  },
+
+  {
+    "id": "client_03",
+    "name": "Test LLC USN DR + Tourist",
+    "tax_regime": "llc_usn_dr_tourist",
+    "employees_count": 2,
+    "salary_dates": [5, 20],
+    "has_vat": false,
+    "has_tourist_fee": true,
+    "auto_generate_bank_tasks": true,
+    "extra": {}
+  }
+]

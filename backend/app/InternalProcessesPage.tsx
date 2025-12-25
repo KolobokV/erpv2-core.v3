@@ -1,683 +1,365 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-type ProcessStage = {
-  id: string;
+/* =======================
+   Types
+======================= */
+
+type Step = {
+  id?: string;
+  key?: string;
   title?: string;
   name?: string;
-  order?: number;
-  description?: string;
-  default_deadline_offset_days?: number;
-  offset_days?: number;
-};
-
-type ProcessDefinition = {
-  id: string;
-  name: string;
-  description?: string;
-  scope?: string;
-  period_type?: string;
-  stages: ProcessStage[];
-  meta?: Record<string, any>;
-};
-
-type ProcessInstance = {
-  id: string;
-  definition_id: string;
-  client_id: string;
-  period: string;
-  status: string;
-  tasks: string[];
-  meta?: Record<string, any>;
-  updated_at?: string;
-};
-
-type GeneratedTasksResponse = {
-  status: string;
-  instance_id: string;
-  created: number;
-  created_task_ids: string[];
-  instance: ProcessInstance;
-};
-
-type TaskItem = {
-  id: string;
-  title: string;
-  description?: string;
-  client_id?: string | null;
-  assigned_to?: string | null;
-  status: string;
-  priority?: string;
+  status?: string;
+  computed_status?: string;
   deadline?: string;
-  tags?: string;
-  is_auto_generated?: boolean;
-  created_at?: string;
-  updated_at?: string;
+  due_date?: string;
+  target_date?: string;
 };
 
-type InstanceTasksResponse = {
-  instance_id: string;
-  count: number;
-  auto_only: boolean;
-  items: TaskItem[];
+type Instance = {
+  id?: string;
+  instance_id?: string;
+  instance_key?: string;
+  key?: string;
+  client_label?: string;
+  client_code?: string;
+  client_id?: string;
+  profile_code?: string;
+  profile_id?: string;
+  period?: string;
+  status?: string;
+  computed_status?: string;
+  steps?: Step[];
 };
+
+/* =======================
+   Helpers
+======================= */
+
+function safeStr(v: any): string {
+  return v === null || v === undefined ? "" : String(v);
+}
+
+function extractInstances(j: any): Instance[] {
+  if (!j) return [];
+  if (Array.isArray(j)) return j;
+  if (Array.isArray(j.instances)) return j.instances;
+  if (Array.isArray(j.items)) return j.items;
+  return [];
+}
+
+function normalizeStatus(raw?: string | null): "open" | "closed" | "error" | "unknown" {
+  const s = (raw || "").toLowerCase().trim();
+  if (["completed", "closed", "done"].includes(s)) return "closed";
+  if (["planned", "open", "in_progress", "in-progress"].includes(s)) return "open";
+  if (["error", "failed", "stuck"].includes(s)) return "error";
+  return "unknown";
+}
+
+function getStableInstanceId(i: Instance): string {
+  return (
+    safeStr(i.instance_id) ||
+    safeStr(i.id) ||
+    safeStr(i.instance_key) ||
+    safeStr(i.key) ||
+    safeStr(i.client_code || i.client_id) + "::" + safeStr(i.period)
+  );
+}
+
+function getClientKey(i: Instance): string {
+  return safeStr(i.client_code || i.client_id || i.client_label);
+}
+
+function parseDate(d?: string): Date | null {
+  if (!d) return null;
+  const dt = new Date(d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function isOverdue(step: Step): boolean {
+  const status = normalizeStatus(step.computed_status || step.status);
+  if (status === "closed") return false;
+  const d = parseDate(step.deadline || step.due_date || step.target_date);
+  if (!d) return false;
+  return d.getTime() < new Date().setHours(0, 0, 0, 0);
+}
+
+function stripNumber(label: string): string {
+  return label.replace(/^\s*\d+\s*[\.\)]\s*/, "");
+}
+
+function getClientFromSearch(search: string): string {
+  try {
+    const sp = new URLSearchParams(search || "");
+    return (sp.get("client") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function clearClientFromUrl(pathname: string, search: string): string {
+  try {
+    const sp = new URLSearchParams(search || "");
+    if (!sp.has("client")) return pathname + (search || "");
+    sp.delete("client");
+    const next = sp.toString();
+    return pathname + (next ? "?" + next : "");
+  } catch {
+    return pathname;
+  }
+}
+
+function instanceHasRisk(i: Instance): boolean {
+  const steps = i.steps || [];
+  return steps.some(isOverdue);
+}
+
+/* =======================
+   Component
+======================= */
 
 const InternalProcessesPage: React.FC = () => {
-  const [definitions, setDefinitions] = useState<ProcessDefinition[]>([]);
-  const [instances, setInstances] = useState<ProcessInstance[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<Instance[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [creatingDefinition, setCreatingDefinition] = useState(false);
-  const [creatingInstance, setCreatingInstance] = useState(false);
-
-  const [newDefName, setNewDefName] = useState("Monthly Closing");
-  const [newDefDescription, setNewDefDescription] = useState(
-    "Basic monthly accounting workflow"
-  );
-  const [newDefPeriodType, setNewDefPeriodType] = useState("monthly");
-
-  const [newInstClientId, setNewInstClientId] = useState("client_demo_01");
-  const [newInstPeriod, setNewInstPeriod] = useState("2025-11");
-  const [newInstDefinitionId, setNewInstDefinitionId] = useState("");
-
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
-    null
-  );
-  const [selectedInstanceTasks, setSelectedInstanceTasks] =
-    useState<InstanceTasksResponse | null>(null);
-  const [tasksLoading, setTasksLoading] = useState(false);
-
-  const [lastRunResult, setLastRunResult] =
-    useState<GeneratedTasksResponse | null>(null);
-
-  const apiBase = "/api/internal";
-
-  async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-    const resp = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-      ...options,
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(
-        `Request failed: ${resp.status} ${resp.statusText} - ${text}`
-      );
-    }
-    return (await resp.json()) as T;
-  }
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [defs, insts] = await Promise.all([
-        fetchJson<ProcessDefinition[]>(`${apiBase}/process-definitions`),
-        fetchJson<ProcessInstance[]>(`${apiBase}/process-instances`),
-      ]);
-      setDefinitions(defs);
-      setInstances(insts);
-      if (!newInstDefinitionId && defs.length > 0) {
-        setNewInstDefinitionId(defs[0].id);
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loc = useLocation();
+  const nav = useNavigate();
+  const client = useMemo(() => getClientFromSearch(loc.search), [loc.search]);
 
   useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setLoadError(null);
+
+        const r = await fetch("/api/internal/process-instances-v2/");
+
+        if (!r.ok) {
+          const txt = await r.text().catch(() => "");
+          const msg = "HTTP " + String(r.status) + (txt ? ": " + txt.slice(0, 200) : "");
+          if (!cancelled) {
+            setItems([]);
+            setLoadError(msg);
+          }
+          return;
+        }
+
+        const raw = await r.text();
+        if (!raw || raw.trim().length === 0) {
+          if (!cancelled) {
+            setItems([]);
+            setLoadError("Empty response");
+          }
+          return;
+        }
+
+        let j: any = null;
+        try {
+          j = JSON.parse(raw);
+        } catch {
+          if (!cancelled) {
+            setItems([]);
+            setLoadError("Invalid JSON response");
+          }
+          return;
+        }
+
+        const list = extractInstances(j);
+        if (!cancelled) {
+          setItems(list);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setItems([]);
+          setLoadError(String(e?.message || e || "Request failed"));
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleCreateDefinition = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setCreatingDefinition(true);
-    try {
-      if (!newDefName.trim()) {
-        throw new Error("Name is required");
-      }
+  const filteredItems = useMemo(() => {
+    if (!client) return items;
+    return items.filter((i) => getClientKey(i) === client);
+  }, [items, client]);
 
-      const payload: ProcessDefinition = {
-        id: "", // will be generated by backend
-        name: newDefName.trim(),
-        description: newDefDescription.trim(),
-        scope: "accounting",
-        period_type: newDefPeriodType,
-        stages: [
-          {
-            id: "collect_bank",
-            title: "Collect bank statements",
-            order: 1,
-            description: "Request statements for the period",
-            default_deadline_offset_days: 0,
-          },
-          {
-            id: "collect_docs",
-            title: "Collect primary documents",
-            order: 2,
-            description: "Request all primary documents",
-            default_deadline_offset_days: 2,
-          },
-          {
-            id: "reconciliation",
-            title: "Perform reconciliation",
-            order: 3,
-            description: "Reconcile accounts and verify balances",
-            default_deadline_offset_days: 5,
-          },
-        ],
-        meta: {},
-      };
-
-      const created = await fetchJson<ProcessDefinition>(
-        `${apiBase}/process-definitions`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        }
-      );
-
-      await loadData();
-      if (!newInstDefinitionId) {
-        setNewInstDefinitionId(created.id);
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to create process definition");
-    } finally {
-      setCreatingDefinition(false);
+  useEffect(() => {
+    const list = filteredItems;
+    if (list.length === 0) {
+      setSelectedId(null);
+      return;
     }
-  };
-
-  const handleCreateInstance = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setCreatingInstance(true);
-    try {
-      if (!newInstClientId.trim()) {
-        throw new Error("Client id is required");
-      }
-      if (!newInstPeriod.trim()) {
-        throw new Error("Period is required");
-      }
-      if (!newInstDefinitionId) {
-        throw new Error("Definition is required");
-      }
-
-      const payload: ProcessInstance = {
-        id: "",
-        definition_id: newInstDefinitionId,
-        client_id: newInstClientId.trim(),
-        period: newInstPeriod.trim(),
-        status: "planned",
-        tasks: [],
-        meta: {},
-      };
-
-      await fetchJson<ProcessInstance>(`${apiBase}/process-instances`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-
-      await loadData();
-    } catch (err: any) {
-      setError(err.message || "Failed to create process instance");
-    } finally {
-      setCreatingInstance(false);
+    const preferred = selectedId && list.some((i) => getStableInstanceId(i) === selectedId);
+    if (!preferred) {
+      setSelectedId(getStableInstanceId(list[0]));
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, filteredItems.length]);
 
-  const handleRunInstance = async (instanceId: string) => {
-    setError(null);
-    setLastRunResult(null);
-    try {
-      const result = await fetchJson<GeneratedTasksResponse>(
-        `${apiBase}/process-instances/${instanceId}/generate-tasks`,
-        {
-          method: "POST",
-        }
-      );
-      setLastRunResult(result);
-      await loadData();
-      if (selectedInstanceId === instanceId) {
-        await loadTasksForInstance(instanceId);
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to run process instance");
-    }
-  };
+  const selected = useMemo(
+    () => filteredItems.find((i) => getStableInstanceId(i) === selectedId) || null,
+    [filteredItems, selectedId]
+  );
 
-  const loadTasksForInstance = async (instanceId: string) => {
-    setTasksLoading(true);
-    setSelectedInstanceId(instanceId);
-    setSelectedInstanceTasks(null);
-    setError(null);
-    try {
-      const tasks = await fetchJson<InstanceTasksResponse>(
-        `${apiBase}/process-instances/${instanceId}/tasks`
-      );
-      setSelectedInstanceTasks(tasks);
-    } catch (err: any) {
-      setError(err.message || "Failed to load tasks for instance");
-    } finally {
-      setTasksLoading(false);
-    }
-  };
+  const steps = selected?.steps || [];
+  const stepStatuses = steps.map((s) => normalizeStatus(s.computed_status || s.status));
 
-  const setInstanceStatus = async (instanceId: string, status: string) => {
-    setError(null);
-    try {
-      const updated = await fetchJson<ProcessInstance>(
-        `${apiBase}/process-instances/${instanceId}/status`,
-        {
-          method: "POST",
-          body: JSON.stringify({ status }),
-        }
-      );
-      setInstances((prev) =>
-        prev.map((inst) =>
-          String(inst.id) === String(updated.id)
-            ? {
-                ...inst,
-                status: updated.status,
-                tasks: (updated as any).tasks ?? inst.tasks,
-                updated_at: updated.updated_at ?? inst.updated_at,
-              }
-            : inst
-        )
-      );
-    } catch (err: any) {
-      setError(err.message || "Failed to set instance status");
-    }
-  };
+  const total = steps.length;
+  const closed = stepStatuses.filter((s) => s === "closed").length;
+  const progress = total ? Math.round((closed / total) * 100) : 0;
 
-  const renderDefinitionStages = (def: ProcessDefinition) => {
-    if (!def.stages || def.stages.length === 0) {
-      return <span className="text-sm text-gray-500">No stages</span>;
-    }
-    return (
-      <ul className="list-disc list-inside text-sm text-gray-700">
-        {def.stages.map((s) => (
-          <li key={s.id}>
-            <span className="font-medium">
-              {s.title || s.name || s.id}
-            </span>{" "}
-            {typeof s.default_deadline_offset_days === "number" && (
-              <span className="text-gray-500">
-                (offset {s.default_deadline_offset_days} days)
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    );
-  };
+  const currentIdx = stepStatuses.findIndex((s) => s !== "closed");
+  const currentStep = currentIdx >= 0 ? steps[currentIdx] : null;
 
-  const renderInstanceStatusBadge = (status: string) => {
-    const base =
-      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium";
-    if (status === "in_progress") {
-      return (
-        <span className={`${base} bg-blue-100 text-blue-800`}>
-          in progress
-        </span>
-      );
-    }
-    if (status === "done") {
-      return (
-        <span className={`${base} bg-green-100 text-green-800`}>
-          done
-        </span>
-      );
-    }
-    return (
-      <span className={`${base} bg-gray-100 text-gray-800`}>
-        planned
-      </span>
-    );
-  };
-
-  const selectedInstance =
-    selectedInstanceId &&
-    instances.find((i) => String(i.id) === String(selectedInstanceId));
+  const overdueSteps = steps.filter(isOverdue);
+  const hasRisk = overdueSteps.length > 0;
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold mb-2">Internal processes</h1>
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-2xl font-semibold">Internal processes</h1>
 
-      {error && (
-        <div className="border border-red-300 bg-red-50 text-red-800 px-4 py-2 rounded">
-          {error}
-        </div>
-      )}
-
-      {loading && (
-        <div className="text-gray-500 text-sm">Loading data...</div>
-      )}
-
-      {/* Definitions block */}
-      <section className="border rounded-xl p-4 space-y-4">
-        <h2 className="text-xl font-semibold">Process definitions</h2>
-
-        <form
-          onSubmit={handleCreateDefinition}
-          className="grid gap-3 md:grid-cols-3"
-        >
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Name</label>
-            <input
-              className="border rounded px-2 py-1 text-sm"
-              value={newDefName}
-              onChange={(e) => setNewDefName(e.target.value)}
-              placeholder="Process name"
-            />
-          </div>
-          <div className="flex flex-col md:col-span-2">
-            <label className="text-sm font-medium mb-1">Description</label>
-            <input
-              className="border rounded px-2 py-1 text-sm"
-              value={newDefDescription}
-              onChange={(e) => setNewDefDescription(e.target.value)}
-              placeholder="Process description"
-            />
-          </div>
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Period type</label>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              value={newDefPeriodType}
-              onChange={(e) => setNewDefPeriodType(e.target.value)}
-            >
-              <option value="monthly">monthly</option>
-              <option value="quarterly">quarterly</option>
-              <option value="yearly">yearly</option>
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={creatingDefinition}
-              className="bg-blue-600 text-white text-sm px-4 py-2 rounded disabled:opacity-60"
-            >
-              {creatingDefinition ? "Creating..." : "Create definition"}
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 space-y-2">
-          {definitions.length === 0 ? (
-            <div className="text-sm text-gray-500">No definitions yet.</div>
-          ) : (
-            <table className="w-full text-sm border border-gray-200 rounded overflow-hidden">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="text-left px-2 py-1">ID</th>
-                  <th className="text-left px-2 py-1">Name</th>
-                  <th className="text-left px-2 py-1">Period</th>
-                  <th className="text-left px-2 py-1">Stages</th>
-                </tr>
-              </thead>
-              <tbody>
-                {definitions.map((def) => (
-                  <tr key={def.id} className="border-t">
-                    <td className="px-2 py-1">{def.id}</td>
-                    <td className="px-2 py-1 font-medium">
-                      {def.name}
-                    </td>
-                    <td className="px-2 py-1">
-                      {def.period_type || "-"}
-                    </td>
-                    <td className="px-2 py-1">
-                      {renderDefinitionStages(def)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </section>
-
-      {/* Instances block */}
-      <section className="border rounded-xl p-4 space-y-4">
-        <h2 className="text-xl font-semibold">Process instances</h2>
-
-        <form
-          onSubmit={handleCreateInstance}
-          className="grid gap-3 md:grid-cols-4"
-        >
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Client id</label>
-            <input
-              className="border rounded px-2 py-1 text-sm"
-              value={newInstClientId}
-              onChange={(e) => setNewInstClientId(e.target.value)}
-              placeholder="client id"
-            />
-          </div>
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">Period</label>
-            <input
-              className="border rounded px-2 py-1 text-sm"
-              value={newInstPeriod}
-              onChange={(e) => setNewInstPeriod(e.target.value)}
-              placeholder="YYYY-MM"
-            />
-          </div>
-          <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">
-              Definition
-            </label>
-            <select
-              className="border rounded px-2 py-1 text-sm"
-              value={newInstDefinitionId}
-              onChange={(e) => setNewInstDefinitionId(e.target.value)}
-            >
-              <option value="">Select definition</option>
-              {definitions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.id} - {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={creatingInstance}
-              className="bg-green-600 text-white text-sm px-4 py-2 rounded disabled:opacity-60"
-            >
-              {creatingInstance ? "Creating..." : "Create instance"}
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4 space-y-2">
-          {instances.length === 0 ? (
-            <div className="text-sm text-gray-500">No instances yet.</div>
-          ) : (
-            <table className="w-full text-sm border border-gray-200 rounded overflow-hidden">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="text-left px-2 py-1">ID</th>
-                  <th className="text-left px-2 py-1">Client</th>
-                  <th className="text-left px-2 py-1">Period</th>
-                  <th className="text-left px-2 py-1">Status</th>
-                  <th className="text-left px-2 py-1">Tasks</th>
-                  <th className="text-left px-2 py-1">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {instances.map((inst) => (
-                  <tr key={inst.id} className="border-t">
-                    <td className="px-2 py-1">{inst.id}</td>
-                    <td className="px-2 py-1">{inst.client_id}</td>
-                    <td className="px-2 py-1">{inst.period}</td>
-                    <td className="px-2 py-1">
-                      {renderInstanceStatusBadge(inst.status)}
-                    </td>
-                    <td className="px-2 py-1">
-                      {inst.tasks ? inst.tasks.length : 0}
-                    </td>
-                    <td className="px-2 py-1 space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => handleRunInstance(inst.id)}
-                        className="text-xs px-2 py-1 rounded border border-blue-500 text-blue-600 hover:bg-blue-50"
-                      >
-                        Run
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => loadTasksForInstance(inst.id)}
-                        className="text-xs px-2 py-1 rounded border border-gray-500 text-gray-700 hover:bg-gray-100"
-                      >
-                        View tasks
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setInstanceStatus(inst.id, "planned")
-                        }
-                        className="text-xs px-2 py-1 rounded border border-gray-400 text-gray-700 hover:bg-gray-100"
-                        disabled={inst.status === "planned"}
-                      >
-                        Planned
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setInstanceStatus(inst.id, "in_progress")
-                        }
-                        className="text-xs px-2 py-1 rounded border border-blue-400 text-blue-700 hover:bg-blue-50"
-                        disabled={inst.status === "in_progress"}
-                      >
-                        In progress
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setInstanceStatus(inst.id, "done")}
-                        className="text-xs px-2 py-1 rounded border border-green-400 text-green-700 hover:bg-green-50"
-                        disabled={inst.status === "done"}
-                      >
-                        Done
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {client && (
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
+              <span className="text-slate-500">client</span>
+              <span className="font-medium">{client}</span>
+              <button
+                type="button"
+                className="rounded-full px-1 text-[11px] text-slate-500 hover:bg-slate-100"
+                title="Clear client context"
+                onClick={() => nav(clearClientFromUrl(loc.pathname, loc.search))}
+              >
+                x
+              </button>
+            </div>
           )}
         </div>
 
-        {lastRunResult && (
-          <div className="mt-3 text-sm border border-blue-200 bg-blue-50 px-3 py-2 rounded">
-            <div>
-              Last run for instance{" "}
-              <span className="font-mono">{lastRunResult.instance_id}</span>
+        {loadError ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {"Failed to load process instances: " + loadError}
+          </div>
+        ) : null}
+
+
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* ===== Instances list ===== */}
+          <div className="bg-white border rounded-xl overflow-hidden">
+            <div className="px-4 py-2 border-b text-sm font-semibold">
+              Instances {client ? "(filtered)" : ""}
             </div>
-            <div>
-              Created tasks:{" "}
-              <span className="font-mono">
-                {lastRunResult.created}
-              </span>
-            </div>
-            {lastRunResult.created_task_ids.length > 0 && (
-              <div>
-                IDs:{" "}
-                <span className="font-mono">
-                  {lastRunResult.created_task_ids.join(", ")}
-                </span>
-              </div>
+
+            {filteredItems.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-slate-600">No instances</div>
+            ) : (
+              filteredItems.map((i) => {
+                const id = getStableInstanceId(i);
+                const st = normalizeStatus(i.computed_status || i.status);
+                const risk = instanceHasRisk(i);
+
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setSelectedId(id)}
+                    className={
+                      "w-full text-left px-4 py-3 border-b hover:bg-slate-50 " +
+                      (id === selectedId ? "bg-sky-50" : "")
+                    }
+                  >
+                    <div className="font-medium">
+                      {i.client_label || i.client_code || i.client_id}
+                    </div>
+                    <div className="text-xs text-slate-500">{i.period}</div>
+                    <div className="text-xs mt-1">
+                      status: <span className={risk ? "text-red-600" : ""}>{st}</span>
+                      {risk ? <span className="ml-2 text-red-700">risk</span> : null}
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
-        )}
-      </section>
 
-      {/* Tasks for selected instance */}
-      <section className="border rounded-xl p-4 space-y-4">
-        <h2 className="text-xl font-semibold">Tasks for instance</h2>
-
-        {!selectedInstanceId && (
-          <div className="text-sm text-gray-500">
-            Select an instance and click "View tasks".
-          </div>
-        )}
-
-        {selectedInstanceId && (
-          <div className="space-y-2">
-            <div className="text-sm">
-              Instance:{" "}
-              <span className="font-mono">{selectedInstanceId}</span>{" "}
-              {selectedInstance && (
-                <>
-                  / client{" "}
-                  <span className="font-mono">
-                    {selectedInstance.client_id}
-                  </span>{" "}
-                  / period{" "}
-                  <span className="font-mono">
-                    {selectedInstance.period}
-                  </span>
-                </>
-              )}
-            </div>
-
-            {tasksLoading && (
-              <div className="text-sm text-gray-500">
-                Loading tasks...
-              </div>
-            )}
-
-            {selectedInstanceTasks && (
-              <>
-                <div className="text-sm text-gray-600">
-                  Tasks count:{" "}
-                  <span className="font-mono">
-                    {selectedInstanceTasks.count}
-                  </span>
-                </div>
-                {selectedInstanceTasks.count === 0 ? (
-                  <div className="text-sm text-gray-500">
-                    No tasks for this instance yet.
+          {/* ===== Process card ===== */}
+          {selected && (
+            <div className="bg-white border rounded-xl p-4 space-y-4">
+              <div className="flex justify-between">
+                <div>
+                  <div className="text-xs text-slate-500">Client</div>
+                  <div className="font-semibold">
+                    {selected.client_label || selected.client_code || selected.client_id}
                   </div>
-                ) : (
-                  <table className="w-full text-sm border border-gray-200 rounded overflow-hidden">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="text-left px-2 py-1">ID</th>
-                        <th className="text-left px-2 py-1">Title</th>
-                        <th className="text-left px-2 py-1">Deadline</th>
-                        <th className="text-left px-2 py-1">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedInstanceTasks.items.map((t) => (
-                        <tr key={t.id} className="border-t">
-                          <td className="px-2 py-1 font-mono text-xs">
-                            {t.id}
-                          </td>
-                          <td className="px-2 py-1">{t.title}</td>
-                          <td className="px-2 py-1">
-                            {t.deadline
-                              ? t.deadline.slice(0, 10)
-                              : "-"}
-                          </td>
-                          <td className="px-2 py-1">{t.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-slate-500">Period</div>
+                  <div className="font-semibold">{selected.period}</div>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
+                <div>
+                  Progress: {closed} / {total} ({progress}%)
+                </div>
+                {currentStep && (
+                  <div>
+                    Next action:{" "}
+                    <span className="font-medium">
+                      {stripNumber(currentStep.title || currentStep.name || "")}
+                    </span>
+                  </div>
                 )}
-              </>
-            )}
-          </div>
-        )}
-      </section>
+                {hasRisk && (
+                  <div className="text-red-700">
+                    Risk: {overdueSteps.length} overdue step(s)
+                  </div>
+                )}
+              </div>
+
+              {/* Steps */}
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase">Steps</div>
+                {steps.map((s, idx) => {
+                  const st = normalizeStatus(s.computed_status || s.status);
+                  const overdue = isOverdue(s);
+                  return (
+                    <div
+                      key={idx}
+                      className={
+                        "border rounded p-2 " +
+                        (overdue
+                          ? "bg-red-50 border-red-200"
+                          : st === "closed"
+                          ? "bg-emerald-50"
+                          : idx === currentIdx
+                          ? "bg-sky-50"
+                          : "bg-white")
+                      }
+                    >
+                      <div className="text-sm font-medium">
+                        {idx + 1}. {stripNumber(s.title || s.name || "")}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        status: {st}
+                        {overdue && " (overdue)"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

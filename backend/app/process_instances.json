@@ -1,71 +1,706 @@
 [
   {
-    "id": "ip_usn_dr_monthly-2025-12",
-    "definition_id": "ip_usn_dr_monthly",
-    "period": "2025-12",
-    "created_at": "2025-12-02T07:33:34.627003",
-    "generated_tasks": [
-      {
-        "task_id": "ip_usn_dr_monthly-2025-12-task-1",
-        "title": "Auto task 1",
-        "created_at": "2025-12-03T10:23:02.456266"
-      },
-      {
-        "task_id": "ip_usn_dr_monthly-2025-12-task-2",
-        "title": "Auto task 2",
-        "created_at": "2025-12-03T10:23:02.456310"
-      },
-      {
-        "task_id": "ip_usn_dr_monthly-2025-12-task-3",
-        "title": "Auto task 3",
-        "created_at": "2025-12-03T10:23:02.456312"
-      }
-    ]
+    "id": "821235e0-90dc-4aaa-8fa2-0f14c8652c57",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T11:59:33Z",
+    "updated_at": "2025-11-25T12:01:07Z"
   },
   {
-    "id": "llc_osno_nds_monthly-2025-12",
-    "definition_id": "llc_osno_nds_monthly",
-    "period": "2025-12",
-    "created_at": "2025-12-02T07:33:34.627048",
-    "generated_tasks": [
-      {
-        "task_id": "llc_osno_nds_monthly-2025-12-task-1",
-        "title": "Auto task 1",
-        "created_at": "2025-12-02T10:14:30.387714"
-      },
-      {
-        "task_id": "llc_osno_nds_monthly-2025-12-task-2",
-        "title": "Auto task 2",
-        "created_at": "2025-12-02T10:14:30.387724"
-      },
-      {
-        "task_id": "llc_osno_nds_monthly-2025-12-task-3",
-        "title": "Auto task 3",
-        "created_at": "2025-12-02T10:14:30.387726"
-      }
-    ]
+    "id": "60af394f-b716-4815-a287-d196f06d0cdd",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T12:01:09Z",
+    "updated_at": "2025-11-25T13:14:34Z"
   },
   {
-    "id": "llc_usn_dr_tourist_monthly-2025-12",
-    "definition_id": "llc_usn_dr_tourist_monthly",
+    "id": "266b710a-66f2-450c-a220-f8dde2d56633",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T12:01:10Z",
+    "updated_at": "2025-11-25T12:01:10Z"
+  },
+  {
+    "id": "91cfb5f7-ff57-4b3f-9ffc-4e5c3279e666",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T12:33:32Z",
+    "updated_at": "2025-11-25T12:33:32Z"
+  },
+  {
+    "id": "618c4528-bf0a-42df-b8ef-8e9d5c77175f",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T13:15:20Z",
+    "updated_at": "2025-11-25T13:15:20Z"
+  },
+  {
+    "id": "8fc003a6-5dd2-4570-8ee8-1156fd0234b6",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T18:21:43Z",
+    "updated_at": "2025-11-25T18:21:43Z"
+  },
+  {
+    "id": "55ad5031-7a95-4e02-8182-337ff58cf3cf",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T18:28:06Z",
+    "updated_at": "2025-11-25T18:28:06Z"
+  },
+  {
+    "id": "fb712eae-38c9-4688-b9dd-2d85296ab906",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-25T18:28:09Z",
+    "updated_at": "2025-11-29T18:20:54Z"
+  },
+  {
+    "id": "2a70ab79-81e7-481b-a6ad-f4dfba9653dd",
+    "definition_id": "c34485b6-dbdc-4093-a6ef-4afbfbec1404",
+    "client_id": "client_demo_01",
     "period": "2025-12",
-    "created_at": "2025-12-02T07:33:34.627054",
-    "generated_tasks": [
-      {
-        "task_id": "llc_usn_dr_tourist_monthly-2025-12-task-1",
-        "title": "Auto task 1",
-        "created_at": "2025-12-02T10:02:37.108081"
-      },
-      {
-        "task_id": "llc_usn_dr_tourist_monthly-2025-12-task-2",
-        "title": "Auto task 2",
-        "created_at": "2025-12-02T10:02:37.108090"
-      },
-      {
-        "task_id": "llc_usn_dr_tourist_monthly-2025-12-task-3",
-        "title": "Auto task 3",
-        "created_at": "2025-12-02T10:02:37.108092"
-      }
-    ]
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "09a792ca-6a6b-4288-8c6b-deed35c8b4a7",
+      "3b8220a9-7753-4e53-a56b-ae9a24db832f",
+      "df7a04e6-199f-4628-8043-b8bc329ff342",
+      "3197cbd7-9c75-40d1-acc6-0dbd99d2bd3b",
+      "9f265459-75dd-4cc3-80b5-ff7675b4424d",
+      "ef3d01ed-a73e-4846-9697-e845c19963b1",
+      "4ad4b0c9-1238-4a5a-ab06-8b485ae941cb",
+      "fa92f973-2580-4d0e-b6d5-46561583bd87",
+      "60757438-f6db-458d-9f64-f2a92a57c5a5",
+      "f5e71822-162f-4d93-b032-08eec7a9cf34",
+      "13ee89f3-467d-4f89-881f-ae3bbb5d7e66",
+      "61711497-10dc-4205-a5d0-072f486085e7",
+      "ba13c322-6b90-486f-896c-471c216f4524",
+      "da86e863-b6fd-4141-817d-931ae110f74b",
+      "ec5b075d-f76d-454d-adea-95a23901e179",
+      "347ad29b-35eb-472a-83ec-9564206f9548",
+      "5a6df9d0-2517-4f12-a4db-b6bf7506b356",
+      "874157f0-35ad-480f-b928-ba651ffeebe0",
+      "9326321e-30de-4ff6-aee3-bb899d84d8bc",
+      "d7f07d81-2c62-47c4-9173-3f7182482b75",
+      "6b2743e3-b5bb-4909-9165-619efe534357",
+      "b49290cb-1922-48b7-8518-c709bf6c1e10",
+      "26f05de7-2590-4541-8c1a-0fab5c33b0eb",
+      "0f2ce596-c7ac-453e-ad68-8197bcf30cb2",
+      "832e2c96-c3cc-49f4-86e0-e5cf70273929",
+      "71656a77-9b26-4b55-a300-7308046bb965",
+      "0da31e93-9797-4ecf-98b7-46b48b625b09",
+      "65584caf-7cf1-455d-8d7f-c2e5d460ad8b",
+      "d90cfeeb-c556-422a-ae65-a54d80b33566",
+      "16f570ce-98e5-4d70-95ce-fb3044b8c74b",
+      "6e1f83f3-a8cd-4c90-bf19-8fad3f8f9834",
+      "a131badd-b8c0-422e-b8fb-544d149536c0",
+      "cb50f70b-4b7f-4bc5-abef-e9d49d10fa9d",
+      "febc3683-3649-45be-9303-4e0ee20666dc",
+      "efad1ffb-ac69-4933-81cd-1324ddbfafb7",
+      "cf1649d4-ae48-4727-8ff8-aadf37156c36",
+      "924ffdef-f919-4a84-8f48-74d5211865f6",
+      "8c3cdfa3-a19b-40ce-9fed-55570c6bacba",
+      "c72f7715-8856-46dd-ad28-927679bdbfab",
+      "220ada13-dafb-4acb-ba4f-14f26fd7eeea",
+      "6ea2f173-1199-443d-90f8-1b9c675a262e",
+      "5bcea879-ba21-48e8-a7a2-49fd86fb878e",
+      "a94f77e9-3be2-46d2-a204-d61be5a596ef",
+      "7fd5d68a-9d52-4e00-b1bf-7e1c8a284177",
+      "f1299ccf-2b75-4fa5-8844-30448d2b967a",
+      "72023daa-61d9-498b-a0d1-57816fe85ef6",
+      "ec8273d1-d1f5-4460-82c6-c3c79de261b8",
+      "aa8d9bd5-b861-4a82-af51-1b5324212243"
+    ],
+    "created_at": "2025-11-25T18:30:51Z",
+    "updated_at": "2025-11-29T15:29:54Z"
+  },
+  {
+    "id": "199c67df-e315-4060-b7c9-2da666659ada",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-27T09:30:20Z",
+    "updated_at": "2025-11-27T09:30:28Z"
+  },
+  {
+    "id": "56c807ba-ccd6-4df9-9f49-c7dbd28711c6",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_demo_01",
+    "period": "2025-11",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-11-27T10:40:07Z",
+    "updated_at": "2025-11-27T10:40:07Z"
+  },
+  {
+    "id": "664a0fa7-2e30-401a-bd15-ab4817f96490",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:27Z"
+  },
+  {
+    "id": "6fad7720-9826-49f7-b36a-7d3d720fb3b4",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:27Z"
+  },
+  {
+    "id": "a992f08e-f4de-4571-9b0b-e5d4953c85af",
+    "definition_id": "a2a8d7f0-591b-4a38-8f29-ffe2c611514b",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:27Z"
+  },
+  {
+    "id": "ff8d3aa6-66d7-4cf1-86da-deec741561a0",
+    "definition_id": "b3a5373b-34e5-4990-afb8-9decd30326f5",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "6cafcb2b-c743-40ef-abdd-6f851977a883",
+      "d6263a4d-860b-4f13-b35b-4b3fd3f40c33",
+      "28540593-d23d-493a-b1fb-8ff903d26794"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "4dbcca7a-ceb4-41c7-a34b-4ec1bd11bdef",
+    "definition_id": "b3a5373b-34e5-4990-afb8-9decd30326f5",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "d08ed114-8020-46d4-949b-f6a521830446",
+      "6492dc46-c35c-4ddd-bf14-e63cc921406c",
+      "7af76509-0a16-470d-a3d3-7c2dd656c76a"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "1260a434-5a3b-451e-9459-97c74427275c",
+    "definition_id": "b3a5373b-34e5-4990-afb8-9decd30326f5",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "97c24a4e-d858-4928-a89e-3f3482eac3e2",
+      "8c73b5d4-84ff-4b23-af7d-c7e237c21e31",
+      "41240faa-d6e2-4169-867a-ba3c4ddac806"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "1fcdc33a-9dd5-4184-aa4c-102f47302ff0",
+    "definition_id": "b409f2a2-09b5-4458-afd0-2b7e1d6106d4",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "a9d42682-89e2-4174-afa6-be10ee96dc85",
+      "68c763be-04c7-4167-9980-77326388f8b7",
+      "947a64be-b594-4d36-8086-667162fa7bf5",
+      "2f4b969c-3629-4d07-b1d4-4ad08010f9fd",
+      "48c05817-a886-4db5-887c-ba20defbadef",
+      "99d5e371-7cf5-4f0a-a14c-3728e23d223a"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T12:33:35Z"
+  },
+  {
+    "id": "b8d5244c-80ca-4528-9a48-0df0bce87a5b",
+    "definition_id": "b409f2a2-09b5-4458-afd0-2b7e1d6106d4",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "90fc7352-6006-4b9c-9368-2b25d3c78f2b",
+      "c54780f2-6514-4261-a613-e6c5f6243a49",
+      "1279c013-1e67-4185-84a5-44d5b71b1ae9"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "03269055-3fa9-4b0c-9995-94edfbfc81df",
+    "definition_id": "b409f2a2-09b5-4458-afd0-2b7e1d6106d4",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "4483ed8a-1817-4994-8593-803f1bce6c56",
+      "358b73d9-296c-4a0b-be77-a75709fed577",
+      "454d5cb5-317d-43c5-b386-01707d437a32",
+      "5dae944f-5a0e-4062-b819-8d0647c27761",
+      "a1a4de3f-928c-41dc-b3bb-4b7d86a5b5d9",
+      "20b23361-3a5b-4c81-a2fd-f06c55b5f655"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T12:33:36Z"
+  },
+  {
+    "id": "8265de51-b789-4448-9322-64d67b571bff",
+    "definition_id": "c34485b6-dbdc-4093-a6ef-4afbfbec1404",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "67f498b0-6721-4e22-8174-8fb26f552388",
+      "bf94922a-12bd-4387-8352-46608af41d0a",
+      "501b565e-52f3-4ff5-878a-9b9f681bf581",
+      "063dd038-9417-4495-a409-c6f939d140e3",
+      "5c43d9f5-e4dc-46de-91e1-1bd0cf1615a9",
+      "b4e5ec0b-ad35-4ddc-baef-e10306e457ff"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T12:20:07Z"
+  },
+  {
+    "id": "63226115-9f1e-4b94-8bae-f6190f810940",
+    "definition_id": "c34485b6-dbdc-4093-a6ef-4afbfbec1404",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "ee9ce5b0-0412-4b02-ad81-87138e4f8ecd",
+      "0882420b-f316-4288-99ba-b1227637afe0",
+      "af52ab61-2098-4ad5-b606-20243501405d",
+      "84700066-15c3-4f6a-91dc-a0d37d4a3d0b",
+      "3d8267ee-caf2-4795-897e-4411e48c6522",
+      "d7030136-17f6-4106-a6c9-d350cc3e261d",
+      "8c245c85-47c6-4546-8301-e7b56f3236d9",
+      "46528000-90a0-4c54-bf82-71d60c88823f",
+      "688a8c8d-f2db-4f92-9793-2e3389edf6c3"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T12:20:11Z"
+  },
+  {
+    "id": "991f6346-5478-43ec-9525-82db647eb7eb",
+    "definition_id": "c34485b6-dbdc-4093-a6ef-4afbfbec1404",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "c7f8ca19-545a-47c2-888a-f8771d11cd48",
+      "f20db369-a1a5-42f1-af1c-809fed4c3ead",
+      "b6085b1e-6072-46ce-a76e-5f5b1fdb999c",
+      "bd41eb36-f909-44df-867a-2418a279d936",
+      "43d41cd9-8da3-4d2b-bc0b-7a0c4490a0b6",
+      "b859bc7a-03d3-4ac0-a580-48d122cf8b40"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T12:20:13Z"
+  },
+  {
+    "id": "61e3f33f-e6b2-4a9f-8fc4-047f1047f6cb",
+    "definition_id": "30ed0427-9529-466c-a228-20209fe65045",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "in_progress",
+    "meta": {},
+    "tasks": [
+      "d1d9825c-fb6e-482d-926f-c1ed7e0eda0d",
+      "5263fb91-aae7-4f89-8419-1ee90896e063",
+      "56da8bf2-556e-4543-a511-93db40745774",
+      "48c09695-7903-4fbd-9dac-d034f63a38a7",
+      "5f3402a1-fea6-45ce-be54-37925544528d",
+      "b5eaff56-7286-4eb7-b730-b5bad121e653"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T12:20:14Z"
+  },
+  {
+    "id": "d75cf6ce-299d-4734-9a6d-16a20fb012bd",
+    "definition_id": "30ed0427-9529-466c-a228-20209fe65045",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "3e15e376-ad32-4461-ae0e-ffea778c03a5",
+      "40254e33-eabc-4879-9248-504aae4864a6",
+      "a6745c07-4296-42de-897f-63624b7efb1e"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "8171619a-f6f3-435a-a0bc-0f0cdf22dc61",
+    "definition_id": "30ed0427-9529-466c-a228-20209fe65045",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "8f5a3704-ac56-4fc2-8e2c-fbeceb52e67a",
+      "a2076cb7-1ec6-406a-8ed9-7b42275f84d2",
+      "0755b901-22cd-428b-a61c-a9e95f0cd0df"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "df223625-d7f5-4c25-83d2-91f78781ec6d",
+    "definition_id": "9cad0f02-491a-4d8f-85ee-8935483fd284",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "84521fff-1991-4de6-a50f-483b92046d36",
+      "49f7252e-7320-4685-8a6d-93e983332b6a",
+      "b1f63213-7b8a-4efb-812d-4d45ad93cfb9"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:28Z"
+  },
+  {
+    "id": "aac594a9-b55e-45d5-bc25-d62fdfafc4f6",
+    "definition_id": "9cad0f02-491a-4d8f-85ee-8935483fd284",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "a457a421-79bf-4c89-854a-000a84a6b8bd",
+      "44a59778-549a-490a-bc02-3bea03a4da4b",
+      "bb2bcaa9-9e48-41fd-ac5e-51045d2defe9"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "e13f1728-4d44-4d7e-84e6-798e7c16ca0c",
+    "definition_id": "9cad0f02-491a-4d8f-85ee-8935483fd284",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "34758513-733f-4314-9e2b-ac94b08a90ef",
+      "72fb98d5-98c9-4724-854e-13b2d26a3703",
+      "17579414-d480-44e8-9bc8-bf227a5cb652"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "7a9093ce-ca46-4455-97ab-bd60cdccc379",
+    "definition_id": "1ddb7672-fe71-4923-b4e9-96ca74e2a1a3",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "2e0d565d-f5b1-4d2a-875a-e395aa9daecf",
+      "550fa131-d9bb-4ad7-9672-de238ce39aa5",
+      "15b16223-dc0e-460a-a7ff-23ac2afc9d4e"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "23db629a-1294-4022-887d-9e74eb6c89a0",
+    "definition_id": "1ddb7672-fe71-4923-b4e9-96ca74e2a1a3",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "29adf933-ad03-4a19-aa16-f16775fb16bc",
+      "d3ba6070-64ab-4548-80a9-f7a77b2bb5f5",
+      "4df8b376-b28a-4d4c-9a32-012aa634fca1"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "bbcc8667-ffcb-4faf-bc8a-d9ac6f3da2bb",
+    "definition_id": "1ddb7672-fe71-4923-b4e9-96ca74e2a1a3",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "949fd217-4bc1-433e-95ce-4fd71aaf0d64",
+      "77492101-f765-45c6-8ad9-2ace62cf037f",
+      "16a7b50f-6622-45ac-8c59-13d86e5e2a39"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "ed3c7a3f-bc65-474e-ab91-ca8be37c632b",
+    "definition_id": "e3527cfe-8a31-460f-9288-265c6dc7a2e5",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "25a89f51-ae19-43b4-a6d3-8541db230646",
+      "1a7ac817-e85e-400d-88b0-7613703862dd",
+      "c30d5180-f9ac-45e7-8c8a-eb0713cb62f5"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "d0300b92-6c1b-4ad7-ba28-7a41783815cc",
+    "definition_id": "e3527cfe-8a31-460f-9288-265c6dc7a2e5",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "20d14abf-4bb9-49c2-a6c2-2af1285389f9",
+      "8f025b0b-6e67-4813-a834-132ff8123eb7",
+      "34c6963a-af42-4ecf-84de-9c57d586b9da"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "6b0362dc-bba8-476a-820d-9f80e5a8a625",
+    "definition_id": "e3527cfe-8a31-460f-9288-265c6dc7a2e5",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "065ee195-6000-4bb2-8dc8-d716fc7bd498",
+      "9556892f-61fc-4ed2-881e-9bb6b59fb122",
+      "820f7209-8b1d-48e3-92c3-faefcc69fffc"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "4360f354-86fe-4ada-9f94-e179efe2656b",
+    "definition_id": "5e8aeb25-77d7-4147-8c6a-31f05df92695",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "430471b7-0751-44dd-8d3e-2901a14b322e",
+      "05305b08-8798-4d1f-aa3a-ac4559bb6f97",
+      "fa29a88b-da6e-4eff-9c51-8857eba3a01c"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "b39fde90-06d7-47f7-8ad7-8625d68ffaf8",
+    "definition_id": "5e8aeb25-77d7-4147-8c6a-31f05df92695",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "2a86d009-c905-4d98-8e75-c38cb95bbf12",
+      "46041a53-407d-4f33-962b-1b462f78612c",
+      "13a707b7-1daa-4305-a87c-83365648d392"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "de254448-84ae-4fe7-bf34-197fcc54d936",
+    "definition_id": "5e8aeb25-77d7-4147-8c6a-31f05df92695",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "c48f9fcb-ba32-4003-9c8e-9ab3e0a6f7ec",
+      "49cc7ce5-5640-443a-b032-80e22602b278",
+      "f0bcdf11-6abb-41f9-b555-02dc9a0d3261"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "70f52aec-2fde-4045-8dfe-7e55cfd4ac70",
+    "definition_id": "af5baeff-7957-45df-9b35-8fca97d67812",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "88d53376-8c21-4773-880b-512796d67ddd",
+      "7b1a7c41-e698-4f46-8067-ec7e03044100",
+      "7eb76c06-93ac-4659-9300-6927e2b9e1ed",
+      "7d187b9f-f4b9-412b-93af-8418ba2eceff",
+      "bf1577fc-b4a5-4bb4-bade-9e2b1b640847",
+      "0b0f23b4-e323-4a56-8a15-b064c1448d12",
+      "7471d1ce-9bf4-4b61-a320-163d121b8005",
+      "98a92f97-3f4c-4aca-89e6-fb8af21cf5f0"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:29Z"
+  },
+  {
+    "id": "6daec83e-ba4d-4687-8e46-7460bc9d8d36",
+    "definition_id": "af5baeff-7957-45df-9b35-8fca97d67812",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "961d1642-245d-427a-847d-71f3c35ea444",
+      "804016fc-70cb-4a0f-ac31-618389cc27c7",
+      "139e4bc0-152a-4e8f-951d-214aab482bba",
+      "f5278d3e-827a-49bd-b34f-5d63a93e9fa9",
+      "0a99ff52-ca14-4bdf-9c24-f092626dfb87",
+      "554fb046-dbba-4183-bdae-a413e10be7b0",
+      "36310f64-1910-4bc0-b6da-70ff2ea95d64",
+      "0069284d-0b72-4158-9c52-874ddd33fa1b"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:30Z"
+  },
+  {
+    "id": "43ef5b23-a18f-490f-98cb-bebd5492dc5b",
+    "definition_id": "af5baeff-7957-45df-9b35-8fca97d67812",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "0f03b779-be48-4914-a195-fd8a76b71d71",
+      "3ebc2318-e255-414c-9769-4c0631c1a683",
+      "83e87693-9fb6-4667-8cbb-3e1137fca97e",
+      "b1150bea-2a95-4a51-9ca0-9853ad9544da",
+      "a287f4fa-f615-4681-b1d3-4789ef490472",
+      "3dfeb268-be7d-4724-b913-04b27e56e3d6",
+      "d8d76ac8-36b7-4d6a-82a7-9934bf2a5827",
+      "1fef2b14-5296-49e5-bf65-235841fc87fd"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:30Z"
+  },
+  {
+    "id": "a1aa1d35-bc48-45c7-9bdc-8db554fc6237",
+    "definition_id": "b177ef8f-05a2-4de3-b2fc-2d11ed3a7b5e",
+    "client_id": "client_01",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "7b6db744-5364-4a20-ba22-3edabf8ad062",
+      "5d174794-4587-4c51-8fa6-02ce5ffb3e78",
+      "2e2e2d91-0c8b-46dc-b495-4d8b2c34c045",
+      "ab0b674f-a372-4f83-9e44-2d15620a9dc1",
+      "958290e5-971c-474b-bc6c-c66ad32e2dfd",
+      "93b52e70-fa1a-4575-b956-5f0bcbccec3b",
+      "8baae031-ac46-4a52-8724-9a6646427da0",
+      "cb3f64a4-5bc7-4b50-aa6d-f053a0e368d2"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:30Z"
+  },
+  {
+    "id": "79fd4226-a9d9-4bf8-9cea-aa6977f245e1",
+    "definition_id": "b177ef8f-05a2-4de3-b2fc-2d11ed3a7b5e",
+    "client_id": "client_02",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "9e21830b-1d13-4346-a3f8-1cef5d364568",
+      "843c75c4-e63c-481e-b128-a878c14c4419",
+      "f1034712-92d9-4128-a877-3c57469a248e",
+      "936680aa-cc7f-44a1-afc8-4cedfa2b9c7f",
+      "99dd05e2-e591-4470-a46e-7b806c5a4adc",
+      "25902352-94fe-4cce-874a-d42a166f667c",
+      "eba7c870-29f3-46c8-9e34-8318e7228143",
+      "e3be6ab3-6e00-4930-8ac8-3c1724f0c7f7"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:30Z"
+  },
+  {
+    "id": "965959c0-322a-4942-bc48-629e28018385",
+    "definition_id": "b177ef8f-05a2-4de3-b2fc-2d11ed3a7b5e",
+    "client_id": "client_03",
+    "period": "2025-12",
+    "status": "planned",
+    "meta": {},
+    "tasks": [
+      "f51a8bd6-9fae-4fde-9d63-bba7c8215e54",
+      "3e08802a-b8c0-4588-b305-af010e91f214",
+      "f2288cef-24c9-4a98-9a40-ca3e136ce1d1",
+      "7b027fd5-20b1-44e4-a171-9ef77bfadadc",
+      "2b4212d7-b893-4896-affd-da71e3c6c75f",
+      "4ef4445b-a5fe-443b-9706-6b2007302337",
+      "9574110e-6d22-41bc-8194-5c907837f669",
+      "b234b056-61a3-4e23-b864-7094b232ecc0"
+    ],
+    "created_at": "2025-12-01T11:48:27Z",
+    "updated_at": "2025-12-01T11:48:30Z"
   }
 ]

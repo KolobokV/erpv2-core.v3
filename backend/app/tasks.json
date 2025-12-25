@@ -1,0 +1,182 @@
+[
+  {
+    "id": "task-demo-client-1-bank-statement-2025-12-01",
+    "title": "Bank statement request",
+    "description": "Monthly bank statement request for previous month.",
+    "status": "overdue",
+    "assignee": null,
+    "created_at": "2025-12-04T08:08:36.116Z",
+    "updated_at": null,
+    "due_date": "2025-12-01"
+  },
+  {
+    "id": "task-demo-client-1-primary-docs-2025-12-04",
+    "title": "Primary documents request",
+    "description": "Request primary documents after bank statement is received.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:08:36.116Z",
+    "updated_at": null,
+    "due_date": "2025-12-04"
+  },
+  {
+    "id": "task-demo-client-1-tax-payment-2025-12-14",
+    "title": "Tax payment deadline",
+    "description": "Planned tax payment based on current reporting period.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:08:36.116Z",
+    "updated_at": null,
+    "due_date": "2025-12-14"
+  },
+  {
+    "id": "task-demo-client-1-bank-statement-2025-12-01",
+    "title": "Bank statement request",
+    "description": "Monthly bank statement request for previous month.",
+    "status": "overdue",
+    "assignee": null,
+    "created_at": "2025-12-04T08:08:41.027Z",
+    "updated_at": null,
+    "due_date": "2025-12-01"
+  },
+  {
+    "id": "task-demo-client-1-primary-docs-2025-12-04",
+    "title": "Primary documents request",
+    "description": "Request primary documents after bank statement is received.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:08:41.027Z",
+    "updated_at": null,
+    "due_date": "2025-12-04"
+  },
+  {
+    "id": "task-demo-client-1-tax-payment-2025-12-14",
+    "title": "Tax payment deadline",
+    "description": "Planned tax payment based on current reporting period.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:08:41.027Z",
+    "updated_at": null,
+    "due_date": "2025-12-14"
+  },
+  {
+    "id": "task-demo-client-1-bank-statement-2025-12-01",
+    "title": "Bank statement request",
+    "description": "Monthly bank statement request for previous month.",
+    "status": "overdue",
+    "assignee": null,
+    "created_at": "2025-12-04T08:22:13.460Z",
+    "updated_at": null,
+    "due_date": "2025-12-01"
+  },
+  {
+    "id": "task-demo-client-1-primary-docs-2025-12-04",
+    "title": "Primary documents request",
+    "description": "Request primary documents after bank statement is received.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:22:13.460Z",
+    "updated_at": null,
+    "due_date": "2025-12-04"
+  },
+  {
+    "id": "task-demo-client-1-tax-payment-2025-12-14",
+    "title": "Tax payment deadline",
+    "description": "Planned tax payment based on current reporting period.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:22:13.460Z",
+    "updated_at": null,
+    "due_date": "2025-12-14"
+  },
+  {
+    "id": "task-demo-client-1-bank-statement-2025-12-01",
+    "title": "Bank statement request",
+    "description": "Monthly bank statement request for previous month.",
+    "status": "overdue",
+    "assignee": null,
+    "created_at": "2025-12-04T08:35:36.745770",
+    "updated_at": null,
+    "due_date": "2025-12-01"
+  },
+  {
+    "id": "task-demo-client-1-primary-docs-2025-12-04",
+    "title": "Primary documents request",
+    "description": "Request primary documents after bank statement is received.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:35:36.745770",
+    "updated_at": null,
+    "due_date": "2025-12-04"
+  },
+  {
+    "id": "task-demo-client-1-tax-payment-2025-12-14",
+    "title": "Tax payment deadline",
+    "description": "Planned tax payment based on current reporting period.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:35:36.745770",
+    "updated_at": null,
+    "due_date": "2025-12-14"
+  },
+  {
+    "id": "task-demo-client-1-bank-statement-2025-12-01",
+    "title": "Bank statement request",
+    "description": "Monthly bank statement request for previous month.",
+    "status": "overdue",
+    "assignee": null,
+    "created_at": "2025-12-04T08:36:26.650488",
+    "updated_at": null,
+    "due_date": "2025-12-01"
+  },
+  {
+    "id": "task-demo-client-1-primary-docs-2025-12-04",
+    "title": "Primary documents request",
+    "description": "Request primary documents after bank statement is received.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:36:26.650488",
+    "updated_at": null,
+    "due_date": "2025-12-04"
+  },
+  {
+    "id": "task-demo-client-1-tax-payment-2025-12-14",
+    "title": "Tax payment deadline",
+    "description": "Planned tax payment based on current reporting period.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:36:26.650488",
+    "updated_at": null,
+    "due_date": "2025-12-14"
+  },
+  {
+    "id": "task-demo-client-1-bank-statement-2025-12-01",
+    "title": "Bank statement request",
+    "description": "Monthly bank statement request for previous month.",
+    "status": "overdue",
+    "assignee": null,
+    "created_at": "2025-12-04T08:39:12.784883",
+    "updated_at": null,
+    "due_date": "2025-12-01"
+  },
+  {
+    "id": "task-demo-client-1-primary-docs-2025-12-04",
+    "title": "Primary documents request",
+    "description": "Request primary documents after bank statement is received.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:39:12.784883",
+    "updated_at": null,
+    "due_date": "2025-12-04"
+  },
+  {
+    "id": "task-demo-client-1-tax-payment-2025-12-14",
+    "title": "Tax payment deadline",
+    "description": "Planned tax payment based on current reporting period.",
+    "status": "planned",
+    "assignee": null,
+    "created_at": "2025-12-04T08:39:12.784883",
+    "updated_at": null,
+    "due_date": "2025-12-14"
+  }
+]

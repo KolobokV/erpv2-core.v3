@@ -7,6 +7,8 @@ import { ErpShell, type ErpNavItem } from "./components/layout/ErpShell";
 import TasksPage from "./pages/TasksPage";
 import InternalProcessesPage from "./pages/InternalProcessesPage";
 import ProcessCoveragePage from "./pages/ProcessCoveragePage";
+import ClientCreatePage from "./pages/ClientCreatePage";
+import OnboardingClientsPage from "./pages/OnboardingClientsPage";
 import ClientProfilePage from "./pages/ClientProfilePage";
 import ControlEventsPage from "./pages/ControlEventsPage";
 import InternalControlEventsStorePage from "./pages/InternalControlEventsStorePage";
@@ -87,8 +89,10 @@ function App() {
           <Route path="/client-process-overview/step/:stepId" element={<ClientProcessStepPage />} />
           <Route path="/client-process-overview/event/:eventId" element={<ClientControlEventPage />} />
 
-          <Route path="/process-chains-dev" element={<ProcessChainsDevPage />} />
-        </Routes>
+          <Route path="/client-create" element={<ClientCreatePage />} />
+<Route path="/process-chains-dev" element={<ProcessChainsDevPage />} />
+          <Route path="/onboarding-clients" element={<OnboardingClientsPage />} />
+      </Routes>
       </ErpShell>
     </Router>
   );

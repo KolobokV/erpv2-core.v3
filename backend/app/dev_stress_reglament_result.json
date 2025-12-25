@@ -1,0 +1,70 @@
+{
+  "year": 2025,
+  "month": 12,
+  "iterations": 10,
+  "duration_total_sec": 0.143,
+  "ok_count": 10,
+  "error_count": 0,
+  "runs": [
+    {
+      "iteration": 1,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.016
+    },
+    {
+      "iteration": 2,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.013
+    },
+    {
+      "iteration": 3,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.014
+    },
+    {
+      "iteration": 4,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.013
+    },
+    {
+      "iteration": 5,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.014
+    },
+    {
+      "iteration": 6,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.014
+    },
+    {
+      "iteration": 7,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.012
+    },
+    {
+      "iteration": 8,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.014
+    },
+    {
+      "iteration": 9,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.014
+    },
+    {
+      "iteration": 10,
+      "status": "ok",
+      "error": null,
+      "duration_sec": 0.015
+    }
+  ]
+}

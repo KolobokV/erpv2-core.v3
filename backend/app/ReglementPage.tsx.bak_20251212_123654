@@ -1,0 +1,34 @@
+import React, { useMemo } from "react";
+import { useLocation } from "react-router-dom";
+import { getClientFromLocation } from "../v27/clientContext";
+import { buildV27Bundle } from "../v27/bridge";
+import { V27DerivedPanel } from "../components/V27DerivedPanel";
+
+export default function ReglementPage() {
+  const loc = useLocation();
+  const clientId = getClientFromLocation(loc);
+
+  const bundle = useMemo(() => {
+    if (!clientId) return null;
+    return buildV27Bundle(clientId);
+  }, [clientId]);
+
+  return (
+    <div className="p-4 space-y-4">
+      {bundle ? (
+        <V27DerivedPanel
+          title="V27: profile-derived obligations"
+          clientId={bundle.clientId}
+          derived={bundle.derived}
+          risks={bundle.risks}
+        />
+      ) : null}
+
+      <div className="rounded-xl border p-4">
+        <div className="text-sm text-muted-foreground">
+          This page content is provided by existing v26 Reglement UX. If you see only this block, the original Reglement page file name differs.
+        </div>
+      </div>
+    </div>
+  );
+}

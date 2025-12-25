@@ -1,0 +1,187 @@
+{
+  "instances": [
+    {
+      "id": "deebfca2-e447-4fef-9e5d-70230bb6ccf5",
+      "key": "ip_usn_dr::ip_usn_dr::2025-12",
+      "client_id": "ip_usn_dr",
+      "profile_code": "ip_usn_dr",
+      "period": "2025-12",
+      "status": "open",
+      "source": "dev_script",
+      "events": [],
+      "last_event_code": null,
+      "steps": [
+        {
+          "id": "ce93d7a0-500d-489d-b033-792296898506",
+          "template_id": "generic_doc_request",
+          "title": "Request documents from client",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.900223Z"
+        },
+        {
+          "id": "ffd4a7aa-ea4b-4aea-a953-b3004c2c63c7",
+          "template_id": "generic_upload",
+          "title": "Upload documents to 1C",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.900223Z"
+        },
+        {
+          "id": "98c0b7b0-7d68-450a-b2d7-56de3c344418",
+          "template_id": "generic_control",
+          "title": "Control accountant review",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.900223Z"
+        }
+      ],
+      "created_at": "2025-12-11T10:55:18.900223Z",
+      "updated_at": "2025-12-11T10:55:18.900223Z"
+    },
+    {
+      "id": "a22af098-f929-4019-b426-8b3f03d8d290",
+      "key": "ooo_osno_3_zp1025::ooo_osno_3_zp1025::2025-12",
+      "client_id": "ooo_osno_3_zp1025",
+      "profile_code": "ooo_osno_3_zp1025",
+      "period": "2025-12",
+      "status": "open",
+      "source": "dev_script",
+      "events": [],
+      "last_event_code": null,
+      "steps": [
+        {
+          "id": "b0d0c534-bc24-440a-ab56-4592cc526bd9",
+          "template_id": "generic_doc_request",
+          "title": "Request documents from client",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.900223Z"
+        },
+        {
+          "id": "6cb014d2-2b69-4eab-8876-0a841e045a38",
+          "template_id": "generic_upload",
+          "title": "Upload documents to 1C",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.900223Z"
+        },
+        {
+          "id": "7a237665-3267-4188-8e38-5615e8a46684",
+          "template_id": "generic_control",
+          "title": "Control accountant review",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.900223Z"
+        }
+      ],
+      "created_at": "2025-12-11T10:55:18.900223Z",
+      "updated_at": "2025-12-11T10:55:18.900223Z"
+    },
+    {
+      "id": "b647cd46-9448-4bbc-b5fc-055378f060ae",
+      "key": "ooo_usn_dr_tour::ooo_usn_dr_tour::2025-12",
+      "client_id": "ooo_usn_dr_tour",
+      "profile_code": "ooo_usn_dr_tour",
+      "period": "2025-12",
+      "status": "open",
+      "source": "dev_script",
+      "events": [],
+      "last_event_code": null,
+      "steps": [
+        {
+          "id": "d7396bd8-ecbb-4c3c-8d86-e034fa49f137",
+          "template_id": "generic_doc_request",
+          "title": "Request documents from client",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.903359Z"
+        },
+        {
+          "id": "b4a8697a-a69d-45b6-b50e-6110315501f3",
+          "template_id": "generic_upload",
+          "title": "Upload documents to 1C",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.903359Z"
+        },
+        {
+          "id": "475dd973-ac18-4148-b0fc-0eda8ba6d87f",
+          "template_id": "generic_control",
+          "title": "Control accountant review",
+          "status": "planned",
+          "created_at": "2025-12-11T10:55:18.903359Z"
+        }
+      ],
+      "created_at": "2025-12-11T10:55:18.900223Z",
+      "updated_at": "2025-12-11T10:55:18.900223Z"
+    }
+  ],
+  "ip_usn_dr::2025-12": {
+    "client_code": "ip_usn_dr",
+    "year": 2025,
+    "month": 12,
+    "steps": {
+      "step_templates": [
+        {
+          "id": "generic_doc_request",
+          "name": "Request documents from client",
+          "default_status": "planned"
+        },
+        {
+          "id": "generic_upload",
+          "name": "Upload documents to 1C",
+          "default_status": "planned"
+        },
+        {
+          "id": "generic_control",
+          "name": "Control accountant review",
+          "default_status": "planned"
+        }
+      ]
+    },
+    "status": "completed"
+  },
+  "ooo_osno_3_zp1025::2025-12": {
+    "client_code": "ooo_osno_3_zp1025",
+    "year": 2025,
+    "month": 12,
+    "steps": {
+      "step_templates": [
+        {
+          "id": "generic_doc_request",
+          "name": "Request documents from client",
+          "default_status": "planned"
+        },
+        {
+          "id": "generic_upload",
+          "name": "Upload documents to 1C",
+          "default_status": "planned"
+        },
+        {
+          "id": "generic_control",
+          "name": "Control accountant review",
+          "default_status": "planned"
+        }
+      ]
+    },
+    "status": "completed"
+  },
+  "ooo_usn_dr_tour::2025-12": {
+    "client_code": "ooo_usn_dr_tour",
+    "year": 2025,
+    "month": 12,
+    "steps": {
+      "step_templates": [
+        {
+          "id": "generic_doc_request",
+          "name": "Request documents from client",
+          "default_status": "planned"
+        },
+        {
+          "id": "generic_upload",
+          "name": "Upload documents to 1C",
+          "default_status": "planned"
+        },
+        {
+          "id": "generic_control",
+          "name": "Control accountant review",
+          "default_status": "planned"
+        }
+      ]
+    },
+    "status": "completed"
+  }
+}

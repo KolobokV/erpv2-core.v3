@@ -1,0 +1,19 @@
+{
+  "step_templates": [
+    {
+      "id": "generic_doc_request",
+      "name": "Request documents from client",
+      "default_status": "planned"
+    },
+    {
+      "id": "generic_upload",
+      "name": "Upload documents to 1C",
+      "default_status": "planned"
+    },
+    {
+      "id": "generic_control",
+      "name": "Control accountant review",
+      "default_status": "planned"
+    }
+  ]
+}

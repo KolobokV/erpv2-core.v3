@@ -1,0 +1,60 @@
+﻿{
+    "summary":  {
+                    "created_at":  "2025-12-15T21:40:06.0260008+03:00",
+                    "clients":  [
+                                    "ip_usn_dr",
+                                    "ooo_osno_3_zp1025",
+                                    "ooo_usn_dr_tourism_2_zp0520"
+                                ],
+                    "to_month":  12,
+                    "year":  2025,
+                    "from_month":  12,
+                    "total":  3,
+                    "base_url":  "http://localhost:8000",
+                    "failed":  1
+                },
+    "results":  [
+                    {
+                        "client":  "ip_usn_dr",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  true,
+                        "http":  200,
+                        "status":  "ok",
+                        "run_id":  "18924cba-d3b2-412a-b68e-853c96b5fbc9",
+                        "engine":  "chain_executor_v2",
+                        "started_at":  "2025-12-15T18:40:05.870124Z",
+                        "finished_at":  "2025-12-15T18:40:05.875122Z",
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/ip_usn_dr?year=2025\u0026month=12",
+                        "error":  null
+                    },
+                    {
+                        "client":  "ooo_osno_3_zp1025",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  true,
+                        "http":  200,
+                        "status":  "ok",
+                        "run_id":  "95ee82bc-56d3-4cba-8657-80e730d96109",
+                        "engine":  "chain_executor_v2",
+                        "started_at":  "2025-12-15T18:40:05.980330Z",
+                        "finished_at":  "2025-12-15T18:40:05.987508Z",
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/ooo_osno_3_zp1025?year=2025\u0026month=12",
+                        "error":  null
+                    },
+                    {
+                        "client":  "ooo_usn_dr_tourism_2_zp0520",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  false,
+                        "http":  500,
+                        "status":  "fail",
+                        "run_id":  null,
+                        "engine":  null,
+                        "started_at":  null,
+                        "finished_at":  null,
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/ooo_usn_dr_tourism_2_zp0520?year=2025\u0026month=12",
+                        "error":  "Удаленный сервер возвратил ошибку: (500) Внутренняя ошибка сервера."
+                    }
+                ]
+}

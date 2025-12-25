@@ -1,0 +1,17 @@
+{
+    "created_at":  "2025-12-15T22:12:06.5937979+03:00",
+    "erp":  {
+                "frontend_root":  "C:\\Users\\User\\Desktop\\ERP\\ERPv2_front_stage1",
+                "backend_root":  "C:\\Users\\User\\Desktop\\ERP\\ERPv2_backend_connect"
+            },
+    "git":  {
+                "frontend_root":  "C:\\Users\\User\\Desktop\\erpv2-core.v3\\frontend",
+                "root":  "C:\\Users\\User\\Desktop\\erpv2-core.v3"
+            },
+    "checks":  {
+                   "git_has_dotgit":  true,
+                   "erp_back_app_main":  "C:\\Users\\User\\Desktop\\ERP\\ERPv2_backend_connect\\app\\main.py",
+                   "erp_front_package_json":  "C:\\Users\\User\\Desktop\\ERP\\ERPv2_front_stage1\\package.json",
+                   "git_front_detected":  true
+               }
+}

@@ -1,0 +1,60 @@
+﻿{
+    "summary":  {
+                    "created_at":  "2025-12-15T21:57:34.2197936+03:00",
+                    "clients":  [
+                                    "ip_usn_dr",
+                                    "ooo_osno_3_zp1025",
+                                    "ooo_usn_dr_tour"
+                                ],
+                    "to_month":  12,
+                    "year":  2025,
+                    "from_month":  12,
+                    "total":  3,
+                    "base_url":  "http://localhost:8000",
+                    "failed":  0
+                },
+    "results":  [
+                    {
+                        "client":  "ip_usn_dr",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  true,
+                        "http":  200,
+                        "status":  "ok",
+                        "run_id":  "8de62d24-99b4-46a3-bcea-011af97a5a81",
+                        "engine":  "chain_executor_v2",
+                        "started_at":  "2025-12-15T18:57:34.088008Z",
+                        "finished_at":  "2025-12-15T18:57:34.096149Z",
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/ip_usn_dr?year=2025\u0026month=12",
+                        "error":  null
+                    },
+                    {
+                        "client":  "ooo_osno_3_zp1025",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  true,
+                        "http":  200,
+                        "status":  "ok",
+                        "run_id":  "210e71af-cddb-41c6-99f9-1eed952b70be",
+                        "engine":  "chain_executor_v2",
+                        "started_at":  "2025-12-15T18:57:34.163982Z",
+                        "finished_at":  "2025-12-15T18:57:34.170632Z",
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/ooo_osno_3_zp1025?year=2025\u0026month=12",
+                        "error":  null
+                    },
+                    {
+                        "client":  "ooo_usn_dr_tour",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  true,
+                        "http":  200,
+                        "status":  "ok",
+                        "run_id":  "d96e0256-c489-4be0-8453-fc928e02060e",
+                        "engine":  "chain_executor_v2",
+                        "started_at":  "2025-12-15T18:57:34.195361Z",
+                        "finished_at":  "2025-12-15T18:57:34.204087Z",
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/ooo_usn_dr_tour?year=2025\u0026month=12",
+                        "error":  null
+                    }
+                ]
+}

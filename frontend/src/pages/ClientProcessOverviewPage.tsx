@@ -1,409 +1,251 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 type ClientProfile = {
-  id: string;
-  label: string;
-  short_label?: string;
-};
-
-type ProcessStep = {
-  id: string;
+  client_id?: string;
+  id?: string;
   name?: string;
   title?: string;
-  status?: string;
-  type?: string;
-  due_date?: string;
-  [key: string]: any;
-};
-
-type ProcessInstance = {
-  id: string;
-  client_id: string;
-  label?: string;
-  year?: number;
-  month?: number;
-  period?: string;
-  status?: string;
-  steps?: ProcessStep[];
-  [key: string]: any;
+  tax_mode?: string;
 };
 
 type ControlEvent = {
-  id: string;
-  client_id: string;
-  instance_id?: string;
-  name?: string;
+  id?: string;
+  client_id?: string;
   title?: string;
-  type?: string;
   due_date?: string;
-  year?: number;
-  month?: number;
-  period?: string;
   status?: string;
-  [key: string]: any;
 };
 
-type InstancesResponse = {
-  clients?: ClientProfile[];
-  instances?: ProcessInstance[];
+type ProcessInstance = {
+  id?: string;
+  client_id?: string;
+  title?: string;
+  status?: string;
+  started_at?: string;
 };
 
-function makePeriod(year: number, month: number): string {
-  const mm = String(month).padStart(2, "0");
-  return `${year}-${mm}`;
+type LoadResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+async function fetchJsonSafe<T>(url: string, fallback: T): Promise<LoadResult<T>> {
+  try {
+    const res = await fetch(url, { method: "GET" });
+    if (!res.ok) {
+      return { ok: false, error: `${res.status} ${res.statusText}` };
+    }
+    const data = (await res.json()) as T;
+    return { ok: true, data };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
 }
 
-function matchPeriod(obj: any, year: number, month: number): boolean {
-  if (!obj) {
-    return false;
+function ensureArray<T>(x: unknown): T[] {
+  if (Array.isArray(x)) return x as T[];
+  if (x && typeof x === "object") {
+    const anyObj = x as any;
+    const v = anyObj.items ?? anyObj.data ?? anyObj.results;
+    if (Array.isArray(v)) return v as T[];
   }
-
-  const targetPeriod = makePeriod(year, month);
-
-  if (obj.period === targetPeriod) {
-    return true;
-  }
-
-  const oy = obj.year;
-  const om = obj.month;
-
-  if (oy == null || om == null) {
-    return false;
-  }
-
-  const omInt = typeof om === "string" ? parseInt(om, 10) : om;
-  return Number(oy) === Number(year) && Number(omInt) === Number(month);
+  return [];
 }
 
-const ClientProcessOverviewPage: React.FC = () => {
-  const navigate = useNavigate();
 
-  const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [instances, setInstances] = useState<ProcessInstance[]>([]);
+function pickClientId(p: ClientProfile): string {
+  return (p.client_id || p.id || "").toString();
+}
+
+function pickClientName(p: ClientProfile): string {
+  return (p.name || p.title || pickClientId(p) || "Unknown").toString();
+}
+
+export default function ClientProcessOverviewPage() {
+  const nav = useNavigate();
+  const [sp, setSp] = useSearchParams();
+
+  const qClient = (sp.get("client") || "").trim();
+
+  const [profiles, setProfiles] = useState<ClientProfile[]>([]);
   const [events, setEvents] = useState<ControlEvent[]>([]);
+  const [instances, setInstances] = useState<ProcessInstance[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [diag, setDiag] = useState<{ profiles?: string; events?: string; instances?: string }>({});
 
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [year, setYear] = useState<number>(2025);
-  const [month, setMonth] = useState<number>(12);
+  const selectedClientId = useMemo(() => {
+    if (qClient) return qClient;
+    const first = profiles[0];
+    return first ? pickClientId(first) : "";
+  }, [qClient, profiles]);
 
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Load base data (clients, instances, events) once
   useEffect(() => {
+    let alive = true;
+
     async function loadAll() {
       setLoading(true);
-      setError(null);
-      try {
-        const [clientsResp, instancesResp, eventsResp] = await Promise.all([
-          fetch("/api/internal/client-profiles"),
-          fetch("/api/internal/process-instances-v2/"),
-          fetch("/api/internal/control-events-store/"),
-        ]);
+      setDiag({});
 
-        if (!clientsResp.ok) {
-          throw new Error("Failed to load client profiles");
-        }
+      const rProfiles = await fetchJsonSafe<ClientProfile[]>("/api/internal/client-profiles", []);
+      const rInstances = await fetchJsonSafe<ProcessInstance[]>("/api/internal/process-instances-v2/", []);
+      const rEvents = await fetchJsonSafe<ControlEvent[]>("/api/internal/control-events-store/", []);
 
-        if (!instancesResp.ok) {
-          throw new Error("Failed to load process instances");
-        }
+      if (!alive) return;
 
-        if (!eventsResp.ok) {
-          throw new Error("Failed to load control events store");
-        }
+      if (rProfiles.ok) setProfiles(ensureArray<ClientProfile>(rProfiles.data as unknown));
+      else setDiag((d) => ({ ...d, profiles: rProfiles.error }));
 
-        const clientsJson: any = await clientsResp.json();
-        const instancesJson = (await instancesResp.json()) as InstancesResponse;
-        const eventsJson = (await eventsResp.json()) as ControlEvent[];
+      if (rInstances.ok) setInstances(ensureArray<ProcessInstance>(rInstances.data as unknown));
+      else setDiag((d) => ({ ...d, instances: rInstances.error }));
 
-        // Normalize clients shape: support array and { clients: [...] }
-        let normalizedClients: ClientProfile[] = [];
-        if (Array.isArray(clientsJson)) {
-          normalizedClients = clientsJson;
-        } else if (clientsJson && Array.isArray(clientsJson.clients)) {
-          normalizedClients = clientsJson.clients;
-        }
+      if (rEvents.ok) setEvents(ensureArray<ControlEvent>(rEvents.data as unknown));
+      else setDiag((d) => ({ ...d, events: rEvents.error }));
 
-        setClients(normalizedClients);
-        const allInstances = instancesJson.instances || [];
-        setInstances(allInstances);
-        setEvents(eventsJson || []);
-
-        if (!selectedClientId && normalizedClients.length > 0) {
-          setSelectedClientId(normalizedClients[0].id);
-        }
-      } catch (e: any) {
-        console.error("Error loading client process overview data:", e);
-        setError(e?.message || "Failed to load data");
-      } finally {
-        setLoading(false);
-      }
+      setLoading(false);
     }
 
-    loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadAll();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const currentClient = useMemo(
-    () =>
-      Array.isArray(clients)
-        ? clients.find((c) => c.id === selectedClientId) || null
-        : null,
-    [clients, selectedClientId]
-  );
-
-  const currentInstance = useMemo(() => {
-    if (!selectedClientId || !Array.isArray(instances)) {
-      return null;
+  useEffect(() => {
+    if (!qClient && selectedClientId) {
+      const next = new URLSearchParams(sp);
+      next.set("client", selectedClientId);
+      setSp(next, { replace: true });
     }
-    const forClient = instances.filter(
-      (inst) => String(inst.client_id) === String(selectedClientId)
-    );
-    if (forClient.length === 0) {
-      return null;
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClientId]);
 
-    const exact = forClient.find((inst) => matchPeriod(inst, year, month));
-    if (exact) {
-      return exact;
-    }
+  const visibleProfiles = profiles.slice(0, 200);
 
-    return forClient[forClient.length - 1];
-  }, [instances, selectedClientId, year, month]);
+  const clientInstances = useMemo(() => {
+    if (!selectedClientId) return [];
+    return instances.filter((x) => (x.client_id || "") === selectedClientId);
+  }, [instances, selectedClientId]);
 
-  const currentSteps = useMemo<ProcessStep[]>(() => {
-    if (!currentInstance || !Array.isArray(currentInstance.steps)) {
-      return [];
-    }
-    return currentInstance.steps as ProcessStep[];
-  }, [currentInstance]);
+  const clientEvents = useMemo(() => {
+    if (!selectedClientId) return [];
+    return events.filter((x) => (x.client_id || "") === selectedClientId);
+  }, [events, selectedClientId]);
 
-  const currentEvents = useMemo<ControlEvent[]>(() => {
-    if (!selectedClientId || !Array.isArray(events)) {
-      return [];
-    }
-    return events.filter(
-      (ev) =>
-        String(ev.client_id) === String(selectedClientId) &&
-        matchPeriod(ev, year, month)
-    );
-  }, [events, selectedClientId, year, month]);
-
-  const meta = useMemo(
-    () => ({
-      client_id: selectedClientId || null,
-      client_label: currentClient ? currentClient.label : null,
-      year,
-      month,
-      period: makePeriod(year, month),
-      instance_id: currentInstance ? currentInstance.id : null,
-      instance_period: currentInstance ? currentInstance.period : null,
-      steps_count: currentSteps.length,
-      control_events_count: currentEvents.length,
-    }),
-    [selectedClientId, currentClient, year, month, currentInstance, currentSteps, currentEvents]
-  );
-
-  function handleClientChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setSelectedClientId(e.target.value);
-  }
-
-  function handleYearChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = parseInt(e.target.value, 10);
-    if (!Number.isNaN(v)) {
-      setYear(v);
-    }
-  }
-
-  function handleMonthChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = parseInt(e.target.value, 10);
-    if (!Number.isNaN(v)) {
-      setMonth(v);
-    }
-  }
-
-  function handleStepClick(step: ProcessStep) {
-    if (!step.id) {
-      return;
-    }
-    navigate(`/client-process-overview/step/${step.id}`);
-  }
-
-  function handleEventClick(event: ControlEvent) {
-    if (!event.id) {
-      return;
-    }
-    navigate(`/client-process-overview/event/${event.id}`);
-  }
+  const anyErrors = Boolean(diag.profiles || diag.instances || diag.events);
 
   return (
-    <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold mb-2">Client process overview</h1>
-
-      <div className="flex flex-wrap gap-4 items-end">
-        <div>
-          <label className="block text-sm font-medium mb-1">Client</label>
-          <select
-            className="border rounded px-2 py-1 min-w-[240px]"
-            value={selectedClientId}
-            onChange={handleClientChange}
+    <div style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0 }}>Client process overview</h2>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => nav("/onboarding")} style={{ padding: "8px 12px" }}>
+            Onboarding hub
+          </button>
+          <button
+            onClick={() => nav("/client-profile?client=" + encodeURIComponent(selectedClientId || ""))}
+            style={{ padding: "8px 12px" }}
+            disabled={!selectedClientId}
           >
-            <option value="">Select client</option>
-            {Array.isArray(clients) &&
-              clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.short_label || c.label || c.id}
-                </option>
-              ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Year</label>
-          <input
-            type="number"
-            className="border rounded px-2 py-1 w-24"
-            value={year}
-            onChange={handleYearChange}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Month</label>
-          <input
-            type="number"
-            className="border rounded px-2 py-1 w-20"
-            value={month}
-            min={1}
-            max={12}
-            onChange={handleMonthChange}
-          />
-        </div>
-
-        {loading && <div className="text-sm text-gray-500">Loading...</div>}
-        {error && <div className="text-sm text-red-600">Error: {error}</div>}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Instance block */}
-        <div className="border rounded p-3 bg-white">
-          <h2 className="font-semibold mb-2">Instance</h2>
-          {!selectedClientId && (
-            <div className="text-sm text-gray-500">
-              Select client to see instance.
-            </div>
-          )}
-          {selectedClientId && !currentInstance && (
-            <div className="text-sm text-gray-500">
-              No instance found for this client and period.
-            </div>
-          )}
-          {currentInstance && (
-            <pre className="text-xs bg-gray-50 border rounded p-2 overflow-auto max-h-64">
-              {JSON.stringify(currentInstance, null, 2)}
-            </pre>
-          )}
-        </div>
-
-        {/* Steps block */}
-        <div className="border rounded p-3 bg-white">
-          <h2 className="font-semibold mb-2">
-            Steps ({currentSteps.length})
-          </h2>
-          {currentSteps.length === 0 && (
-            <div className="text-sm text-gray-500">
-              No steps for this client and period.
-            </div>
-          )}
-          {currentSteps.length > 0 && (
-            <div className="border rounded max-h-64 overflow-auto text-xs">
-              <table className="w-full border-collapse">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="border px-2 py-1 text-left">Name</th>
-                    <th className="border px-2 py-1 text-left">Status</th>
-                    <th className="border px-2 py-1 text-left">Due</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentSteps.map((step) => (
-                    <tr
-                      key={step.id || step.name}
-                      className="hover:bg-gray-100 cursor-pointer"
-                      onClick={() => handleStepClick(step)}
-                    >
-                      <td className="border px-2 py-1">
-                        {step.title || step.name || step.id}
-                      </td>
-                      <td className="border px-2 py-1">
-                        {step.status || step.type || ""}
-                      </td>
-                      <td className="border px-2 py-1">
-                        {step.due_date || ""}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Control events block */}
-        <div className="border rounded p-3 bg-white">
-          <h2 className="font-semibold mb-2">
-            Control events ({currentEvents.length})
-          </h2>
-          {currentEvents.length === 0 && (
-            <div className="text-sm text-gray-500">
-              No control events for this client and period.
-            </div>
-          )}
-          {currentEvents.length > 0 && (
-            <div className="border rounded max-h-64 overflow-auto text-xs">
-              <table className="w-full border-collapse">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="border px-2 py-1 text-left">Name</th>
-                    <th className="border px-2 py-1 text-left">Status</th>
-                    <th className="border px-2 py-1 text-left">Due</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentEvents.map((ev) => (
-                    <tr
-                      key={ev.id}
-                      className="hover:bg-gray-100 cursor-pointer"
-                      onClick={() => handleEventClick(ev)}
-                    >
-                      <td className="border px-2 py-1">
-                        {ev.title || ev.name || ev.id}
-                      </td>
-                      <td className="border px-2 py-1">
-                        {ev.status || ev.type || ""}
-                      </td>
-                      <td className="border px-2 py-1">
-                        {ev.due_date || ""}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+            Client profile
+          </button>
         </div>
       </div>
 
-      <div className="border rounded p-3 bg-white">
-        <h2 className="font-semibold mb-2">Meta</h2>
-        <pre className="text-xs bg-gray-50 border rounded p-2 overflow-auto max-h-40">
-          {JSON.stringify(meta, null, 2)}
-        </pre>
+      {anyErrors ? (
+        <div style={{ marginTop: 12, padding: 12, border: "1px solid #f59e0b", borderRadius: 8, background: "#fffbeb" }}>
+          <div style={{ fontWeight: 600 }}>Backend internal endpoints are failing.</div>
+          <div style={{ marginTop: 6, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12, opacity: 0.9 }}>
+            {diag.profiles ? <div>client-profiles: {diag.profiles}</div> : null}
+            {diag.instances ? <div>process-instances-v2: {diag.instances}</div> : null}
+            {diag.events ? <div>control-events-store: {diag.events}</div> : null}
+          </div>
+          <div style={{ marginTop: 8, opacity: 0.9 }}>
+            UI stays usable: you can continue onboarding and open the client profile. Fixing backend errors is separate.
+          </div>
+        </div>
+      ) : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 12, marginTop: 16 }}>
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Clients</div>
+          {loading && visibleProfiles.length === 0 ? <div style={{ opacity: 0.7 }}>Loading...</div> : null}
+          {visibleProfiles.length === 0 && !loading ? (
+            <div style={{ opacity: 0.7 }}>
+              No clients loaded. Use onboarding to create a client, or fix backend internal endpoints.
+            </div>
+          ) : null}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 520, overflow: "auto" }}>
+            {visibleProfiles.map((p) => {
+              const id = pickClientId(p);
+              const name = pickClientName(p);
+              const active = id && id === selectedClientId;
+              return (
+                <button
+                  key={id || name}
+                  onClick={() => {
+                    const next = new URLSearchParams(sp);
+                    next.set("client", id);
+                    setSp(next, { replace: true });
+                  }}
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid " + (active ? "#93c5fd" : "#e5e7eb"),
+                    background: active ? "#eff6ff" : "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{name}</div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{id}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 600 }}>Selected client:</div>
+            <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12 }}>
+              {selectedClientId || "(none)"}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Process instances</div>
+              {clientInstances.length === 0 ? <div style={{ opacity: 0.7 }}>Empty</div> : null}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {clientInstances.slice(0, 50).map((x) => (
+                  <div key={x.id || Math.random()} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{x.title || x.id || "Instance"}</div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>{x.status || ""}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Control events</div>
+              {clientEvents.length === 0 ? <div style={{ opacity: 0.7 }}>Empty</div> : null}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {clientEvents.slice(0, 50).map((x) => (
+                  <div key={x.id || Math.random()} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{x.title || x.id || "Event"}</div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>
+                      {(x.due_date ? "due " + x.due_date : "") + (x.status ? " Р’В· " + x.status : "")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, opacity: 0.75, fontSize: 12 }}>
+            Note: this page is resilient. It will not crash if backend returns 500. Errors are shown in the banner above.
+          </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default ClientProcessOverviewPage;
+}

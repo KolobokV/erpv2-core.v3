@@ -1,0 +1,20 @@
+﻿/* universal text contrast fix */
+body, div, span, p, td, th {
+  color: #1e293b !important; /* slate-800 */
+}
+
+table th {
+  background: #f1f5f9 !important; /* slate-100 */
+}
+
+a {
+  color: #334155 !important; /* slate-700 */
+}
+
+nav a {
+  font-weight: 500;
+}
+
+pre {
+  color: #0f172a !important; /* slate-900 */
+}

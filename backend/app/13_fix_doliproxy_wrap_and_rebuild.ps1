@@ -1,0 +1,208 @@
+param(
+    [string]$Root = "C:\Users\User\Desktop\ERP\ERPv2_backend_connect"
+)
+
+Write-Host "=== ERPv2 backend: doliproxy final shape (wrapped objects) ==="
+Write-Host "Backend root: $Root"
+Write-Host ""
+
+if (-Not (Test-Path $Root)) {
+    Write-Host "[ERROR] Backend root path does not exist."
+    exit 1
+}
+
+$appDir = Join-Path $Root "app"
+$doliFile = Join-Path $appDir "doliproxy.py"
+
+if (-Not (Test-Path $doliFile)) {
+    Write-Host "[ERROR] doliproxy.py not found at: $doliFile"
+    exit 1
+}
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupDir = Join-Path $Root ("_savepoints_backend_fix_wrap_" + $timestamp)
+
+Write-Host "[INFO] Creating backup directory: $backupDir"
+New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+
+Write-Host "[INFO] Backing up doliproxy.py -> $backupDir"
+Copy-Item -Path $doliFile -Destination (Join-Path $backupDir "doliproxy.py.bak") -Force
+
+Write-Host "[INFO] Writing new doliproxy.py (SafeMode + wrapped objects)..."
+
+$code = @'
+import os
+from typing import Any, Dict, Optional, Tuple, List
+
+import httpx
+from fastapi import APIRouter
+
+router = APIRouter(tags=["Dolibarr"])
+
+
+def _get_dolibarr_base_and_key() -> Tuple[str, Optional[str]]:
+    """
+    Read Dolibarr base URL and API key from env.
+    DOLI_API_URL example: http://host.docker.internal:8282/api/index.php
+    This function NEVER raises HTTP exceptions. It only returns (base, key or None).
+    """
+    base = os.getenv("DOLI_API_URL") or "http://host.docker.internal:8282/api/index.php"
+    key = os.getenv("DOLI_API_KEY")
+    return base.rstrip("/"), key
+
+
+async def _call_dolibarr(path: str, params: Optional[Dict[str, Any]] = None) -> Tuple[bool, Any]:
+    """
+    Generic helper to call Dolibarr REST API and return (ok, data_or_error).
+    It NEVER raises HTTPException. All errors are converted to (False, message).
+    On success: (True, json or text).
+    """
+    base, key = _get_dolibarr_base_and_key()
+
+    if not key:
+        return False, "DOLI_API_KEY is not set"
+
+    url = f"{base}/{path.lstrip('/')}"
+    q: Dict[str, Any] = dict(params or {})
+    q["DOLAPIKEY"] = key
+
+    timeout = httpx.Timeout(10.0, connect=5.0)
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, params=q)
+    except httpx.RequestError as exc:
+        return False, f"Dolibarr unreachable: {exc}"
+
+    if resp.status_code != 200:
+        return False, f"Dolibarr error {resp.status_code}: {resp.text}"
+
+    try:
+        return True, resp.json()
+    except ValueError:
+        # Fallback: return raw text if JSON parsing fails
+        return True, resp.text
+
+
+def _normalize_list(data: Any, key: str) -> List[Any]:
+    """
+    Try to extract a list from Dolibarr response.
+    If it is already a list, return it.
+    If it is a dict, try keys: key, "items".
+    Otherwise return empty list.
+    """
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        v = data.get(key)
+        if isinstance(v, list):
+            return v
+        items = data.get("items")
+        if isinstance(items, list):
+            return items
+    return []
+
+
+@router.get("/health/dolibarr")
+async def health_dolibarr() -> Dict[str, Any]:
+    """
+    Simple health-check against Dolibarr.
+    It NEVER returns HTTP 5xx. If Dolibarr is not configured or broken,
+    status will be "error" instead of raising.
+    """
+    ok, _ = await _call_dolibarr("thirdparties", params={"limit": 1})
+    if ok:
+        return {"status": "ok"}
+    return {"status": "error"}
+
+
+@router.get("/clients")
+async def list_clients(limit: int = 100, page: int = 0) -> Dict[str, Any]:
+    """
+    Map /clients -> Dolibarr /thirdparties.
+    On any error returns { "clients": [] } with HTTP 200.
+    """
+    params = {
+        "limit": limit,
+        "page": page,
+        "sortfield": "t.rowid",
+        "sortorder": "ASC",
+    }
+    ok, data = await _call_dolibarr("thirdparties", params=params)
+    clients = _normalize_list(data, "clients") if ok else []
+    return {"clients": clients}
+
+
+@router.get("/invoices")
+async def list_invoices(limit: int = 100) -> Dict[str, Any]:
+    """
+    Map /invoices -> Dolibarr /invoices.
+    On any error returns { "invoices": [] } with HTTP 200.
+    """
+    params = {
+        "limit": limit,
+    }
+    ok, data = await _call_dolibarr("invoices", params=params)
+    invoices = _normalize_list(data, "invoices") if ok else []
+    return {"invoices": invoices}
+
+
+@router.get("/products")
+async def list_products(limit: int = 100) -> Dict[str, Any]:
+    """
+    Map /products -> Dolibarr /products.
+    On any error returns { "products": [] } with HTTP 200.
+    """
+    params = {
+        "limit": limit,
+    }
+    ok, data = await _call_dolibarr("products", params=params)
+    products = _normalize_list(data, "products") if ok else []
+    return {"products": products}
+'@
+
+Set-Content -Path $doliFile -Value $code -Encoding UTF8
+
+Write-Host "[OK] New doliproxy.py written."
+Write-Host ""
+Write-Host "[INFO] Rebuilding backend via docker compose..."
+
+cd $Root
+
+Write-Host "[INFO] docker compose down..."
+docker compose down
+
+Write-Host "[INFO] docker compose build --no-cache..."
+docker compose build --no-cache
+
+Write-Host "[INFO] docker compose up -d..."
+docker compose up -d
+
+Write-Host "[INFO] Waiting 10 seconds for backend to start..."
+Start-Sleep -Seconds 10
+
+$urls = @(
+    "http://localhost:8000/health",
+    "http://localhost:8000/health/dolibarr",
+    "http://localhost:8000/clients?limit=5",
+    "http://localhost:8000/invoices?limit=5",
+    "http://localhost:8000/products?limit=5"
+)
+
+foreach ($u in $urls) {
+    Write-Host ""
+    Write-Host "=== GET $u ==="
+    try {
+        $resp = Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 10
+        Write-Host "StatusCode: $($resp.StatusCode)"
+        if ($resp.Content) {
+            Write-Host "Body:"
+            Write-Host $resp.Content
+        }
+    } catch {
+        Write-Host "[ERROR] Request failed: $($_.Exception.Message)"
+    }
+}
+
+Write-Host ""
+Write-Host "=== Done (doliproxy final shape) ==="

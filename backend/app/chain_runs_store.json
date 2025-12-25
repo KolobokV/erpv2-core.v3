@@ -1,0 +1,1252 @@
+{
+  "runs": [
+    {
+      "id": "26019f80-6779-41db-9217-3a97b69f0c3e",
+      "chain_id": "reglament.ip_usn_dr.monthly",
+      "client_id": "ip_usn_dr",
+      "period": "2025-12",
+      "mode": "reglament",
+      "trigger": "scheduler",
+      "status": "completed",
+      "started_at": "2025-12-09T09:44:38.399382Z",
+      "finished_at": "2025-12-09T09:44:38.400383Z",
+      "steps_generated": 0,
+      "tasks_generated": 0,
+      "error": null
+    },
+    {
+      "id": "0e0d6586-0edb-4f3b-abc8-4384ba49858b",
+      "chain_id": "reglament.ooo_osno_3_zp1025.monthly",
+      "client_id": "ooo_osno_3_zp1025",
+      "period": "2025-12",
+      "mode": "reglament",
+      "trigger": "scheduler",
+      "status": "completed",
+      "started_at": "2025-12-09T09:44:38.414930Z",
+      "finished_at": "2025-12-09T09:44:38.415930Z",
+      "steps_generated": 0,
+      "tasks_generated": 0,
+      "error": null
+    },
+    {
+      "id": "7d03d0d3-3f42-4d79-b1e6-06fe3448e3d5",
+      "chain_id": "reglament.ooo_usn_dr_tour.monthly",
+      "client_id": "ooo_usn_dr_tour",
+      "period": "2025-12",
+      "mode": "reglament",
+      "trigger": "scheduler",
+      "status": "completed",
+      "started_at": "2025-12-09T09:44:38.427663Z",
+      "finished_at": "2025-12-09T09:44:38.428701Z",
+      "steps_generated": 0,
+      "tasks_generated": 0,
+      "error": null
+    },
+    {
+      "id": "7f6e65e3-aa4d-45cf-8000-f8cb1039f86d",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:20:30.847209Z",
+      "finished_at": "2025-12-09T12:20:30.913269Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "bc7c29fe-04ae-42d5-92ad-63710cca8618",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:20:33.006224Z",
+      "finished_at": "2025-12-09T12:20:33.014961Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "230573d3-bc97-4b89-90f0-bf871d662bec",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:20:58.334823Z",
+      "finished_at": "2025-12-09T12:20:58.353455Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "58eb1773-0d6e-454a-b80e-e621e4512d0e",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:21:00.288109Z",
+      "finished_at": "2025-12-09T12:21:00.300068Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "26130ece-8082-4bb4-ba96-8d4c4aa09875",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:21:01.824474Z",
+      "finished_at": "2025-12-09T12:21:01.837966Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "26e67255-0465-410e-8207-0c5401941cfc",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:21:03.141408Z",
+      "finished_at": "2025-12-09T12:21:03.154109Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "f772a8c0-0e9e-4120-9fc7-2c0eb024543a",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:21:04.316801Z",
+      "finished_at": "2025-12-09T12:21:04.330418Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "37ae4f78-41d9-42d9-b32f-7de6f4714f55",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:31:09.875594Z",
+      "finished_at": "2025-12-09T12:31:09.881854Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "64d4f097-da08-4bf6-be18-a6069a33a9b5",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:36:58.126313Z",
+      "finished_at": "2025-12-09T12:36:58.131906Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "acb14756-6252-47ae-b5d4-ab31e817fcf4",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:48:05.561272Z",
+      "finished_at": "2025-12-09T12:48:05.570569Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "6b01b21b-b911-4452-b229-60f9a0baa5e6",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T12:56:05.302243Z",
+      "finished_at": "2025-12-09T12:56:05.313750Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "fd1d3684-edf0-4ea9-bd79-2af237e97213",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T13:54:43.609589Z",
+      "finished_at": "2025-12-09T13:54:43.659158Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "ab3bcd6d-4ae7-4a02-b212-d1f1aa898037",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T13:54:44.570512Z",
+      "finished_at": "2025-12-09T13:54:44.583901Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "45505134-76b4-4d3a-a5d3-8157822b1091",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T14:01:19.972969Z",
+      "finished_at": "2025-12-09T14:01:19.989949Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "9e5e0cb5-733f-4a0d-8559-80136f91bca6",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T19:39:11.732274Z",
+      "finished_at": "2025-12-09T19:39:11.798797Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "c201bf24-bc90-490a-842e-d76718d0f502",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T19:39:15.394356Z",
+      "finished_at": "2025-12-09T19:39:15.421438Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "f031faf9-1d46-42fb-9686-4afef47df476",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2026,
+      "month": 1,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T20:12:42.768541Z",
+      "finished_at": "2025-12-09T20:12:42.787440Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2026-01",
+        "events_created": 3,
+        "tasks_created": 3
+      }
+    },
+    {
+      "id": "60c8bf32-e29c-4058-9ccc-433f7fede81a",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2026,
+      "month": 1,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T20:12:43.865808Z",
+      "finished_at": "2025-12-09T20:12:43.927603Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2026-01",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "10032717-08ac-4a7b-85e1-fcde389f9ada",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2026,
+      "month": 1,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T20:12:45.227705Z",
+      "finished_at": "2025-12-09T20:12:45.249114Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2026-01",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "0a4f641f-bd2e-4f69-aa6e-4ef8962439de",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2026,
+      "month": 1,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T20:12:49.526473Z",
+      "finished_at": "2025-12-09T20:12:49.545501Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2026-01",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "2df68445-f40f-4ed6-a9ba-29e0ef8f77f0",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T20:31:01.827993Z",
+      "finished_at": "2025-12-09T20:31:01.841752Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "a8978760-84f8-4782-a305-7285d25ef0b4",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T20:31:03.624053Z",
+      "finished_at": "2025-12-09T20:31:03.654364Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "caf29791-6d25-49b7-9cbb-2789107f3ebb",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-09T21:13:45.386057Z",
+      "finished_at": "2025-12-09T21:13:45.396600Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "0dc6a96e-ad5d-4e4d-b73b-1e21e0af7f8b",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T10:58:20.269508Z",
+      "finished_at": "2025-12-10T10:58:20.325362Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 4,
+        "tasks_created": 4
+      }
+    },
+    {
+      "id": "1f92c6b2-7e9a-4cc1-8d01-c285f31f2a2f",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T11:03:23.400102Z",
+      "finished_at": "2025-12-10T11:03:23.430437Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "32926be2-0aa2-42e8-9951-7e8c08477d82",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T11:11:35.760777Z",
+      "finished_at": "2025-12-10T11:11:35.772035Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "59030b7a-4fda-4053-9d31-b539c86e5add",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T11:48:52.238987Z",
+      "finished_at": "2025-12-10T11:48:52.270005Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "ebb17dd0-a988-410f-83a2-5246ac04efbf",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T11:49:41.077867Z",
+      "finished_at": "2025-12-10T11:49:41.092140Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "1cbc7069-43cc-4896-8b40-c53e55901077",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T11:54:43.636822Z",
+      "finished_at": "2025-12-10T11:54:43.656165Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "e0d387a6-cfb1-494d-bb1f-a9fca0495402",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T11:54:49.248097Z",
+      "finished_at": "2025-12-10T11:54:49.292475Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "ec5ec174-c09e-4434-9cb0-2f2049055a5d",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T12:02:08.591424Z",
+      "finished_at": "2025-12-10T12:02:08.603220Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "021740b8-6d27-4b21-955e-3045f8b42af7",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T12:36:51.179889Z",
+      "finished_at": "2025-12-10T12:36:51.192187Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "aa60c156-48ad-48bd-afe5-fa950438fb90",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T12:45:29.518601Z",
+      "finished_at": "2025-12-10T12:45:29.543399Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "56d037ee-b0eb-4608-84e2-b8b8f631691f",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T19:42:08.497442Z",
+      "finished_at": "2025-12-10T19:42:08.576150Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "91c896c9-a008-414d-940a-c401aa16c015",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-10T19:45:42.850665Z",
+      "finished_at": "2025-12-10T19:45:42.867334Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "87b2197f-2f9f-44ae-a41b-af3f8d3f0c0a",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T06:31:59.973821Z",
+      "finished_at": "2025-12-11T06:32:00.020764Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "e59ca5bb-633f-4a4a-b4d7-ad3007c075e9",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T08:30:25.351359Z",
+      "finished_at": "2025-12-11T08:30:25.423021Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "95d47e33-0b9d-47eb-afd5-4ab07d78eb45",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:20:16.645988Z",
+      "finished_at": "2025-12-11T09:20:16.663159Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "52a692bb-7683-4ca5-810d-b706d99fc57e",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:21:06.549915Z",
+      "finished_at": "2025-12-11T09:21:06.560517Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "a396ce92-57da-4692-b5db-d2c4284c34f7",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:39:43.993637Z",
+      "finished_at": "2025-12-11T09:39:43.999215Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "564d862b-b112-4fbd-b0ba-fb0cc3711647",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:39:50.024699Z",
+      "finished_at": "2025-12-11T09:39:50.035003Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "09b9bf04-1362-41e3-b01c-dc542f318112",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:44:33.913063Z",
+      "finished_at": "2025-12-11T09:44:33.925549Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "ab456a02-9165-432b-9965-1d56a2309e92",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:57:47.241736Z",
+      "finished_at": "2025-12-11T09:57:47.275095Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "7c945362-3286-4747-8819-9412b293314c",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T09:58:48.031565Z",
+      "finished_at": "2025-12-11T09:58:48.036193Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "cdba6268-af6d-4819-ae5f-d916d1a59345",
+      "mode": "reglement",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T10:03:58.959544Z",
+      "finished_at": "2025-12-11T10:03:58.974342Z",
+      "result": {
+        "mode": "reglament",
+        "period": "2025-12",
+        "process_instances": 3,
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "70a8d8de-8f8a-4715-bb85-728b7c7ad6e3",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T10:04:29.978160Z",
+      "finished_at": "2025-12-11T10:04:29.982475Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "e179f261-fa4f-434e-95b1-839349859e8c",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-11T11:00:45.014146Z",
+      "finished_at": "2025-12-11T11:00:45.014146Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "baf62bf6-1049-4a92-91b6-9eb1f8b455d5",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-12T07:08:11.045854Z",
+      "finished_at": "2025-12-12T07:08:11.110752Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "a8fac2bb-4377-47ec-bade-af9b555c8e26",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T12:42:36.888802Z",
+      "finished_at": "2025-12-15T12:42:36.942036Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "17c3341f-a290-4bdd-ac97-d9d5d26be8bc",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T17:58:49.132265Z",
+      "finished_at": "2025-12-15T17:58:49.165478Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "48520a52-cdd1-4506-89de-f0266d3899d3",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:32:22.491603Z",
+      "finished_at": "2025-12-15T18:32:22.504996Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "18924cba-d3b2-412a-b68e-853c96b5fbc9",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:40:05.870124Z",
+      "finished_at": "2025-12-15T18:40:05.875122Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "95ee82bc-56d3-4cba-8657-80e730d96109",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:40:05.980330Z",
+      "finished_at": "2025-12-15T18:40:05.987508Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "d77b5e19-dbb7-44f1-afe9-ea4f8ed3f9fb",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:43:02.864128Z",
+      "finished_at": "2025-12-15T18:43:02.875752Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "9dcd2bb4-faba-4cbc-bfac-982834068317",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:43:02.950264Z",
+      "finished_at": "2025-12-15T18:43:02.952055Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "8de62d24-99b4-46a3-bcea-011af97a5a81",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:57:34.088008Z",
+      "finished_at": "2025-12-15T18:57:34.096149Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "210e71af-cddb-41c6-99f9-1eed952b70be",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:57:34.163982Z",
+      "finished_at": "2025-12-15T18:57:34.170632Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "d96e0256-c489-4be0-8453-fc928e02060e",
+      "mode": "dev",
+      "client_id": "ooo_usn_dr_tour",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:57:34.195361Z",
+      "finished_at": "2025-12-15T18:57:34.204087Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_usn_dr_tour::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "630f07ca-eabc-4d02-9006-8d79583e344e",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:59:48.413597Z",
+      "finished_at": "2025-12-15T18:59:48.432245Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "59dbb7be-453a-4b06-95bb-fba8efe986b0",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:59:48.499240Z",
+      "finished_at": "2025-12-15T18:59:48.505692Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "a45700f2-0d02-41dc-9bd6-b4b18e5ee2a6",
+      "mode": "dev",
+      "client_id": "ooo_usn_dr_tour",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:59:48.530390Z",
+      "finished_at": "2025-12-15T18:59:48.537614Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_usn_dr_tour::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "694a35b0-f5e9-471b-a571-5726c2bf9130",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:59:51.927719Z",
+      "finished_at": "2025-12-15T18:59:51.938419Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "f4d20ee1-9f5f-4726-80a4-95dcd4b9e6cf",
+      "mode": "dev",
+      "client_id": "ooo_osno_3_zp1025",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:59:52.001317Z",
+      "finished_at": "2025-12-15T18:59:52.009736Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_osno_3_zp1025::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "4e4a90b6-0d2d-4276-a7b6-fa3ac5007697",
+      "mode": "dev",
+      "client_id": "ooo_usn_dr_tour",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T18:59:52.033850Z",
+      "finished_at": "2025-12-15T18:59:52.040358Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ooo_usn_dr_tour::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "99b0a7c5-752b-4466-828f-6f328aa0796c",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T20:07:16.579184Z",
+      "finished_at": "2025-12-15T20:07:16.594616Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "b9cb3bdd-2353-4939-9bdf-6b5540d36de7",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-15T20:12:21.320137Z",
+      "finished_at": "2025-12-15T20:12:21.335594Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    },
+    {
+      "id": "f57510ad-b1a1-445a-aae2-689b99e79c72",
+      "mode": "dev",
+      "client_id": "ip_usn_dr",
+      "year": 2025,
+      "month": 12,
+      "status": "ok",
+      "error": null,
+      "engine": "chain_executor_v2",
+      "started_at": "2025-12-17T21:11:56.486718Z",
+      "finished_at": "2025-12-17T21:11:56.598069Z",
+      "result": {
+        "mode": "dev",
+        "instance_key": "ip_usn_dr::2025-12",
+        "events_created": 0,
+        "tasks_created": 0
+      }
+    }
+  ]
+}

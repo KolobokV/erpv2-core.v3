@@ -44,7 +44,9 @@ export function ErpShell(props: {
                 <span>{x.label}</span>
               </NavLink>
             ))}
-          </nav>
+          <NavLink to="/client-create" className="erp-nav-link">New client</NavLink>      <NavLink to="/onboarding-clients" className="erp-nav-link">Onboarding clients</NavLink>
+
+</nav>
         </aside>
 
         <main className="erp-main">

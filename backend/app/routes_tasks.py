@@ -1,161 +1,91 @@
-﻿from datetime import date, timedelta, datetime
-from typing import Any, Dict, List, Optional
-
-from fastapi import APIRouter, HTTPException, Request
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any, List
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
-# Very simple in-memory storage for demo purposes.
-TASKS: List[Dict[str, Any]] = []
+STORE = Path(__file__).resolve().parent.parent.parent / "tasks_store.json"
 
+def load_store():
+    if not STORE.exists():
+        return {"tasks": []}
+    try:
+        raw = STORE.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return {"tasks": data}
+        if isinstance(data, dict) and isinstance(data.get("tasks"), list):
+            return data
+        return {"tasks": []}
+    except:
+        return {"tasks": []}
 
-def _ensure_seed_tasks() -> None:
-    """Seed some demo tasks if storage is empty."""
-    if TASKS:
-        return
-
-    today = date.today()
-    TASKS.extend(
-        [
-            {
-                "id": "task_demo_01",
-                "title": "Collect bank statements for demo client",
-                "description": "Collect monthly bank statements for demo client.",
-                "status": "planned",
-                "client_id": "client_demo_01",
-                "due_date": today.isoformat(),
-            },
-            {
-                "id": "task_demo_02",
-                "title": "Prepare tax report for demo client",
-                "description": "Prepare simplified tax report.",
-                "status": "in_progress",
-                "client_id": "client_demo_01",
-                "due_date": (today + timedelta(days=5)).isoformat(),
-            },
-            {
-                "id": "task_demo_03",
-                "title": "Upload primary documents",
-                "description": "Upload primary documents to ERP.",
-                "status": "planned",
-                "client_id": "ip_usn_dr",
-                "due_date": (today + timedelta(days=3)).isoformat(),
-            },
-        ]
-    )
-
-
-def _find_task_index(task_id: str) -> Optional[int]:
-    for idx, t in enumerate(TASKS):
-        if str(t.get("id")) == task_id:
-            return idx
-    return None
-
+def save_store(store):
+    STORE.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
 
 @router.get("/tasks")
-async def list_tasks() -> List[Dict[str, Any]]:
-    """
-    Return all tasks from in-memory storage.
-    Frontend expects plain array or object with items; array is fine.
-    """
-    _ensure_seed_tasks()
-    return TASKS
-
+def list_tasks():
+    return load_store().get("tasks", [])
 
 @router.post("/tasks")
-async def create_tasks(request: Request) -> Dict[str, Any]:
-    """
-    Create new tasks.
-    Accepts single task object or list of task objects.
-    Returns summary and created items.
-    """
-    payload = await request.json()
+def create_task(payload: Dict[str, Any]):
+    title = payload.get("title")
+    if not title:
+        raise HTTPException(400,"Missing title")
+    store = load_store()
+    tasks = store["tasks"]
 
-    created: List[Dict[str, Any]] = []
-
-    def normalize_task(raw: Dict[str, Any]) -> Dict[str, Any]:
-        task = dict(raw)
-        if "id" not in task or not task["id"]:
-            task["id"] = f"task_{len(TASKS) + len(created) + 1}"
-        if "status" not in task or not task["status"]:
-            task["status"] = "planned"
-        # Normalize dates if present
-        due_raw = task.get("due_date") or task.get("dueDate") or task.get("deadline")
-        if due_raw:
-            try:
-                d = datetime.fromisoformat(str(due_raw)).date()
-                task["due_date"] = d.isoformat()
-            except Exception:
-                # leave as is if cannot parse
-                task["due_date"] = str(due_raw)
-        return task
-
-    if isinstance(payload, list):
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            t = normalize_task(item)
-            created.append(t)
-            TASKS.append(t)
-    elif isinstance(payload, dict):
-        t = normalize_task(payload)
-        created.append(t)
-        TASKS.append(t)
-
-    return {
-        "status": "ok",
-        "created": len(created),
-        "items": created,
+    now = datetime.utcnow().isoformat()+"Z"
+    t = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "status": payload.get("status","new"),
+        "client_code": payload.get("client_code"),
+        "client_label": payload.get("client_label") or payload.get("client_code"),
+        "priority": payload.get("priority","normal"),
+        "deadline": payload.get("deadline"),
+        "description": payload.get("description"),
+        "created_at": now,
+        "updated_at": now
     }
 
+    tasks.append(t)
+    save_store(store)
+    return t
 
-@router.post("/tasks/{task_id}/start")
-async def start_task(task_id: str) -> Dict[str, Any]:
-    _ensure_seed_tasks()
-    idx = _find_task_index(task_id)
-    if idx is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+@router.post("/tasks/{task_id}/status")
+def update_status(task_id: str, payload: Dict[str,Any]):
+    status = payload.get("status")
+    if not status:
+        raise HTTPException(400, "Missing status")
 
-    TASKS[idx]["status"] = "in_progress"
-    return {"status": "ok", "task": TASKS[idx]}
+    store = load_store()
+    tasks = store["tasks"]
 
+    for t in tasks:
+        if t["id"] == task_id:
+            t["status"] = status
+            t["updated_at"] = datetime.utcnow().isoformat()+"Z"
+            save_store(store)
+            return t
 
-@router.post("/tasks/{task_id}/mark-done")
-async def mark_done(task_id: str) -> Dict[str, Any]:
-    _ensure_seed_tasks()
-    idx = _find_task_index(task_id)
-    if idx is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+    raise HTTPException(404,"Task not found")
 
-    TASKS[idx]["status"] = "done"
-    TASKS[idx]["completed_at"] = datetime.utcnow().isoformat()
-    return {"status": "ok", "task": TASKS[idx]}
+@router.patch("/tasks/{task_id}")
+def patch_task(task_id: str, payload: Dict[str,Any]):
+    store = load_store()
+    tasks = store["tasks"]
 
+    for t in tasks:
+        if t["id"] == task_id:
+            for k,v in payload.items():
+                if k!="id":
+                    t[k]=v
+            t["updated_at"] = datetime.utcnow().isoformat()+"Z"
+            save_store(store)
+            return t
 
-@router.post("/tasks/{task_id}/postpone")
-async def postpone(task_id: str, request: Request) -> Dict[str, Any]:
-    _ensure_seed_tasks()
-    idx = _find_task_index(task_id)
-    if idx is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    body = await request.json()
-    days_raw = body.get("days", 1)
-    try:
-        days = int(days_raw)
-    except Exception:
-        days = 1
-
-    due_raw = TASKS[idx].get("due_date")
-    if due_raw:
-        try:
-            d = datetime.fromisoformat(str(due_raw)).date()
-        except Exception:
-            d = date.today()
-    else:
-        d = date.today()
-
-    new_due = d + timedelta(days=days)
-    TASKS[idx]["due_date"] = new_due.isoformat()
-
-    return {"status": "ok", "task": TASKS[idx]}
+    raise HTTPException(404,"Task not found")

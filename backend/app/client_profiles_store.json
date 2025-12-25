@@ -1,0 +1,31 @@
+﻿{
+  "profiles": [
+    {
+      "id": "ip-usn-dr-001",
+      "code": "ip_usn_dr",
+      "label": "IP USN DR",
+      "profile_type": "usn_dr",
+      "salary_dates": [],
+      "has_tourist_tax": false,
+      "settings": {}
+    },
+    {
+      "id": "ooo-osno-3zp1025-001",
+      "code": "ooo_osno_3_zp1025",
+      "label": "OOO OSNO 3 zp1025",
+      "profile_type": "osno",
+      "salary_dates": [10, 25],
+      "has_tourist_tax": false,
+      "settings": {}
+    },
+    {
+      "id": "ooo-usn-dr-tour-001",
+      "code": "ooo_usn_dr_tour",
+      "label": "OOO USN DR + tourist tax",
+      "profile_type": "usn_dr",
+      "salary_dates": [5, 20],
+      "has_tourist_tax": true,
+      "settings": {}
+    }
+  ]
+}
