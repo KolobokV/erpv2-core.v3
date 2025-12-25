@@ -1,0 +1,30 @@
+{
+    "summary":  {
+                    "base_url":  "http://localhost:8000",
+                    "year":  2025,
+                    "from_month":  12,
+                    "to_month":  12,
+                    "clients":  [
+                                    "ip_usn_dr"
+                                ],
+                    "total":  1,
+                    "failed":  1,
+                    "created_at":  "2025-12-15T21:13:59.5557022+03:00"
+                },
+    "results":  [
+                    {
+                        "client":  "ip_usn_dr",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  false,
+                        "http":  422,
+                        "status":  "fail",
+                        "engine":  null,
+                        "run_id":  null,
+                        "started_at":  null,
+                        "finished_at":  null,
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/=2025\u0026month=12",
+                        "error":  "Удаленный сервер возвратил ошибку: (422) Unprocessable Entity."
+                    }
+                ]
+}

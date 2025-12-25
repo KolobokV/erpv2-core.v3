@@ -1,186 +1,170 @@
-﻿from pathlib import Path
-import json
-import datetime
+﻿import json
 import uuid
-from typing import Any, Dict, List
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-CONTROL_EVENTS_PATH = ROOT_DIR / "control_events_store.json"
-PROCESS_INSTANCES_PATH = ROOT_DIR / "process_instances_store.json"
-
-CLIENT_ID = "ooo_usn_dr_tour_zp520"
-PROFILE_CODE = "ooo_usn_dr_tour_zp520"
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 
-def load_json_list(path: Path) -> List[Dict[str, Any]]:
+DEV_CLIENT_ID = "ooo_usn_dr_tour_zp520"
+DEV_PROFILE_CODE = "ooo_usn_dr_tour_zp520"
+
+
+def get_now_iso() -> str:
+    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+def get_current_period() -> str:
+    now = datetime.utcnow()
+    return f"{now.year:04d}-{now.month:02d}"
+
+
+def load_instances_store(path: Path) -> Tuple[List[Dict[str, Any]], bool]:
     if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
-            return data["items"]
-        return []
-    except Exception:
-        return []
+        return [], False
+
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Support both plain list and {"items": [...]}
+    if isinstance(data, list):
+        return data, False
+
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return list(data["items"]), True
+
+    raise ValueError("Unexpected process_instances_store format")
 
 
-def save_json_list(path: Path, items: List[Dict[str, Any]]) -> None:
-    path.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
+def save_instances_store(path: Path, items: List[Dict[str, Any]], wrapped: bool) -> None:
+    if wrapped:
+        out: Any = {"items": items}
+    else:
+        out = items
+
+    tmp_path = path.with_suffix(".tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
+        json.dump(out, f, indent=2, ensure_ascii=False)
+    tmp_path.replace(path)
 
 
-def ensure_ids_unique(items: List[Dict[str, Any]]) -> None:
-    seen = set()
-    for it in items:
-        _id = it.get("id")
-        if not _id:
-            continue
-        if _id in seen:
-            it["id"] = f"{_id}__dup"
-        else:
-            seen.add(_id)
-
-
-def make_event_id() -> str:
-    return "dev_evt_" + uuid.uuid4().hex[:12]
-
-
-def make_instance_id() -> str:
-    return "dev_pi_" + uuid.uuid4().hex[:12]
-
-
-def compute_period_from_date(date_str: str) -> str:
-    try:
-        dt = datetime.date.fromisoformat(date_str)
-    except Exception:
-        dt = datetime.date.today()
-    return f"{dt.year:04d}-{dt.month:02d}"
-
-
-def compute_instance_status_from_steps(steps: List[Dict[str, Any]]) -> str:
+def compute_status_from_steps(steps: List[Dict[str, Any]]) -> str:
     if not steps:
         return "open"
-    has_error = any((s.get("status") or "").lower() in ("error", "failed") for s in steps)
+
+    has_error = any((step.get("status") or "").lower() == "error" for step in steps)
     if has_error:
         return "error"
-    all_completed = all((s.get("status") or "").lower() == "completed" for s in steps)
-    if all_completed:
+
+    normalized = [(step.get("status") or "").lower() for step in steps]
+    if all(s == "completed" for s in normalized if s):
         return "completed"
-    has_waiting = any((s.get("status") or "").lower() in ("waiting", "planned") for s in steps)
-    if has_waiting:
+
+    has_active = any(s in ("open", "waiting", "pending") for s in normalized)
+    if has_active:
         return "waiting"
+
     return "open"
 
 
-def upsert_test_event_and_instance() -> None:
-    today = datetime.date.today()
-    date_str = today.isoformat()
-    period = compute_period_from_date(date_str)
-    now_iso = datetime.datetime.now().isoformat(timespec="seconds")
+def ensure_default_steps(instance: Dict[str, Any]) -> None:
+    steps = instance.get("steps") or []
+    if steps:
+        # Do not touch existing steps in dev mode
+        return
 
-    # 1) control event
-    control_events = load_json_list(CONTROL_EVENTS_PATH)
-
-    event_id = make_event_id()
-    event = {
-        "id": event_id,
-        "client_id": CLIENT_ID,
-        "profile_code": PROFILE_CODE,
-        "period": period,
-        "event_code": "dev_test_process_run",
-        "date": date_str,
-        "title": "DEV test process run for client 3",
-        "category": "dev",
-        "status": "planned",
-        "payload": {
-            "dev": True,
-            "note": "Created by dev_create_test_process_client3 script",
+    now_iso = get_now_iso()
+    default_templates = [
+        {
+            "title": "Request bank statements",
+            "status": "open",
         },
-        "source": "dev_script",
-        "tags": [
-            "dev",
-            "process:docs_collect",
-            "process:payroll_cycle",
-        ],
-        "depends_on": [],
+        {
+            "title": "Request primary documents",
+            "status": "waiting",
+        },
+        {
+            "title": "Prepare tax and reports",
+            "status": "open",
+        },
+    ]
+
+    new_steps: List[Dict[str, Any]] = []
+    for tmpl in default_templates:
+        new_steps.append(
+            {
+                "id": str(uuid.uuid4()),
+                "title": tmpl["title"],
+                "status": tmpl["status"],
+                "created_at": now_iso,
+                "completed_at": None,
+            }
+        )
+
+    instance["steps"] = new_steps
+
+    status = compute_status_from_steps(new_steps)
+    instance["status"] = status
+    instance["computed_status"] = status
+
+
+def upsert_dev_instance(
+    items: List[Dict[str, Any]],
+    client_id: str,
+    profile_code: str,
+    period: str,
+) -> Dict[str, Any]:
+    key = f"{client_id}::{profile_code}::{period}"
+
+    for inst in items:
+        if inst.get("key") == key:
+            # Existing instance: only ensure steps
+            ensure_default_steps(inst)
+            inst["updated_at"] = get_now_iso()
+            return inst
+
+    now_iso = get_now_iso()
+    new_inst: Dict[str, Any] = {
+        "id": str(uuid.uuid4()),
+        "key": key,
+        "client_id": client_id,
+        "profile_code": profile_code,
+        "period": period,
+        "status": "open",
+        "computed_status": "open",
+        "source": "dev_create_test_process_client3",
+        "events": [],
+        "last_event_code": "dev_test_process_run",
+        "steps": [],
         "created_at": now_iso,
         "updated_at": now_iso,
     }
-    control_events.append(event)
-    ensure_ids_unique(control_events)
-    save_json_list(CONTROL_EVENTS_PATH, control_events)
 
-    # 2) process instance
-    instances = load_json_list(PROCESS_INSTANCES_PATH)
+    ensure_default_steps(new_inst)
+    items.append(new_inst)
+    return new_inst
 
-    key = f"{CLIENT_ID}::{PROFILE_CODE}::{period}"
-    instance = None
-    for inst in instances:
-        if inst.get("key") == key:
-            instance = inst
-            break
 
-    if instance is None:
-        instance = {
-            "id": make_instance_id(),
-            "key": key,
-            "client_id": CLIENT_ID,
-            "profile_code": PROFILE_CODE,
-            "period": period,
-            "status": "open",
-            "source": "auto_from_control_event",
-            "events": [],
-            "last_event_code": None,
-            "steps": [],
-            "created_at": now_iso,
-            "updated_at": now_iso,
-        }
-        instances.append(instance)
+def main() -> None:
+    base_dir = Path(__file__).resolve().parent.parent
+    store_path = base_dir / "process_instances_store.json"
 
-    # attach event
-    events_list = instance.get("events") or []
-    if event_id not in events_list:
-        events_list.append(event_id)
-    instance["events"] = events_list
-    instance["last_event_code"] = event["event_code"]
+    print(f"[INFO] Using store: {store_path}")
+    items, wrapped = load_instances_store(store_path)
+    print(f"[INFO] Loaded {len(items)} instances from store")
 
-    # demo steps, if none
-    steps = instance.get("steps") or []
-    if not steps:
-        steps = [
-            {
-                "id": instance["id"] + "::step1",
-                "title": "Collect documents from client",
-                "status": "completed",
-                "created_at": now_iso,
-                "completed_at": now_iso,
-            },
-            {
-                "id": instance["id"] + "::step2",
-                "title": "Prepare reports and declarations",
-                "status": "waiting",
-                "created_at": now_iso,
-                "completed_at": None,
-            },
-            {
-                "id": instance["id"] + "::step3",
-                "title": "Submit reports to authorities",
-                "status": "open",
-                "created_at": now_iso,
-                "completed_at": None,
-            },
-        ]
-    instance["steps"] = steps
+    period = get_current_period()
+    print(f"[INFO] Target dev instance: client={DEV_CLIENT_ID}, profile={DEV_PROFILE_CODE}, period={period}")
 
-    instance_status = compute_instance_status_from_steps(steps)
-    instance["status"] = instance_status
-    instance["computed_status"] = instance_status
-    instance["updated_at"] = now_iso
+    inst = upsert_dev_instance(items, DEV_CLIENT_ID, DEV_PROFILE_CODE, period)
 
-    save_json_list(PROCESS_INSTANCES_PATH, instances)
+    print(f"[INFO] Instance id: {inst.get('id')}")
+    print(f"[INFO] Instance key: {inst.get('key')}")
+    print(f"[INFO] Steps count: {len(inst.get('steps') or [])}")
+    print(f"[INFO] Instance status: {inst.get('status')} / {inst.get('computed_status')}")
+
+    save_instances_store(store_path, items, wrapped)
+    print("[OK] Dev process instance for client3 updated")
 
 
 if __name__ == "__main__":
-    upsert_test_event_and_instance()
-    print("DEV test event and process instance created for client:", CLIENT_ID)
+    main()

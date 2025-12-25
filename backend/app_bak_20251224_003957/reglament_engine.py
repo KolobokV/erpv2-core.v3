@@ -69,6 +69,7 @@ def _events_ip_usn_dr(period: date) -> List[ControlEvent]:
     client_id = "ip_usn_dr"
     period_end = _end_of_month(period)
 
+    # Bank statement request
     ev_stmt = ControlEvent(
         id=_make_id(client_id, period, "bank-statement"),
         client_id=client_id,
@@ -83,6 +84,7 @@ def _events_ip_usn_dr(period: date) -> List[ControlEvent]:
     )
     events.append(ev_stmt)
 
+    # Documents request (depends on statement)
     ev_docs = ControlEvent(
         id=_make_id(client_id, period, "docs-request"),
         client_id=client_id,
@@ -98,6 +100,7 @@ def _events_ip_usn_dr(period: date) -> List[ControlEvent]:
     )
     events.append(ev_docs)
 
+    # USN book control
     ev_book = ControlEvent(
         id=_make_id(client_id, period, "usn-book"),
         client_id=client_id,
@@ -105,11 +108,12 @@ def _events_ip_usn_dr(period: date) -> List[ControlEvent]:
         title="Update USN book and cost register",
         category="tax_usn_book",
         depends_on=[ev_docs.id],
-        description="Update USN income and expense book, control tax base and 1 percent limit.",
+        description="Update USN income/expense book, control tax base and 1 percent limit.",
         tags=["ip", "usn_dr", "book", "process:usn_month_close"],
     )
     events.append(ev_book)
 
+    # Quarterly USN advance (months 3, 6, 9, 12)
     if period.month in (3, 6, 9, 12):
         quarter_due = date(period.year, period.month, 25)
         ev_usn_adv = ControlEvent(
@@ -127,6 +131,7 @@ def _events_ip_usn_dr(period: date) -> List[ControlEvent]:
         )
         events.append(ev_usn_adv)
 
+    # Annual declaration and final payments only for December period
     if period.month == 12:
         ev_decl = ControlEvent(
             id=_make_id(client_id, period, "usn-annual-declaration"),
@@ -152,6 +157,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
     client_id = "ooo_osno_3_zp1025"
     period_end = _end_of_month(period)
 
+    # Salary payments 10 and 25
     pay_dates = []
     for day in (10, 25):
         try:
@@ -173,6 +179,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
         salary_events.append(ev_salary)
         events.append(ev_salary)
 
+        # NDFL next day after salary
         ev_ndfl = ControlEvent(
             id=_make_id(client_id, period, f"ndfl-{idx}"),
             client_id=client_id,
@@ -185,6 +192,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
         )
         events.append(ev_ndfl)
 
+    # Insurance contributions monthly
     ev_ins = ControlEvent(
         id=_make_id(client_id, period, "insurance"),
         client_id=client_id,
@@ -197,6 +205,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
     )
     events.append(ev_ins)
 
+    # Bank statement and docs
     ev_stmt = ControlEvent(
         id=_make_id(client_id, period, "bank-statement"),
         client_id=client_id,
@@ -223,7 +232,9 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
     )
     events.append(ev_docs)
 
+    # Quarterly VAT, 6-NDFL, RSV (months 3, 6, 9, 12)
     if period.month in (3, 6, 9, 12):
+        # VAT
         ev_vat = ControlEvent(
             id=_make_id(client_id, period, "vat-decl"),
             client_id=client_id,
@@ -236,6 +247,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
         )
         events.append(ev_vat)
 
+        # 6-NDFL
         ev_6ndfl = ControlEvent(
             id=_make_id(client_id, period, "6-ndfl"),
             client_id=client_id,
@@ -248,6 +260,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
         )
         events.append(ev_6ndfl)
 
+        # RSV
         ev_rsv = ControlEvent(
             id=_make_id(client_id, period, "rsv"),
             client_id=client_id,
@@ -260,6 +273,7 @@ def _events_ooo_osno_3_zp1025(period: date) -> List[ControlEvent]:
         )
         events.append(ev_rsv)
 
+    # Annual reporting (December period)
     if period.month == 12:
         ev_bal = ControlEvent(
             id=_make_id(client_id, period, "annual-balance"),
@@ -297,6 +311,7 @@ def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
     client_id = "ooo_usn_dr_tour_zp520"
     period_end = _end_of_month(period)
 
+    # Salary 5 and 20
     pay_dates = []
     for day in (5, 20):
         try:
@@ -330,6 +345,7 @@ def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
         )
         events.append(ev_ndfl)
 
+    # Insurance monthly
     ev_ins = ControlEvent(
         id=_make_id(client_id, period, "insurance"),
         client_id=client_id,
@@ -342,6 +358,7 @@ def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
     )
     events.append(ev_ins)
 
+    # Tourist fee monthly
     ev_tour = ControlEvent(
         id=_make_id(client_id, period, "tourist-fee"),
         client_id=client_id,
@@ -355,6 +372,7 @@ def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
     )
     events.append(ev_tour)
 
+    # Bank statement and docs
     ev_stmt = ControlEvent(
         id=_make_id(client_id, period, "bank-statement"),
         client_id=client_id,
@@ -381,6 +399,7 @@ def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
     )
     events.append(ev_docs)
 
+    # Quarterly USN advance (months 3, 6, 9, 12)
     if period.month in (3, 6, 9, 12):
         ev_usn_adv = ControlEvent(
             id=_make_id(client_id, period, "usn-advance"),
@@ -394,6 +413,7 @@ def _events_ooo_usn_dr_tour_zp520(period: date) -> List[ControlEvent]:
         )
         events.append(ev_usn_adv)
 
+    # Annual reporting (December period)
     if period.month == 12:
         ev_usn_decl = ControlEvent(
             id=_make_id(client_id, period, "usn-annual-declaration"),

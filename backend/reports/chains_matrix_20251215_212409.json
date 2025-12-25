@@ -1,0 +1,60 @@
+{
+    "summary":  {
+                    "base_url":  "http://localhost:8000",
+                    "year":  2025,
+                    "from_month":  12,
+                    "to_month":  12,
+                    "clients":  [
+                                    "ip_usn_dr",
+                                    "ooo_osno_3_zp1025",
+                                    "ooo_usn_dr_tourism_2_zp0520"
+                                ],
+                    "total":  3,
+                    "failed":  3,
+                    "created_at":  "2025-12-15T21:24:09.8895723+03:00"
+                },
+    "results":  [
+                    {
+                        "client":  "ip_usn_dr",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  false,
+                        "http":  422,
+                        "status":  "fail",
+                        "engine":  null,
+                        "run_id":  null,
+                        "started_at":  null,
+                        "finished_at":  null,
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/=2025\u0026month=12",
+                        "error":  "Удаленный сервер возвратил ошибку: (422) Unprocessable Entity."
+                    },
+                    {
+                        "client":  "ooo_osno_3_zp1025",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  false,
+                        "http":  422,
+                        "status":  "fail",
+                        "engine":  null,
+                        "run_id":  null,
+                        "started_at":  null,
+                        "finished_at":  null,
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/=2025\u0026month=12",
+                        "error":  "Удаленный сервер возвратил ошибку: (422) Unprocessable Entity."
+                    },
+                    {
+                        "client":  "ooo_usn_dr_tourism_2_zp0520",
+                        "year":  2025,
+                        "month":  12,
+                        "ok":  false,
+                        "http":  422,
+                        "status":  "fail",
+                        "engine":  null,
+                        "run_id":  null,
+                        "started_at":  null,
+                        "finished_at":  null,
+                        "url":  "http://localhost:8000/api/internal/process-chains/dev/run-for-client/=2025\u0026month=12",
+                        "error":  "Удаленный сервер возвратил ошибку: (422) Unprocessable Entity."
+                    }
+                ]
+}

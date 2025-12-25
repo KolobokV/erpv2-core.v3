@@ -1,3 +1,101 @@
-﻿{
-  "events": []
+{
+  "events": [
+    {
+      "id": "evt-bank_statement-ip_usn_dr-2025-12",
+      "client_code": "ip_usn_dr",
+      "period": "2025-12",
+      "type": "bank_statement",
+      "label": "Bank statement request",
+      "status": "done"
+    },
+    {
+      "id": "evt-document_request-ip_usn_dr-2025-12",
+      "client_code": "ip_usn_dr",
+      "period": "2025-12",
+      "type": "document_request",
+      "label": "Document request",
+      "status": "new"
+    },
+    {
+      "id": "evt-usn_advance-ip_usn_dr-2025-12",
+      "client_code": "ip_usn_dr",
+      "period": "2025-12",
+      "type": "usn_advance",
+      "label": "USN advance",
+      "status": "new"
+    },
+    {
+      "id": "evt-bank_statement-ooo_osno_3_zp1025-2025-12",
+      "client_code": "ooo_osno_3_zp1025",
+      "period": "2025-12",
+      "type": "bank_statement",
+      "label": "Bank statement request",
+      "status": "new"
+    },
+    {
+      "id": "evt-document_request-ooo_osno_3_zp1025-2025-12",
+      "client_code": "ooo_osno_3_zp1025",
+      "period": "2025-12",
+      "type": "document_request",
+      "label": "Document request",
+      "status": "new"
+    },
+    {
+      "id": "evt-bank_statement-ip_usn_dr-2026-01",
+      "client_code": "ip_usn_dr",
+      "period": "2026-01",
+      "type": "bank_statement",
+      "label": "Bank statement request",
+      "status": "new"
+    },
+    {
+      "id": "evt-document_request-ip_usn_dr-2026-01",
+      "client_code": "ip_usn_dr",
+      "period": "2026-01",
+      "type": "document_request",
+      "label": "Document request",
+      "status": "done",
+      "updated_at": "2025-12-09T20:13:02.195146Z"
+    },
+    {
+      "id": "evt-usn_advance-ip_usn_dr-2026-01",
+      "client_code": "ip_usn_dr",
+      "period": "2026-01",
+      "type": "usn_advance",
+      "label": "USN advance",
+      "status": "new"
+    },
+    {
+      "id": "evt-bank_statement-ooo_usn_dr_tour-2025-12",
+      "client_code": "ooo_usn_dr_tour",
+      "period": "2025-12",
+      "type": "bank_statement",
+      "label": "Bank statement request",
+      "status": "new"
+    },
+    {
+      "id": "evt-document_request-ooo_usn_dr_tour-2025-12",
+      "client_code": "ooo_usn_dr_tour",
+      "period": "2025-12",
+      "type": "document_request",
+      "label": "Document request",
+      "status": "new"
+    },
+    {
+      "id": "evt-usn_advance-ooo_usn_dr_tour-2025-12",
+      "client_code": "ooo_usn_dr_tour",
+      "period": "2025-12",
+      "type": "usn_advance",
+      "label": "USN advance",
+      "status": "new"
+    },
+    {
+      "id": "evt-tourist_tax-ooo_usn_dr_tour-2025-12",
+      "client_code": "ooo_usn_dr_tour",
+      "period": "2025-12",
+      "type": "tourist_tax",
+      "label": "Tourist tax",
+      "status": "new"
+    }
+  ]
 }

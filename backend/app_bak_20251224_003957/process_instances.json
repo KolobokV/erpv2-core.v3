@@ -1,71 +1,53 @@
 [
   {
-    "id": "ip_usn_dr_monthly-2025-12",
-    "definition_id": "ip_usn_dr_monthly",
-    "period": "2025-12",
-    "created_at": "2025-12-02T07:33:34.627003",
-    "generated_tasks": [
-      {
-        "task_id": "ip_usn_dr_monthly-2025-12-task-1",
-        "title": "Auto task 1",
-        "created_at": "2025-12-03T10:23:02.456266"
-      },
-      {
-        "task_id": "ip_usn_dr_monthly-2025-12-task-2",
-        "title": "Auto task 2",
-        "created_at": "2025-12-03T10:23:02.456310"
-      },
-      {
-        "task_id": "ip_usn_dr_monthly-2025-12-task-3",
-        "title": "Auto task 3",
-        "created_at": "2025-12-03T10:23:02.456312"
-      }
-    ]
+    "id": "inst_ip_usn_dr_proc_bank_monthly_2025-12",
+    "definition_id": "proc_bank_monthly",
+    "definition_name": "Monthly bank statement and documents",
+    "client_id": "ip_usn_dr",
+    "month": "2025-12",
+    "status": "completed",
+    "last_run_result": "demo instance",
+    "created_at": "2025-12-05",
+    "updated_at": "2025-12-05T09:30:18.016980"
   },
   {
-    "id": "llc_osno_nds_monthly-2025-12",
-    "definition_id": "llc_osno_nds_monthly",
-    "period": "2025-12",
-    "created_at": "2025-12-02T07:33:34.627048",
-    "generated_tasks": [
-      {
-        "task_id": "llc_osno_nds_monthly-2025-12-task-1",
-        "title": "Auto task 1",
-        "created_at": "2025-12-02T10:14:30.387714"
-      },
-      {
-        "task_id": "llc_osno_nds_monthly-2025-12-task-2",
-        "title": "Auto task 2",
-        "created_at": "2025-12-02T10:14:30.387724"
-      },
-      {
-        "task_id": "llc_osno_nds_monthly-2025-12-task-3",
-        "title": "Auto task 3",
-        "created_at": "2025-12-02T10:14:30.387726"
-      }
-    ]
+    "id": "inst_ooo_osno_3_zp1025_proc_bank_monthly_2025-12",
+    "definition_id": "proc_bank_monthly",
+    "definition_name": "Monthly bank statement and documents",
+    "client_id": "ooo_osno_3_zp1025",
+    "month": "2025-12",
+    "status": "ready",
+    "last_run_result": "demo instance",
+    "created_at": "2025-12-05"
   },
   {
-    "id": "llc_usn_dr_tourist_monthly-2025-12",
-    "definition_id": "llc_usn_dr_tourist_monthly",
-    "period": "2025-12",
-    "created_at": "2025-12-02T07:33:34.627054",
-    "generated_tasks": [
-      {
-        "task_id": "llc_usn_dr_tourist_monthly-2025-12-task-1",
-        "title": "Auto task 1",
-        "created_at": "2025-12-02T10:02:37.108081"
-      },
-      {
-        "task_id": "llc_usn_dr_tourist_monthly-2025-12-task-2",
-        "title": "Auto task 2",
-        "created_at": "2025-12-02T10:02:37.108090"
-      },
-      {
-        "task_id": "llc_usn_dr_tourist_monthly-2025-12-task-3",
-        "title": "Auto task 3",
-        "created_at": "2025-12-02T10:02:37.108092"
-      }
-    ]
+    "id": "inst_ooo_osno_3_zp1025_proc_salary_and_ndfl_2025-12",
+    "definition_id": "proc_salary_and_ndfl",
+    "definition_name": "Salary and NDFL",
+    "client_id": "ooo_osno_3_zp1025",
+    "month": "2025-12",
+    "status": "ready",
+    "last_run_result": "demo instance",
+    "created_at": "2025-12-05"
+  },
+  {
+    "id": "inst_ooo_usn_dr_tour_zp520_proc_bank_monthly_2025-12",
+    "definition_id": "proc_bank_monthly",
+    "definition_name": "Monthly bank statement and documents",
+    "client_id": "ooo_usn_dr_tour_zp520",
+    "month": "2025-12",
+    "status": "ready",
+    "last_run_result": "demo instance",
+    "created_at": "2025-12-05"
+  },
+  {
+    "id": "inst_ooo_usn_dr_tour_zp520_proc_tourist_fee_2025-12",
+    "definition_id": "proc_tourist_fee",
+    "definition_name": "Tourist fee monthly",
+    "client_id": "ooo_usn_dr_tour_zp520",
+    "month": "2025-12",
+    "status": "ready",
+    "last_run_result": "demo instance",
+    "created_at": "2025-12-05"
   }
 ]
