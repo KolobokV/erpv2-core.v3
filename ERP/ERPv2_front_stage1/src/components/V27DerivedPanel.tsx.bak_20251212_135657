@@ -1,6 +1,0 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { RiskBadge } from "./RiskBadge";
-import { fetchTasksAll, TaskItem } from "../api/taskApi";
-import { fetchProcessInstances, ProcessInstance } from "../api/internalProcessesApi";
-
-/* остальной файл БЕЗ ИЗМЕНЕНИЙ */
