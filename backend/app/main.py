@@ -1,79 +1,51 @@
-from __future__ import annotations
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# NOTE:
-# This main.py is intentionally defensive.
-# ERPv2 backend has evolved with multiple route modules living either:
-# - directly under the app package (app/routes_*.py)
-# - or under a subpackage (app/api/routes_*.py)
-# We load whatever exists and expose the expected endpoints.
 
-app = FastAPI(title="ERPv2 API", version="v36.10")
+def create_app() -> FastAPI:
+    app = FastAPI(title="ERPv2")
 
-# CORS (keep permissive for local dev)
-origins = ["*"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    # CORS for local dev (frontend on Vite)
+    allow_origins = [
+        "http://localhost:5174",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
 
-def _try_include(module_path: str) -> bool:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Main API router (/api/*)
     try:
-        mod = __import__(module_path, fromlist=["router"])
-        router = getattr(mod, "router", None)
-        if router is None:
-            return False
-        app.include_router(router)
-        return True
-    except Exception:
-        return False
+        from app.api.api_router import api_router
+        app.include_router(api_router)
+    except Exception as e:
+        # keep boot alive
+        print(f"[WARN] api_router not loaded: {e}")
 
-def _include_candidates(name: str) -> None:
-    # prefer app.<name>, then app.api.<name>
-    _try_include(f"app.{name}")
-    _try_include(f"app.api.{name}")
+    # Internal dev router (/api/internal/*)
+    try:
+        from app.internal_router import internal_router
+        app.include_router(internal_router)
+    except Exception as e:
+        # keep boot alive
+        print(f"[WARN] internal_router not loaded: {e}")
 
-# ---- Core expected routes ----
-for _mod in [
-    # public
-    "routes_tasks",
-    "routes_clients",
-    "routes_invoices",
-    "routes_products",
-    "routes_client_profiles",
-    "routes_control_events",
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok"}
 
-    # internal
-    "routes_internal",
-    "routes_internal_tasks",
-    "routes_internal_processes",
-    "routes_internal_processes_v2",
-    "routes_internal_chains",
-    "routes_process_chains_dev",
-    "routes_process_chains_v2",
-    "routes_process_chains_reglement",
-    "routes_process_instances",
-    "routes_process_instances_v2",
-    "routes_process_intents",
-    "routes_process_overview",
-    "routes_process_overview_zoom",
-    "routes_process_to_tasks",
-    "routes_internal_control_events",
-    "routes_internal_control_events_store",
-    "routes_internal_control_events_store_v2",
-    "routes_internal_control_event_store",
+    return app
 
-    # onboarding
-    "routes_onboarding_intake",
-]:
-    _include_candidates(_mod)
 
-# ---- minimal health ----
-@app.get("/api/health")
-def health():
-    return {"status": "ok"}
+app = create_app()

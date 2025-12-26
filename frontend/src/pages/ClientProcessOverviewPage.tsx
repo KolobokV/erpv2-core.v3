@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { apiUrl } from "../lib/api";
 
 type ClientProfile = {
   client_id?: string;
@@ -45,12 +46,11 @@ function ensureArray<T>(x: unknown): T[] {
   if (Array.isArray(x)) return x as T[];
   if (x && typeof x === "object") {
     const anyObj = x as any;
-    const v = anyObj.items ?? anyObj.data ?? anyObj.results;
+    const v = anyObj.items ?? anyObj.data ?? anyObj.results ?? anyObj.value;
     if (Array.isArray(v)) return v as T[];
   }
   return [];
 }
-
 
 function pickClientId(p: ClientProfile): string {
   return (p.client_id || p.id || "").toString();
@@ -85,9 +85,9 @@ export default function ClientProcessOverviewPage() {
       setLoading(true);
       setDiag({});
 
-      const rProfiles = await fetchJsonSafe<ClientProfile[]>("/api/internal/client-profiles", []);
-      const rInstances = await fetchJsonSafe<ProcessInstance[]>("/api/internal/process-instances-v2/", []);
-      const rEvents = await fetchJsonSafe<ControlEvent[]>("/api/internal/control-events-store/", []);
+      const rProfiles = await fetchJsonSafe<ClientProfile[]>(apiUrl("/api/internal/client-profiles"), []);
+      const rInstances = await fetchJsonSafe<ProcessInstance[]>(apiUrl("/api/internal/process-instances-v2/"), []);
+      const rEvents = await fetchJsonSafe<ControlEvent[]>(apiUrl("/api/internal/control-events-store/"), []);
 
       if (!alive) return;
 
@@ -233,7 +233,7 @@ export default function ClientProcessOverviewPage() {
                   <div key={x.id || Math.random()} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{x.title || x.id || "Event"}</div>
                     <div style={{ fontSize: 12, opacity: 0.75 }}>
-                      {(x.due_date ? "due " + x.due_date : "") + (x.status ? " Р’В· " + x.status : "")}
+                      {(x.due_date ? "due " + x.due_date : "") + (x.status ? " | " + x.status : "")}
                     </div>
                   </div>
                 ))}
