@@ -14,6 +14,15 @@ export type TasksResponse = {
 
 const EMPTY: TasksResponse = { tasks: [] };
 
-export async function fetchTasksSafe() {
-  return safeFetchJson<TasksResponse>("/api/tasks", EMPTY);
+function normalizeTasks(raw: any): TaskItem[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && Array.isArray(raw.tasks)) return raw.tasks;
+  if (raw && Array.isArray(raw.items)) return raw.items;
+  return [];
+}
+
+export async function fetchTasksSafe(): Promise<TasksResponse> {
+  // NOTE: internal endpoint is canonical for current ERPv2.
+  const raw = await safeFetchJson<any>("/api/internal/tasks", EMPTY);
+  return { tasks: normalizeTasks(raw) };
 }

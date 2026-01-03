@@ -1,51 +1,62 @@
 from fastapi import FastAPI
+from app.routes_internal_control_events_store_stub import router as control_events_store_stub_router
+from app.routes_internal_control_events_store_api import router as control_events_store_router
 from fastapi.middleware.cors import CORSMiddleware
 
+# === INTERNAL TASKS ===
+from app.routes_internal_tasks import router as tasks_router
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="ERPv2")
+# === CLIENT PROFILES ===
+from app.routes_client_profiles import router as client_profiles_router
 
-    # CORS for local dev (frontend on Vite)
-    allow_origins = [
+# === PROCESS INSTANCES V2 ===
+from app.routes_process_instances_v2 import router as process_instances_v2_router
+
+# === OTHER ROUTERS ===
+from app.routes_internal_process_chains_dev import router as dev_chains_router
+from app.routes_control_events_api import router as control_events_router
+from app.routes_onboarding_api import router as onboarding_router
+
+# === ANALYTICS ===
+from app.routes.risk_api import router as risk_router
+from app.routes.coverage_api import router as coverage_router
+
+app = FastAPI(title="ERPv2 API")
+
+app.include_router(control_events_store_router)
+app.include_router(control_events_store_stub_router)
+
+# === CORS (DEV SAFE) ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
         "http://localhost:5174",
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:8000",
         "http://127.0.0.1:5174",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
+        "http://localhost:8000",
         "http://127.0.0.1:8000",
-    ]
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allow_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# --- internal core ---
+app.include_router(tasks_router)
+app.include_router(control_events_store_stub_router)
+app.include_router(client_profiles_router)
+app.include_router(control_events_store_stub_router)
+app.include_router(process_instances_v2_router)
+app.include_router(control_events_store_stub_router)
 
-    # Main API router (/api/*)
-    try:
-        from app.api.api_router import api_router
-        app.include_router(api_router)
-    except Exception as e:
-        # keep boot alive
-        print(f"[WARN] api_router not loaded: {e}")
+# --- system ---
+app.include_router(control_events_router)
+app.include_router(control_events_store_stub_router)
+app.include_router(onboarding_router)
+app.include_router(control_events_store_stub_router)
+app.include_router(dev_chains_router)
+app.include_router(control_events_store_stub_router)
 
-    # Internal dev router (/api/internal/*)
-    try:
-        from app.internal_router import internal_router
-        app.include_router(internal_router)
-    except Exception as e:
-        # keep boot alive
-        print(f"[WARN] internal_router not loaded: {e}")
-
-    @app.get("/api/health")
-    def health():
-        return {"status": "ok"}
-
-    return app
-
-
-app = create_app()
+# --- analytics ---
+app.include_router(risk_router)
+app.include_router(control_events_store_stub_router)
+app.include_router(coverage_router)

@@ -19,6 +19,7 @@ import {
   materializeFromDerivedV27
 } from "../v27/profileStore";
 import { countProcessIntents, clearProcessIntents } from "../v27/processIntentsStore";
+import ClientCockpitHeader from "../components/client/ClientCockpitHeader";
 
 function clampInt(v: any, min: number, max: number): number {
   const n = parseInt(String(v || "0"), 10);
@@ -286,6 +287,7 @@ export default function ClientProfilePage() {
 
   return (
     <PageShell>
+      <ClientCockpitHeader />
       <UpBackBar
         title={sClientCard + (clientId || "-")}
         onUp={() => navigate("/")}

@@ -18,6 +18,7 @@ import ClientProcessStepPage from "./pages/ClientProcessStepPage";
 import ClientControlEventPage from "./pages/ClientControlEventPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DayDashboardPage from "./pages/DayDashboardPage";
+import OnboardingStubPage from "./pages/OnboardingStubPage";
 
 function getClientFromUrl(): string | null {
   try {
@@ -92,7 +93,8 @@ function App() {
           <Route path="/client-create" element={<ClientCreatePage />} />
 <Route path="/process-chains-dev" element={<ProcessChainsDevPage />} />
           <Route path="/onboarding-clients" element={<OnboardingClientsPage />} />
-      </Routes>
+        <Route path="/onboarding" element={<OnboardingStubPage />} />
+</Routes>
       </ErpShell>
     </Router>
   );
