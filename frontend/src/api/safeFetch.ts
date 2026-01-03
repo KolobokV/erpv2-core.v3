@@ -1,33 +1,39 @@
-export type SafeResult<T> = {
-  ok: boolean;
-  status: number;
-  data: T | null;
-  error?: string;
-};
+export type SafeFetchResult<T> =
+  | { ok: true; status: number; data: T }
+  | { ok: false; status: number; error: string };
 
-export async function safeJson<T = any>(
-  url: string,
-  options?: RequestInit
-): Promise<SafeResult<T>> {
+async function readJsonSafe<T>(resp: Response): Promise<T | null> {
   try {
-    const resp = await fetch(url, options);
-    const status = resp.status;
-    const text = await resp.text();
+    return (await resp.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
-    if (!resp.ok) {
-      return { ok: false, status, data: null, error: text || `HTTP ${status}` };
+export async function safeFetchJson<T>(
+  path: string,
+  init?: RequestInit
+): Promise<SafeFetchResult<T>> {
+  try {
+    const resp = await fetch(path, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+    });
+
+    const data = await readJsonSafe<T>(resp);
+
+    if (resp.ok) {
+      return { ok: true, status: resp.status, data: (data as T) };
     }
 
-    if (!text) {
-      return { ok: true, status, data: null };
-    }
+    const errText =
+      (data as any)?.detail
+        ? JSON.stringify((data as any).detail)
+        : resp.statusText || "Request failed";
 
-    try {
-      return { ok: true, status, data: JSON.parse(text) as T };
-    } catch {
-      return { ok: false, status, data: null, error: "Invalid JSON response" };
-    }
+    return { ok: false, status: resp.status, error: errText };
   } catch (e: any) {
-    return { ok: false, status: 0, data: null, error: e?.message || "Network error" };
+    return { ok: false, status: 0, error: e?.message ?? "Network error" };
   }
 }

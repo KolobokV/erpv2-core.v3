@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { apiGetJson } from "../lib/api";
+import TaskCard from "../components/tasks/TaskCard";
+import TaskSectionHeader from "../components/tasks/TaskSectionHeader";
+import { groupTasksByDeadline } from "../ui/taskGrouping";
 
 type ClientProfile = {
   id: string;
   name: string;
-  tax_mode?: string;
-  features?: string[];
-  payroll_days?: number[];
-  is_active?: boolean;
 };
 
 type TaskItem = {
@@ -17,9 +16,8 @@ type TaskItem = {
   status?: string;
   due_date?: string;
   created_at?: string;
-  updated_at?: string | null;
-  assignee?: string | null;
   client_id?: string;
+  priority?: "low" | "medium" | "high" | "urgent";
 };
 
 type ProcessInstance = {
@@ -46,11 +44,9 @@ function deriveTaskClientId(t: TaskItem): string {
   const id = (t.id ?? "").trim();
   if (!id) return "";
 
-  // demo seed ids like: task-demo-client-1-bank-statement-2025-12-01
   const mDemo = id.match(/^task-demo-client-(\d+)-/);
   if (mDemo) return `demo_client_${mDemo[1]}`;
 
-  // common pattern: task-<clientId>-...
   const m = id.match(/^task-([A-Za-z0-9_]+)-/);
   if (m) return normalizeClientId(m[1]);
 
@@ -64,7 +60,6 @@ function deriveProcessClientId(p: ProcessInstance): string {
   const id = (p.id ?? "").trim();
   if (!id) return "";
 
-  // try: <clientId>__something or <clientId>-something
   const mUnd = id.match(/^([A-Za-z0-9_]+)__/);
   if (mUnd) return normalizeClientId(mUnd[1]);
 
@@ -74,79 +69,66 @@ function deriveProcessClientId(p: ProcessInstance): string {
   return "";
 }
 
-function pickClientLabel(c: ClientProfile): string {
-  const name = (c.name ?? "").trim() || c.id;
-  return `${name} (${c.id})`;
+function makeRenderKey(t: TaskItem, idx: number): string {
+  const id = (t.id ?? "").trim() || `noid-${idx}`;
+  const created = (t.created_at ?? "").trim();
+  if (created) return `${id}__${created}`;
+  return `${id}__idx_${idx}`;
+}
+
+function getBackendBaseUrl(): string {
+  const envBase = (import.meta as any)?.env?.VITE_API_BASE_URL;
+  if (typeof envBase === "string" && envBase.trim()) return envBase.trim();
+
+  const host = window.location.hostname || "localhost";
+  return `http://${host}:8000`;
+}
+
+async function httpJson(method: string, url: string, body: any): Promise<Response> {
+  return fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function trySetTaskStatus(taskId: string, status: string): Promise<void> {
+  const base = getBackendBaseUrl();
+  const body = { status };
+
+  const urlPut = `${base}/api/internal/tasks/${encodeURIComponent(taskId)}/status`;
+  const r1 = await httpJson("PUT", urlPut, body);
+  if (r1.ok) return;
+
+  const urlPost = `${base}/api/internal/tasks/${encodeURIComponent(taskId)}`;
+  const r2 = await httpJson("POST", urlPost, body);
+  if (r2.ok) return;
+
+  throw new Error(`Status update failed: PUT ${r1.status}, POST ${r2.status}`);
 }
 
 export default function DayDashboardPage(): JSX.Element {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [processes, setProcesses] = useState<ProcessInstance[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
-
-  const tasksByClient = useMemo(() => {
-    const m = new Map<string, TaskItem[]>();
-    for (const t of tasks) {
-      const cid = deriveTaskClientId(t);
-      if (!cid) continue;
-      if (!m.has(cid)) m.set(cid, []);
-      m.get(cid)!.push(t);
-    }
-    return m;
-  }, [tasks]);
-
-  const procByClient = useMemo(() => {
-    const m = new Map<string, ProcessInstance[]>();
-    for (const p of processes) {
-      const cid = deriveProcessClientId(p);
-      if (!cid) continue;
-      if (!m.has(cid)) m.set(cid, []);
-      m.get(cid)!.push(p);
-    }
-    return m;
-  }, [processes]);
+  const [actionError, setActionError] = useState<string>("");
 
   useEffect(() => {
-    let alive = true;
+    apiGetJson("/api/internal/client-profiles").then((r) => {
+      const list = (r?.items ?? r?.value ?? r) as any;
+      setClients(Array.isArray(list) ? list : []);
+    });
 
-    async function load(): Promise<void> {
-      const errs: string[] = [];
-      try {
-        const c = await apiGetJson("/api/internal/client-profiles");
-        const list: ClientProfile[] = (c?.value ?? c ?? []) as any;
-        if (alive) setClients(Array.isArray(list) ? list : []);
-      } catch (e: any) {
-        errs.push(`client-profiles: ${e?.message ?? "failed"}`);
-        if (alive) setClients([]);
-      }
+    apiGetJson("/api/internal/tasks").then((r) => {
+      const list = (r?.items ?? r?.value ?? r) as any;
+      setTasks(Array.isArray(list) ? list : []);
+    });
 
-      try {
-        const t = await apiGetJson("/api/internal/tasks");
-        const list: TaskItem[] = (t?.value ?? t ?? []) as any;
-        if (alive) setTasks(Array.isArray(list) ? list : []);
-      } catch (e: any) {
-        errs.push(`tasks: ${e?.message ?? "failed"}`);
-        if (alive) setTasks([]);
-      }
-
-      try {
-        const p = await apiGetJson("/api/internal/process-instances-v2");
-        const list: ProcessInstance[] = (p?.value ?? p ?? []) as any;
-        if (alive) setProcesses(Array.isArray(list) ? list : []);
-      } catch (e: any) {
-        errs.push(`process-instances-v2: ${e?.message ?? "failed"}`);
-        if (alive) setProcesses([]);
-      }
-
-      if (alive) setErrors(errs);
-    }
-
-    load();
-    return () => {
-      alive = false;
-    };
+    apiGetJson("/api/internal/process-instances-v2").then((r) => {
+      const list = (r?.items ?? r?.value ?? r) as any;
+      setProcesses(Array.isArray(list) ? list : []);
+    });
   }, []);
 
   useEffect(() => {
@@ -156,64 +138,85 @@ export default function DayDashboardPage(): JSX.Element {
 
   const visibleTasks = useMemo(() => {
     if (!selectedClientId) return [];
-    return tasksByClient.get(selectedClientId) ?? [];
-  }, [selectedClientId, tasksByClient]);
+    return tasks.filter((t) => deriveTaskClientId(t) === selectedClientId);
+  }, [tasks, selectedClientId]);
+
+  const taskSections = useMemo(() => {
+    const mapped = visibleTasks.map((t) => ({ task: t, deadline: t.due_date ?? null }));
+    const grouped = groupTasksByDeadline(mapped);
+    return {
+      overdue: grouped.overdue.map((x) => x.task),
+      today: grouped.today.map((x) => x.task),
+      upcoming: grouped.upcoming.map((x) => x.task),
+    };
+  }, [visibleTasks]);
 
   const visibleProcs = useMemo(() => {
     if (!selectedClientId) return [];
-    return procByClient.get(selectedClientId) ?? [];
-  }, [selectedClientId, procByClient]);
+    return processes.filter((p) => deriveProcessClientId(p) === selectedClientId);
+  }, [processes, selectedClientId]);
 
-  const anyTaskClientIds = useMemo(() => {
-    const s = new Set<string>();
-    for (const t of tasks) {
-      const cid = deriveTaskClientId(t);
-      if (cid) s.add(cid);
+  async function onSetStatus(taskId: string, nextStatus: string): Promise<void> {
+    setActionError("");
+
+    const prev = tasks;
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, status: nextStatus } : t));
+    setTasks(updated);
+
+    try {
+      await trySetTaskStatus(taskId, nextStatus);
+    } catch (e: any) {
+      setTasks(prev);
+      setActionError(e?.message ?? "status update failed");
     }
-    return Array.from(s.values()).sort();
-  }, [tasks]);
+  }
+
+  function renderTaskSection(title: string, items: TaskItem[]): JSX.Element | null {
+    if (items.length === 0) return null;
+    return (
+      <div>
+        <TaskSectionHeader title={title} count={items.length} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((t, idx) => (
+            <TaskCard
+              key={makeRenderKey(t, idx)}
+              task={{
+                id: t.id,
+                title: t.title,
+                status: t.status,
+                priority: t.priority ?? "medium",
+                deadline: t.due_date,
+                client_id: deriveTaskClientId(t),
+              }}
+              compact={true}
+              onSetStatus={onSetStatus}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Day</h2>
         <div style={{ flex: 1 }} />
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>Client</span>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            style={{ padding: "6px 8px" }}
-          >
-            <option value="">(none)</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {pickClientLabel(c)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", minWidth: 260 }}>
+          <option value="">(select client)</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {errors.length > 0 && (
-        <div
-          style={{
-            border: "1px solid #f0c36d",
-            background: "#fff7e6",
-            padding: 12,
-            borderRadius: 8,
-            marginBottom: 12,
-            fontSize: 12,
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Data endpoints have issues.</div>
-          <ul style={{ margin: 0, paddingLeft: 16 }}>
-            {errors.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
+      {actionError ? (
+        <div style={{ marginBottom: 12, border: "1px solid #f0c36d", background: "#fff7e6", padding: 10, borderRadius: 8, fontSize: 12 }}>
+          Action failed: {actionError}
         </div>
-      )}
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 1fr", gap: 12 }}>
         <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
@@ -253,25 +256,13 @@ export default function DayDashboardPage(): JSX.Element {
           {!selectedClientId ? (
             <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>Select a client</div>
           ) : visibleTasks.length === 0 ? (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>Empty</div>
-              {tasks.length > 0 && (
-                <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
-                  Backend has tasks for: {anyTaskClientIds.join(", ")}
-                </div>
-              )}
-            </div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>Empty</div>
           ) : (
-            <ul style={{ margin: "8px 0 0 0", paddingLeft: 16 }}>
-              {visibleTasks.map((t) => (
-                <li key={`${t.id}-${t.created_at ?? ""}`}>
-                  <span style={{ fontWeight: 600 }}>{t.title ?? t.id}</span>{" "}
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>
-                    {t.status ? `[${t.status}]` : ""} {t.due_date ? `due ${t.due_date}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 12 }}>
+              {renderTaskSection("Overdue", taskSections.overdue)}
+              {renderTaskSection("Today", taskSections.today)}
+              {renderTaskSection("Upcoming", taskSections.upcoming)}
+            </div>
           )}
         </div>
 

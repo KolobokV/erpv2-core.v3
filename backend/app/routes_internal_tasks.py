@@ -1,126 +1,179 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
-from datetime import datetime
+from dataclasses import asdict, dataclass
+from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/internal/tasks", tags=["internal-tasks"])
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+# Base dir = backend project root (ERPv2_backend_connect)
+BASE_DIR = Path(__file__).resolve().parents[1]
 TASKS_STORE_PATH = BASE_DIR / "tasks_store.json"
 
 
 class TaskUpdate(BaseModel):
-  status: Optional[str] = None
-  priority: Optional[str] = None
-  deadline: Optional[str] = None
-  title: Optional[str] = None
-  description: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    deadline: Optional[str] = None  # ISO date string
+    title: Optional[str] = None
+    description: Optional[str] = None
 
 
-def _load_tasks_store() -> tuple[List[Dict[str, Any]], Any, Optional[str]]:
-  """
-  Load tasks from tasks_store.json in a tolerant way.
+def _utc_now_z() -> str:
+    return datetime.utcnow().isoformat() + "Z"
 
-  Returns:
-      (tasks_list, container, key_name)
-  """
-  if not TASKS_STORE_PATH.exists():
-    return [], [], None
 
-  with TASKS_STORE_PATH.open("r", encoding="utf-8") as f:
+def _load_tasks_store() -> Tuple[List[Dict[str, Any]], Dict[str, Any], str]:
+    if not TASKS_STORE_PATH.exists():
+        TASKS_STORE_PATH.write_text(json.dumps({"items": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    raw = TASKS_STORE_PATH.read_text(encoding="utf-8")
     try:
-      data = json.load(f)
+        data = json.loads(raw) if raw.strip() else {"items": []}
     except Exception:
-      return [], [], None
+        # If corrupted, do not crash the app: start fresh.
+        data = {"items": []}
 
-  if isinstance(data, list):
-    tasks_list = [t for t in data if isinstance(t, dict)]
-    return tasks_list, tasks_list, None
+    if isinstance(data, list):
+        return data, {"items": data}, "items"
 
-  if isinstance(data, dict):
-    for key in ["tasks", "items"]:
-      val = data.get(key)
-      if isinstance(val, list):
-        tasks_list = [t for t in val if isinstance(t, dict)]
-        return tasks_list, data, key
+    if isinstance(data, dict):
+        if "items" in data and isinstance(data["items"], list):
+            return data["items"], data, "items"
+        if "tasks" in data and isinstance(data["tasks"], list):
+            return data["tasks"], data, "tasks"
 
-  return [], data, None
-
-
-def _save_tasks_store(
-  tasks: List[Dict[str, Any]],
-  container: Any,
-  key_name: Optional[str],
-) -> None:
-  if isinstance(container, list):
-    data_to_write = tasks
-  elif isinstance(container, dict) and key_name:
-    container[key_name] = tasks
-    data_to_write = container
-  else:
-    data_to_write = tasks
-
-  TASKS_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
-  with TASKS_STORE_PATH.open("w", encoding="utf-8") as f:
-    json.dump(data_to_write, f, ensure_ascii=False, indent=2)
+    # Unknown shape -> normalize
+    container = {"items": []}
+    return container["items"], container, "items"
 
 
-def _find_task_by_id(tasks: List[Dict[str, Any]], task_id: str) -> Optional[Dict[str, Any]]:
-  for t in tasks:
-    tid = t.get("id")
-    if tid is not None and str(tid) == str(task_id):
-      return t
-  return None
+def _save_tasks_store(container: Dict[str, Any], key: str, tasks: List[Dict[str, Any]]) -> None:
+    container[key] = tasks
+    TASKS_STORE_PATH.write_text(json.dumps(container, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-@router.get("/", summary="List all tasks (internal)")
+def _find_task(tasks: List[Dict[str, Any]], task_id: str) -> Optional[Dict[str, Any]]:
+    for t in tasks:
+        if str(t.get("id")) == task_id:
+            return t
+    return None
+
+
+def _discover_client_ids() -> List[str]:
+    # Try to discover from any client profiles store file (names vary across versions).
+    candidates = [
+        BASE_DIR / "client_profiles_store.json",
+        BASE_DIR / "client_profiles.json",
+        BASE_DIR / "stores" / "client_profiles_store.json",
+        BASE_DIR / "stores" / "client_profiles.json",
+    ]
+
+    for c in candidates:
+        if c.exists():
+            try:
+                data = json.loads(c.read_text(encoding="utf-8"))
+                items = data.get("items") if isinstance(data, dict) else None
+                if isinstance(items, list):
+                    ids = [str(x.get("id")) for x in items if isinstance(x, dict) and x.get("id")]
+                    if ids:
+                        return ids
+            except Exception:
+                pass
+
+    # Fallback: known demo ids (stable in this project)
+    return ["ip_usn_dr", "ooo_osno_3_zp1025", "ooo_usn_dr_tour_zp520"]
+
+
+def _seed_demo_tasks_if_empty(tasks: List[Dict[str, Any]], container: Dict[str, Any], key: str) -> List[Dict[str, Any]]:
+    if tasks:
+        return tasks
+
+    client_ids = _discover_client_ids()
+    today = date.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+    now = _utc_now_z()
+
+    seeded: List[Dict[str, Any]] = []
+    for cid in client_ids:
+        seeded.append(
+            {
+                "id": f"task-{cid}-bank-statement-{ym}-01",
+                "client_id": cid,
+                "title": "Bank statement import",
+                "description": "Import and reconcile bank statement for the month.",
+                "status": "open",
+                "priority": "normal",
+                "deadline": f"{ym}-05",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        seeded.append(
+            {
+                "id": f"task-{cid}-tax-payment-{ym}-14",
+                "client_id": cid,
+                "title": "Tax payment",
+                "description": "Prepare and schedule tax payment.",
+                "status": "open",
+                "priority": "high",
+                "deadline": f"{ym}-14",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
+    _save_tasks_store(container, key, seeded)
+    return seeded
+
+
+@router.get("", summary="List tasks (internal)")
+@router.get("/", summary="List tasks (internal)")
 def list_tasks_internal() -> List[Dict[str, Any]]:
-  tasks, _, _ = _load_tasks_store()
-  return tasks
+    tasks, container, key = _load_tasks_store()
+    tasks = _seed_demo_tasks_if_empty(tasks, container, key)
+    return tasks
 
 
-@router.get("/{task_id}", summary="Get single task by id")
+@router.get("/{task_id}", summary="Get task by id")
 def get_task_internal(task_id: str) -> Dict[str, Any]:
-  tasks, _, _ = _load_tasks_store()
-  task = _find_task_by_id(tasks, task_id)
-  if not task:
-    raise HTTPException(status_code=404, detail="Task not found")
-  return task
+    tasks, _, _ = _load_tasks_store()
+    t = _find_task(tasks, task_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return t
 
 
-@router.post(
-  "/{task_id}",
-  summary="Update task fields (status, priority, deadline, title, description)",
-)
-def update_task_internal(task_id: str, payload: TaskUpdate) -> Dict[str, Any]:
-  tasks, container, key_name = _load_tasks_store()
-  if not tasks:
-    raise HTTPException(status_code=404, detail="Tasks store is empty")
+@router.post("/{task_id}", summary="Upsert task fields")
+def upsert_task_internal(task_id: str, payload: TaskUpdate) -> Dict[str, Any]:
+    tasks, container, key = _load_tasks_store()
+    tasks = _seed_demo_tasks_if_empty(tasks, container, key)
 
-  task = _find_task_by_id(tasks, task_id)
-  if not task:
-    raise HTTPException(status_code=404, detail="Task not found")
+    t = _find_task(tasks, task_id)
+    now = _utc_now_z()
 
-  if payload.status is not None:
-    task["status"] = payload.status
-  if payload.priority is not None:
-    task["priority"] = payload.priority
-  if payload.deadline is not None:
-    task["deadline"] = payload.deadline
-  if payload.title is not None:
-    task["title"] = payload.title
-  if payload.description is not None:
-    task["description"] = payload.description
+    if not t:
+        t = {"id": task_id, "status": "open", "created_at": now, "updated_at": now}
+        tasks.append(t)
 
-  now_iso = datetime.utcnow().isoformat() + "Z"
-  if "updated_at" in task:
-    task["updated_at"] = now_iso
+    patch = payload.model_dump(exclude_unset=True)
+    for k, v in patch.items():
+        if v is not None:
+            t[k] = v
 
-  _save_tasks_store(tasks, container, key_name)
+    t["updated_at"] = now
+    _save_tasks_store(container, key, tasks)
+    return t
 
-  return {"status": "ok", "task": task}
+
+@router.put("/{task_id}/status", summary="Update task status (alias)")
+def update_task_status_alias(task_id: str, payload: TaskUpdate) -> Dict[str, Any]:
+    # Alias endpoint used by UI actions. Works as upsert too.
+    if payload.status is None:
+        raise HTTPException(status_code=400, detail="Missing status")
+    return upsert_task_internal(task_id, payload)
