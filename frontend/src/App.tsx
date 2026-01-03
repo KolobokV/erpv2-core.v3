@@ -19,6 +19,7 @@ import ClientControlEventPage from "./pages/ClientControlEventPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DayDashboardPage from "./pages/DayDashboardPage";
 import OnboardingStubPage from "./pages/OnboardingStubPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 
 function getClientFromUrl(): string | null {
   try {
@@ -39,6 +40,7 @@ const NAV: ErpNavItem[] = [
   { to: "/control-events", label: "\u0421\u043e\u0431\u044b\u0442\u0438\u044f" },
   { to: "/internal-control-events-store", label: "\u0425\u0440\u0430\u043d\u0438\u043b\u0438\u0449\u0435" },
   { to: "/client-process-overview", label: "\u041e\u0431\u0437\u043e\u0440" },
+  { to: "/analytics", label: "Analytics" },
   { to: "/process-chains-dev", label: "DEV Chains" },
 ];
 
@@ -82,6 +84,8 @@ function App() {
 
           <Route path="/internal-processes" element={<InternalProcessesPage />} />
           <Route path="/process-coverage" element={<ProcessCoveragePage />} />
+
+          <Route path="/analytics" element={<AnalyticsPage />} />
 
           <Route path="/control-events" element={<ControlEventsPage />} />
           <Route path="/internal-control-events-store" element={<InternalControlEventsStorePage />} />
