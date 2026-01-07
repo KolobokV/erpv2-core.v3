@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const TASKS_FOCUS_KEY = "erpv2_tasks_focus";
 
@@ -30,6 +30,34 @@ type FocusPayload = {
 };
 
 const statusOptions = ["all", "planned", "overdue", "completed", "in_progress", "done"];
+
+const statusLabel: Record<string, string> = {
+  all: "\u0412\u0441\u0435",
+  planned: "\u0417\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u043e",
+  overdue: "\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e",
+  completed: "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043e",
+  in_progress: "\u0412 \u0440\u0430\u0431\u043e\u0442\u0435",
+  done: "\u0413\u043e\u0442\u043e\u0432\u043e",
+};
+
+function trTitle(raw: any): string {
+  const title = (raw ?? "").toString();
+  const m = title.match(/^Task for\s+(.+?)\s*(\(\d{4}-\d{2}\))?\s*$/i);
+  if (!m) return title;
+
+  const core = (m[1] ?? "").trim();
+  const suffix = (m[2] ?? "").trim();
+
+  const map: Record<string, string> = {
+    "Bank statement request": "\u0417\u0430\u043f\u0440\u043e\u0441 \u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u0438\u0445 \u0432\u044b\u043f\u0438\u0441\u043e\u043a",
+    "Document request": "\u0417\u0430\u043f\u0440\u043e\u0441 \u043f\u0435\u0440\u0432\u0438\u0447\u043d\u044b\u0445 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u043e\u0432",
+    "USN advance": "\u0410\u0432\u0430\u043d\u0441 \u043f\u043e \u0423\u0421\u041d",
+    "Tourist tax": "\u0422\u0443\u0440\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0441\u0431\u043e\u0440",
+  };
+
+  const translated = map[core] ?? core;
+  return `${translated}${suffix ? " " + suffix : ""}`;
+}
 
 const TasksBoard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -165,10 +193,10 @@ const TasksBoard: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-slate-900">
-              Tasks list
+              {"\u0417\u0430\u0434\u0430\u0447\u0438"}
             </div>
             <p className="text-xs text-slate-600 mt-0.5">
-              Tasks from backend with simple filters by status, client, process and text search.
+              {"\u0421\u043f\u0438\u0441\u043e\u043a \u0437\u0430\u0434\u0430\u0447 \u0438\u0437 backend \u0441 \u0444\u0438\u043b\u044c\u0442\u0440\u0430\u043c\u0438 \u043f\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u0443, \u043a\u043b\u0438\u0435\u043d\u0442\u0443, \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u0443 \u0438 \u043f\u043e\u0438\u0441\u043a\u043e\u043c \u043f\u043e \u0442\u0435\u043a\u0441\u0442\u0443."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
@@ -178,7 +206,7 @@ const TasksBoard: React.FC = () => {
               className="px-2 py-1 rounded-md border border-gray-300 bg-white text-xs hover:bg-gray-50"
               disabled={loading}
             >
-              {loading ? "Loading..." : "Reload"}
+              {loading ? "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430..." : "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c"}
             </button>
           </div>
         </div>
@@ -191,7 +219,7 @@ const TasksBoard: React.FC = () => {
 
         <div className="flex flex-wrap gap-3 items-center text-xs">
           <div className="flex items-center gap-1">
-            <span className="text-slate-600">Status:</span>
+            <span className="text-slate-600">{"\u0421\u0442\u0430\u0442\u0443\u0441:"}</span>
             <select
               className="border rounded px-2 py-0.5 text-xs bg-slate-900 text-slate-100"
               value={statusFilter}
@@ -199,20 +227,20 @@ const TasksBoard: React.FC = () => {
             >
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {statusLabel[s] ?? s}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="flex items-center gap-1">
-            <span className="text-slate-600">Client:</span>
+            <span className="text-slate-600">{"\u041a\u043b\u0438\u0435\u043d\u0442:"}</span>
             <select
               className="border rounded px-2 py-0.5 text-xs bg-slate-900 text-slate-100"
               value={clientFilter}
               onChange={(e) => setClientFilter(e.target.value)}
             >
-              <option value="all">all</option>
+              <option value="all">{"\u0412\u0441\u0435"}</option>
               {derived.clientList.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -222,13 +250,13 @@ const TasksBoard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            <span className="text-slate-600">Process:</span>
+            <span className="text-slate-600">{"\u041f\u0440\u043e\u0446\u0435\u0441\u0441:"}</span>
             <select
               className="border rounded px-2 py-0.5 text-xs bg-slate-900 text-slate-100"
               value={processFilter}
               onChange={(e) => setProcessFilter(e.target.value)}
             >
-              <option value="all">all</option>
+              <option value="all">{"\u0412\u0441\u0435"}</option>
               {derived.processList.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -238,39 +266,41 @@ const TasksBoard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 flex-1 min-w-[160px]">
-            <span className="text-slate-600">Search:</span>
+            <span className="text-slate-600">{"\u041f\u043e\u0438\u0441\u043a:"}</span>
             <input
               className="border rounded px-2 py-0.5 text-xs bg-slate-900 text-slate-100 flex-1"
-              placeholder="title / id / description"
+              placeholder="\u0437\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a / id / \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
 
           <div className="text-xs text-slate-600 ml-auto">
-            Total: {derived.total} · Overdue: {derived.overdue} · Planned:{" "}
-            {derived.planned} · Completed: {derived.completed}
+            {"\u0412\u0441\u0435\u0433\u043e:"} {derived.total} · {"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e:"} {derived.overdue} · {"\u0417\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u043e:"}{" "}
+            {derived.planned} · {"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043e:"} {derived.completed}
           </div>
         </div>
 
         {focus && (
           <div className="mt-2 text-[11px] text-slate-500 flex flex-wrap gap-3 items-center">
-            <span className="font-semibold text-slate-700">Focus from internal processes:</span>
+            <span className="font-semibold text-slate-700">
+              {"\u0424\u043e\u043a\u0443\u0441 \u0438\u0437 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0445 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0432:"}
+            </span>
             {focus.clientId && (
               <span>
-                client:{" "}
+                {"\u043a\u043b\u0438\u0435\u043d\u0442:"}{" "}
                 <span className="font-mono text-slate-900">{focus.clientId}</span>
               </span>
             )}
             {focus.processId && (
               <span>
-                process:{" "}
+                {"\u043f\u0440\u043e\u0446\u0435\u0441\u0441:"}{" "}
                 <span className="font-mono text-slate-900">{focus.processId}</span>
               </span>
             )}
             {focus.instanceId && (
               <span>
-                instance:{" "}
+                {"\u0438\u043d\u0441\u0442\u0430\u043d\u0441:"}{" "}
                 <span className="font-mono text-slate-900">{focus.instanceId}</span>
               </span>
             )}
@@ -279,7 +309,7 @@ const TasksBoard: React.FC = () => {
               onClick={clearFocus}
               className="ml-auto px-2 py-0.5 rounded border border-gray-300 bg-white text-[11px] hover:bg-gray-50"
             >
-              Clear focus
+              {"\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0444\u043e\u043a\u0443\u0441"}
             </button>
           </div>
         )}
@@ -288,19 +318,19 @@ const TasksBoard: React.FC = () => {
       <section className="bg-white border border-gray-200 rounded-xl shadow-sm max-h-[540px] overflow-auto">
         {derived.filteredTasks.length === 0 && !loading ? (
           <div className="px-4 py-6 text-xs text-slate-500">
-            No tasks for current filters.
+            {"\u041d\u0435\u0442 \u0437\u0430\u0434\u0430\u0447 \u0434\u043b\u044f \u0442\u0435\u043a\u0443\u0449\u0438\u0445 \u0444\u0438\u043b\u044c\u0442\u0440\u043e\u0432."}
           </div>
         ) : (
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-slate-900 text-[11px] text-slate-100">
-                <th className="px-3 py-2 text-left">Title</th>
-                <th className="px-3 py-2 text-left">Status</th>
-                <th className="px-3 py-2 text-left">Client</th>
-                <th className="px-3 py-2 text-left">Process</th>
-                <th className="px-3 py-2 text-left">Instance</th>
-                <th className="px-3 py-2 text-left">Due date</th>
-                <th className="px-3 py-2 text-left">Assignee</th>
+                <th className="px-3 py-2 text-left">{"\u0417\u0430\u0434\u0430\u0447\u0430"}</th>
+                <th className="px-3 py-2 text-left">{"\u0421\u0442\u0430\u0442\u0443\u0441"}</th>
+                <th className="px-3 py-2 text-left">{"\u041a\u043b\u0438\u0435\u043d\u0442"}</th>
+                <th className="px-3 py-2 text-left">{"\u041f\u0440\u043e\u0446\u0435\u0441\u0441"}</th>
+                <th className="px-3 py-2 text-left">{"\u0418\u043d\u0441\u0442\u0430\u043d\u0441"}</th>
+                <th className="px-3 py-2 text-left">{"\u0421\u0440\u043e\u043a"}</th>
+                <th className="px-3 py-2 text-left">{"\u0418\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c"}</th>
                 <th className="px-3 py-2 text-left">Id</th>
               </tr>
             </thead>
@@ -313,10 +343,10 @@ const TasksBoard: React.FC = () => {
 
                 const baseKey =
                   t.id ??
-                  `${t.client_id ?? "c"}-${t.process_id ?? "p"}-${
-                    t.instance_id ?? "i"
-                  }`;
+                  `${t.client_id ?? "c"}-${t.process_id ?? "p"}-${t.instance_id ?? "i"}`;
                 const key = `${baseKey}-${index}`;
+
+                const title = trTitle(t.title);
 
                 return (
                   <tr
@@ -325,7 +355,7 @@ const TasksBoard: React.FC = () => {
                   >
                     <td className="px-3 py-2 align-top">
                       <div className="text-xs font-semibold text-slate-900">
-                        {t.title ?? "(no title)"}
+                        {title || "(no title)"}
                       </div>
                       {t.description && (
                         <div className="mt-0.5 text-[11px] text-slate-600 line-clamp-2">
@@ -344,7 +374,7 @@ const TasksBoard: React.FC = () => {
                             : "bg-slate-50 border-slate-200 text-slate-700")
                         }
                       >
-                        {statusRaw}
+                        {statusLabel[statusRaw.toLowerCase()] ?? statusRaw}
                       </span>
                     </td>
                     <td className="px-3 py-2 align-top">

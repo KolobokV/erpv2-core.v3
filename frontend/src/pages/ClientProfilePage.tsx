@@ -34,27 +34,15 @@ function toggleInArray(arr: number[], x: number): number[] {
   return Array.from(set).sort((a, b) => a - b);
 }
 
-function decodeUnicodeEscapes(input: any): string {
-  const s = String(input ?? "");
-  // decode sequences like "\u0417" (backslash-u) into actual chars
-  return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => {
-    const code = parseInt(hex, 16);
-    if (!Number.isFinite(code)) return _;
-    return String.fromCharCode(code);
-  });
-}
-
 function getClientIdSafe(location: { search: string; pathname: string }): string {
   try {
     const sp = new URLSearchParams(location.search || "");
-    const fromQuery =
-      (sp.get("client") || sp.get("client_id") || sp.get("cid") || "").trim();
+    const fromQuery = (sp.get("client") || sp.get("client_id") || sp.get("cid") || "").trim();
     if (fromQuery) return fromQuery;
   } catch {
     // ignore
   }
 
-  // fallback to old helper (kept for compatibility)
   try {
     const v = String(getClientFromLocation(location as any) || "").trim();
     if (v) return v;
@@ -62,7 +50,6 @@ function getClientIdSafe(location: { search: string; pathname: string }): string
     // ignore
   }
 
-  // last resort: parse from path like /client-profile/<id>
   const parts = String(location.pathname || "").split("/").filter(Boolean);
   const idx = parts.indexOf("client-profile");
   if (idx >= 0 && parts[idx + 1]) return String(parts[idx + 1]).trim();
@@ -122,6 +109,57 @@ function normalizeClientProfileV27(input: any, clientId: string): ClientProfileV
   return profile;
 }
 
+const S_CLIENT_CARD = "\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430: ";
+const S_DAY = "\u0414\u0435\u043d\u044c";
+const S_TASKS = "\u0417\u0430\u0434\u0430\u0447\u0438";
+const S_RESET = "\u0421\u0431\u0440\u043e\u0441";
+const S_SAVE = "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c";
+const S_CTX_REQUIRED = "\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u0435\u043d";
+const S_OPEN_WITH_PARAM = "\u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u044d\u0442\u0443 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0441 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u043c ?client=...";
+const S_OPEN = "\u041e\u0442\u043a\u0440\u044b\u0442\u044c";
+const S_GO_TO_TASKS = "\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0437\u0430\u0434\u0430\u0447\u0430\u043c";
+
+const S_PASSPORT = "\u041f\u0430\u0441\u043f\u043e\u0440\u0442 \u043a\u043b\u0438\u0435\u043d\u0442\u0430";
+const S_LEGAL = "\u042e\u0440. \u0434\u0430\u043d\u043d\u044b\u0435";
+const S_EMPLOYEES = "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0438";
+const S_OPS = "\u041e\u043f\u0435\u0440\u0430\u0446\u0438\u0438";
+const S_FLAGS = "\u0421\u043f\u0435\u0446. \u043f\u0440\u0438\u0437\u043d\u0430\u043a\u0438";
+const S_DERIVED = "\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435";
+
+const S_TOAST_MISSING_CLIENT = "\u041d\u0435\u0442 \u043a\u043e\u0434\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u0432 URL";
+const S_TOAST_SAVED = "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e";
+const S_TOAST_SAVE_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f";
+const S_TOAST_RESET = "\u0421\u0431\u0440\u043e\u0448\u0435\u043d\u043e";
+const S_TOAST_RESET_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0431\u0440\u043e\u0441\u0430";
+
+const S_MAT_TASKS = "\u0421\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438 (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
+const S_RESET_TASKS = "\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438 (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
+const S_CLEAR_QUEUE = "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u043e\u0447\u0435\u0440\u0435\u0434\u044c \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0432";
+const S_TOAST_QUEUE_CLEARED = "\u041e\u0447\u0435\u0440\u0435\u0434\u044c \u043e\u0447\u0438\u0449\u0435\u043d\u0430";
+const S_TOAST_MAT_OK = "\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u044b (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
+const S_TOAST_MAT_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0437\u0430\u0434\u0430\u0447";
+const S_TOAST_TASKS_RESET_OK = "\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0431\u0440\u043e\u0448\u0435\u043d\u044b (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
+const S_TOAST_TASKS_RESET_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0431\u0440\u043e\u0441\u0430 \u0437\u0430\u0434\u0430\u0447";
+
+const S_ENTITY_TYPE = "\u0422\u0438\u043f \u0441\u0443\u0431\u044a\u0435\u043a\u0442\u0430";
+const S_TAX_SYSTEM = "\u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u043d\u0430\u043b\u043e\u0433\u043e\u043e\u0431\u043b\u043e\u0436\u0435\u043d\u0438\u044f";
+const S_VAT_MODE = "\u0420\u0435\u0436\u0438\u043c \u041d\u0414\u0421";
+
+const S_HAS_PAYROLL = "\u0415\u0441\u0442\u044c \u0437\u0430\u0440\u043f\u043b\u0430\u0442\u0430";
+const S_HEADCOUNT = "\u0427\u0438\u0441\u043b\u043043\u0435\u043d\u043d\u043e\u0441\u0442\u044c";
+const S_PAYROLL_DATES = "\u0414\u043d\u0438 \u0432\u044b\u043f\u043b\u0430\u0442\u044b";
+
+const S_BANK_ACCOUNTS = "\u0420\u0430\u0441\u0447\u0435\u0442\u043d\u044b\u0435 \u0441\u0447\u0435\u0442\u0430";
+const S_CASH_REGISTER = "\u041a\u0430\u0441\u0441\u0430";
+const S_OFD = "\u041e\u0424\u0414";
+const S_FOREIGN_OPS = "\u0412\u043d\u0435\u0448\u043d\u0438\u0435 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438";
+
+const S_TOURISM_TAX = "\u0422\u0443\u0440\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0441\u0431\u043e\u0440";
+const S_EXCISE = "\u0410\u043a\u0446\u0438\u0437";
+const S_CTRL_TRANS = "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u0438\u0440\u0443\u0435\u043c\u044b\u0435 \u0441\u0434\u0435\u043b\u043a\u0438";
+
+const P_CLIENT_ID = "clientId (e.g. ip_usn_dr)";
+
 export default function ClientProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -174,14 +212,14 @@ export default function ClientProfilePage() {
   const risk = useMemo(() => {
     try {
       return evaluateClientRiskV27(profile, derived as any);
-    } catch (e: any) {
+    } catch {
       return { score: 0, label: "risk_error" };
     }
   }, [profile, derived]);
 
   async function doSave() {
     if (!hasClient) {
-      setToast("Missing client in URL");
+      setToast(S_TOAST_MISSING_CLIENT);
       window.setTimeout(() => setToast(""), 1200);
       return;
     }
@@ -192,10 +230,10 @@ export default function ClientProfilePage() {
       saveClientProfileV27(clientId, fresh);
       setProfile(fresh);
       setSavedAt(fresh.updatedAtIso);
-      setToast("Saved");
+      setToast(S_TOAST_SAVED);
       window.setTimeout(() => setToast(""), 1200);
-    } catch (e: any) {
-      setToast("Save failed");
+    } catch {
+      setToast(S_TOAST_SAVE_FAILED);
       window.setTimeout(() => setToast(""), 1200);
     } finally {
       setSaving(false);
@@ -210,7 +248,7 @@ export default function ClientProfilePage() {
 
   function doReset() {
     if (!hasClient) {
-      setToast("Missing client in URL");
+      setToast(S_TOAST_MISSING_CLIENT);
       window.setTimeout(() => setToast(""), 1200);
       return;
     }
@@ -220,20 +258,20 @@ export default function ClientProfilePage() {
       const fresh = normalizeClientProfileV27(loadClientProfileV27(clientId), clientId);
       setProfile(fresh);
       setSavedAt(fresh.updatedAtIso);
-      setToast("Reset");
+      setToast(S_TOAST_RESET);
       window.setTimeout(() => setToast(""), 1200);
 
       setTasksMeta(loadMaterializeMetaV27(clientId));
       setTasksRev((x) => x + 1);
-    } catch (e: any) {
-      setToast("Reset failed");
+    } catch {
+      setToast(S_TOAST_RESET_FAILED);
       window.setTimeout(() => setToast(""), 1200);
     }
   }
 
   function doMaterializeLocalTasks() {
     if (!hasClient) {
-      setToast("Missing client in URL");
+      setToast(S_TOAST_MISSING_CLIENT);
       window.setTimeout(() => setToast(""), 1200);
       return;
     }
@@ -242,17 +280,17 @@ export default function ClientProfilePage() {
       materializeFromDerivedV27(clientId, derived as any);
       setTasksMeta(loadMaterializeMetaV27(clientId));
       setTasksRev((x) => x + 1);
-      setToast("Materialized tasks (local)");
+      setToast(S_TOAST_MAT_OK);
       window.setTimeout(() => setToast(""), 1200);
-    } catch (e: any) {
-      setToast("Materialize failed");
+    } catch {
+      setToast(S_TOAST_MAT_FAILED);
       window.setTimeout(() => setToast(""), 1200);
     }
   }
 
   function doResetLocalTasks() {
     if (!hasClient) {
-      setToast("Missing client in URL");
+      setToast(S_TOAST_MISSING_CLIENT);
       window.setTimeout(() => setToast(""), 1200);
       return;
     }
@@ -264,47 +302,36 @@ export default function ClientProfilePage() {
       }
       setTasksMeta(loadMaterializeMetaV27(clientId));
       setTasksRev((x) => x + 1);
-      setToast("Tasks reset (local)");
+      setToast(S_TOAST_TASKS_RESET_OK);
       window.setTimeout(() => setToast(""), 1200);
-    } catch (e: any) {
-      setToast("Reset tasks failed");
+    } catch {
+      setToast(S_TOAST_TASKS_RESET_FAILED);
       window.setTimeout(() => setToast(""), 1200);
     }
   }
 
-  const sClientCard = decodeUnicodeEscapes("\\u041A\\u0430\\u0440\\u0442\\u043E\\u0447\\u043A\\u0430 \\u043A\\u043B\\u0438\\u0435\\u043D\\u0442\\u0430: ");
-  const sDay = decodeUnicodeEscapes("\\u0414\\u0435\\u043D\\u044C");
-  const sTasks = decodeUnicodeEscapes("\\u0417\\u0430\\u0434\\u0430\\u0447\\u0438");
-  const sReset = decodeUnicodeEscapes("\\u0421\\u0431\\u0440\\u043E\\u0441");
-  const sSave = decodeUnicodeEscapes("\\u0421\\u043E\\u0445\\u0440\\u0430\\u043D\\u0438\\u0442\\u044C");
-  const sCtxReq = decodeUnicodeEscapes("\\u041A\\u043E\\u043D\\u0442\\u0435\\u043A\\u0441\\u0442 \\u043A\\u043B\\u0438\\u0435\\u043D\\u0442\\u0430 \\u043E\\u0431\\u044F\\u0437\\u0430\\u0442\\u0435\\u043B\\u0435\\u043D");
-  const sPassport = decodeUnicodeEscapes("\\u041F\\u0430\\u0441\\u043F\\u043E\\u0440\\u0442 \\u043A\\u043B\\u0438\\u0435\\u043D\\u0442\\u0430");
-  const sLegal = decodeUnicodeEscapes("\\u042E\\u0440. \\u0434\\u0430\\u043D\\u043D\\u044B\\u0435");
-  const sEmployees = decodeUnicodeEscapes("\\u0421\\u043E\\u0442\\u0440\\u0443\\u0434\\u043D\\u0438\\u043A\\u0438");
-  const sOps = decodeUnicodeEscapes("\\u041E\\u043F\\u0435\\u0440\\u0430\\u0446\\u0438\\u0438");
-  const sFlags = decodeUnicodeEscapes("\\u0421\\u043F\\u0435\\u0446. \\u043F\\u0440\\u0438\\u0437\\u043D\\u0430\\u043A\\u0438");
-  const sDerived = decodeUnicodeEscapes("\\u041F\\u0440\\u043E\\u0438\\u0437\\u0432\\u043E\\u0434\\u043D\\u044B\\u0435 \\u0434\\u0430\\u043D\\u043D\\u044B\\u0435");
+  const title = S_CLIENT_CARD + (clientId || "-");
 
   return (
     <PageShell>
       <ClientCockpitHeader />
       <UpBackBar
-        title={sClientCard + (clientId || "-")}
+        title={title}
         onUp={() => navigate("/")}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <RiskBadge score={risk.score} label={risk.label} />
             <a className="erp-btn" href={hasClient ? ("/day?client=" + encodeURIComponent(clientId)) : "/day"}>
-              {sDay}
+              {S_DAY}
             </a>
             <a className="erp-btn" href={hasClient ? ("/tasks?client=" + encodeURIComponent(clientId)) : "/tasks"}>
-              {sTasks}
+              {S_TASKS}
             </a>
             <button className="erp-btn" onClick={doReset} disabled={saving || !hasClient}>
-              {sReset}
+              {S_RESET}
             </button>
             <button className="erp-btn" onClick={doSave} disabled={saving || !hasClient}>
-              {sSave}
+              {S_SAVE}
             </button>
           </div>
         }
@@ -313,45 +340,35 @@ export default function ClientProfilePage() {
       <div style={{ padding: 12, display: "grid", gap: 12 }}>
         {!hasClient ? (
           <div style={{ border: "1px solid rgba(255,160,80,0.35)", borderRadius: 16, padding: 12 }}>
-            <div style={{ fontWeight: 800 }}>{sCtxReq}</div>
-            <div style={{ marginTop: 6, opacity: 0.85, fontSize: 12 }}>
-              {decodeUnicodeEscapes("\\u041E\\u0442\\u043A\\u0440\\u043E\\u0439\\u0442\\u0435 \\u044D\\u0442\\u0443 \\u0441\\u0442\\u0440\\u0430\\u043D\\u0438\\u0446\\u0443 \\u0441 \\u043F\\u0430\\u0440\\u0430\\u043C\\u0435\\u0442\\u0440\\u043E\\u043C ?client=...")}
-            </div>
+            <div style={{ fontWeight: 800 }}>{S_CTX_REQUIRED}</div>
+            <div style={{ marginTop: 6, opacity: 0.85, fontSize: 12 }}>{S_OPEN_WITH_PARAM}</div>
             <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input
                 value={openClientId}
                 onChange={(e) => setOpenClientId(e.target.value)}
-                placeholder="clientId (e.g. ip_usn_dr)"
+                placeholder={P_CLIENT_ID}
                 style={{ padding: "6px 10px", borderRadius: 12, minWidth: 260, border: "1px solid rgba(15,23,42,0.14)" }}
               />
               <button onClick={doOpenWithClient} className="erp-btn" style={{ padding: "6px 10px" }}>
-                {decodeUnicodeEscapes("\\u041E\\u0442\\u043A\\u0440\\u044B\\u0442\\u044C")}
+                {S_OPEN}
               </button>
               <a href="/tasks" className="erp-btn" style={{ padding: "6px 10px", opacity: 0.9 }}>
-                {decodeUnicodeEscapes("\\u041F\\u0435\\u0440\\u0435\\u0439\\u0442\\u0438 \\u043A \\u0437\\u0430\\u0434\\u0430\\u0447\\u0430\\u043C")}
+                {S_GO_TO_TASKS}
               </a>
             </div>
           </div>
         ) : null}
 
-        <div
-          style={{
-            border: "1px solid rgba(15,23,42,0.12)",
-            borderRadius: 16,
-            padding: 12,
-            background: "rgba(255,255,255,0.98)",
-            boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
-          }}
-        >
+        <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 260 }}>
-              <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 700 }}>{sPassport}</div>
+              <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 700 }}>{S_PASSPORT}</div>
               <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span className="erp-chip">{"entity=" + String(profile?.legal?.entityType || "-")}</span>
-                <span className="erp-chip">{"tax=" + String(profile?.legal?.taxSystem || "-")}</span>
-                <span className="erp-chip">{"vat=" + String(profile?.legal?.vatMode || "-")}</span>
-                <span className="erp-chip">{"payroll=" + String(!!profile?.employees?.hasPayroll)}</span>
-                <span className="erp-chip">{"headcount=" + String(profile?.employees?.headcount ?? 0)}</span>
+                <span className="erp-chip">{"\u0422\u0438\u043f=" + String(profile?.legal?.entityType || "-")}</span>
+                <span className="erp-chip">{"\u041d\u0430\u043b\u043e\u0433=" + String(profile?.legal?.taxSystem || "-")}</span>
+                <span className="erp-chip">{"\u041d\u0414\u0421=" + String(profile?.legal?.vatMode || "-")}</span>
+                <span className="erp-chip">{"\u0417\u0430\u0440\u043f\u043b\u0430\u0442\u0430=" + String(!!profile?.employees?.hasPayroll)}</span>
+                <span className="erp-chip">{"\u0428\u0442\u0430\u0442=" + String(profile?.employees?.headcount ?? 0)}</span>
               </div>
               <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
                 {"updatedAt=" + String(profile?.updatedAtIso || "-")}
@@ -360,10 +377,10 @@ export default function ClientProfilePage() {
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="erp-btn" onClick={doMaterializeLocalTasks} disabled={!hasClient}>
-                {"Materialize tasks (local)"}
+                {S_MAT_TASKS}
               </button>
               <button className="erp-btn" onClick={doResetLocalTasks} disabled={!hasClient}>
-                {"Reset tasks (local)"}
+                {S_RESET_TASKS}
               </button>
               <button
                 className="erp-btn"
@@ -371,12 +388,12 @@ export default function ClientProfilePage() {
                   if (!hasClient) return;
                   clearProcessIntents(clientId);
                   setIntentRev((x) => x + 1);
-                  setToast("Queue cleared");
+                  setToast(S_TOAST_QUEUE_CLEARED);
                   window.setTimeout(() => setToast(""), 1200);
                 }}
                 disabled={!hasClient}
               >
-                {"Clear process queue"}
+                {S_CLEAR_QUEUE}
               </button>
             </div>
           </div>
@@ -390,46 +407,33 @@ export default function ClientProfilePage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <ClientTasksSummaryCard clientId={clientId} title={decodeUnicodeEscapes("\\u0417\\u0430\\u0434\\u0430\\u0447\\u0438")} rev={tasksRev} />
-          <ClientCoverageSummaryCard
-            clientId={clientId}
-            title={decodeUnicodeEscapes("\\u041F\\u043E\\u043A\\u0440\\u044B\\u0442\\u0438\\u0435 \\u043F\\u0440\\u043E\\u0446\\u0435\\u0441\\u0441\\u043E\\u0432 (local)")}
-            rev={tasksRev}
-          />
+          <ClientTasksSummaryCard clientId={clientId} title={S_TASKS} rev={tasksRev} />
+          <ClientCoverageSummaryCard clientId={clientId} title={"\u041f\u043e\u043a\u0440\u044b\u0442\u0438\u0435 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0432 (local)"} rev={tasksRev} />
         </div>
 
         <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{sLegal}</h3>
+          <h3 style={{ marginTop: 0 }}>{S_LEGAL}</h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>Entity type</div>
-            <select
-              value={profile.legal.entityType}
-              disabled={!hasClient}
-              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, entityType: e.target.value as LegalEntityTypeV27 } }))}
-            >
+            <div>{S_ENTITY_TYPE}</div>
+            <select value={profile.legal.entityType} disabled={!hasClient}
+              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, entityType: e.target.value as LegalEntityTypeV27 } }))}>
               <option value="IP">IP</option>
               <option value="OOO">OOO</option>
             </select>
 
-            <div>Tax system</div>
-            <select
-              value={profile.legal.taxSystem}
-              disabled={!hasClient}
-              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, taxSystem: e.target.value as TaxSystemV27 } }))}
-            >
+            <div>{S_TAX_SYSTEM}</div>
+            <select value={profile.legal.taxSystem} disabled={!hasClient}
+              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, taxSystem: e.target.value as TaxSystemV27 } }))}>
               <option value="USN_DR">USN DR</option>
               <option value="USN_DO">USN DO</option>
               <option value="OSNO">OSNO</option>
               <option value="PATENT">PATENT</option>
             </select>
 
-            <div>VAT mode</div>
-            <select
-              value={profile.legal.vatMode}
-              disabled={!hasClient}
-              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, vatMode: e.target.value as VatModeV27 } }))}
-            >
+            <div>{S_VAT_MODE}</div>
+            <select value={profile.legal.vatMode} disabled={!hasClient}
+              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, vatMode: e.target.value as VatModeV27 } }))}>
               <option value="NONE">NONE</option>
               <option value="VAT_5">VAT 5</option>
               <option value="VAT_7">VAT 7</option>
@@ -439,41 +443,29 @@ export default function ClientProfilePage() {
         </div>
 
         <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{sEmployees}</h3>
+          <h3 style={{ marginTop: 0 }}>{S_EMPLOYEES}</h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>Has payroll</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.employees.hasPayroll}
-              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, hasPayroll: e.target.checked } }))}
-            />
+            <div>{S_HAS_PAYROLL}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.employees.hasPayroll}
+              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, hasPayroll: e.target.checked } }))} />
 
-            <div>Headcount</div>
-            <input
-              type="number"
-              disabled={!hasClient}
-              value={profile.employees.headcount}
-              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, headcount: clampInt(e.target.value, 0, 5000) } }))}
-            />
+            <div>{S_HEADCOUNT}</div>
+            <input type="number" disabled={!hasClient} value={profile.employees.headcount}
+              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, headcount: clampInt(e.target.value, 0, 5000) } }))} />
 
-            <div>Payroll dates</div>
+            <div>{S_PAYROLL_DATES}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, opacity: hasClient ? 1 : 0.6 }}>
               {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
                 const on = profile.employees.payrollDates.includes(day);
                 return (
-                  <button
-                    key={day}
-                    disabled={!hasClient}
-                    style={{ opacity: on ? 1 : 0.4 }}
+                  <button key={day} disabled={!hasClient} style={{ opacity: on ? 1 : 0.4 }}
                     onClick={() =>
                       update((p) => ({
                         ...p,
                         employees: { ...p.employees, payrollDates: toggleInArray(p.employees.payrollDates, day) }
                       }))
-                    }
-                  >
+                    }>
                     {day}
                   </button>
                 );
@@ -483,85 +475,53 @@ export default function ClientProfilePage() {
         </div>
 
         <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{sOps}</h3>
+          <h3 style={{ marginTop: 0 }}>{S_OPS}</h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>Bank accounts</div>
-            <input
-              type="number"
-              disabled={!hasClient}
-              value={profile.operations.bankAccounts}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, bankAccounts: clampInt(e.target.value, 0, 50) } }))}
-            />
+            <div>{"\u0420\u0430\u0441\u0447\u0435\u0442\u043d\u044b\u0435 \u0441\u0447\u0435\u0442\u0430"}</div>
+            <input type="number" disabled={!hasClient} value={profile.operations.bankAccounts}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, bankAccounts: clampInt(e.target.value, 0, 50) } }))} />
 
-            <div>Cash register</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.operations.cashRegister}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, cashRegister: e.target.checked } }))}
-            />
+            <div>{S_CASH_REGISTER}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.operations.cashRegister}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, cashRegister: e.target.checked } }))} />
 
-            <div>OFD</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.operations.ofd}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, ofd: e.target.checked } }))}
-            />
+            <div>{S_OFD}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.operations.ofd}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, ofd: e.target.checked } }))} />
 
-            <div>Foreign ops</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.operations.foreignOps}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, foreignOps: e.target.checked } }))}
-            />
+            <div>{S_FOREIGN_OPS}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.operations.foreignOps}
+              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, foreignOps: e.target.checked } }))} />
           </div>
         </div>
 
         <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{sFlags}</h3>
+          <h3 style={{ marginTop: 0 }}>{S_FLAGS}</h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>Tourism tax</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.specialFlags.tourismTax}
-              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, tourismTax: e.target.checked } }))}
-            />
+            <div>{S_TOURISM_TAX}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.specialFlags.tourismTax}
+              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, tourismTax: e.target.checked } }))} />
 
-            <div>Excise</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.specialFlags.excise}
-              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, excise: e.target.checked } }))}
-            />
+            <div>{S_EXCISE}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.specialFlags.excise}
+              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, excise: e.target.checked } }))} />
 
-            <div>Controlled transactions</div>
-            <input
-              type="checkbox"
-              disabled={!hasClient}
-              checked={!!profile.specialFlags.controlledTransactions}
-              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, controlledTransactions: e.target.checked } }))}
-            />
+            <div>{S_CTRL_TRANS}</div>
+            <input type="checkbox" disabled={!hasClient} checked={!!profile.specialFlags.controlledTransactions}
+              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, controlledTransactions: e.target.checked } }))} />
           </div>
 
           <div style={{ marginTop: 12 }}>
             <details>
-              <summary style={{ cursor: "pointer" }}>{sDerived}</summary>
+              <summary style={{ cursor: "pointer" }}>{S_DERIVED}</summary>
               <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(derived, null, 2)}</pre>
             </details>
           </div>
         </div>
 
-        {toast ? (
-          <div style={{ opacity: 0.85, fontSize: 12 }}>
-            toast: {toast}
-          </div>
-        ) : null}
+        {toast ? <div style={{ opacity: 0.85, fontSize: 12 }}>toast: {toast}</div> : null}
       </div>
     </PageShell>
   );
