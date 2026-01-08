@@ -1,233 +1,792 @@
-import { useEffect, useMemo, useState } from "react";
-import { fetchTasksSafe, type TaskItem } from "../api/tasksSafe";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { apiGetJson } from "../api";
+import "../ux/dayDashboard.css";
 
-type Bucket = {
-  key: string;
+type Task = {
+  id: string;
+  client_code?: string;
+  client_label?: string;
   title: string;
-  subtitle: string;
-  items: TaskItem[];
+  status: string;
+  priority?: string;
+  deadline?: string;
 };
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
+type ProcessInstance = {
+  id: string;
+  client_code?: string;
+  client_label?: string;
+  period?: string;
+  status?: string;
+  deadline?: string;
+  due_date?: string;
+};
+
+type StoredAttachment = {
+  name: string;
+  mime: string;
+  data_url: string;
+  added_at: string;
+};
+
+type AttachmentIndex = Record<string, StoredAttachment[]>;
+
+type ManualTaskStatus = "todo" | "in_progress" | "done";
+
+type ManualTask = {
+  id: string;
+  title: string;
+  note?: string;
+  assignee?: string;
+  due_date?: string | null; // YYYY-MM-DD
+  status: ManualTaskStatus;
+  pinned?: boolean;
+  created_at: string; // ISO
+  updated_at: string; // ISO
+};
+
+const LS_ATTACH_KEY = "erpv2_task_attachments_v1";
+const LS_MANUAL_KEY = "erpv2_manual_tasks_v1";
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+function nowIso(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${m}-${day}T${hh}:${mm}:${ss}`;
 }
 
-function toDateKey(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function isoDateLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function parseDateKey(s?: string) {
+function parseDateOnly(s?: string | null): Date | null {
   if (!s) return null;
-  const m = /^\d{4}-\d{2}-\d{2}/.exec(String(s));
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
-  const [y, mo, da] = m[0].split("-").map((x) => parseInt(x, 10));
-  if (!y || !mo || !da) return null;
-  return new Date(y, mo - 1, da);
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  const dt = new Date(y, mo, d);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
 }
 
-function isDone(status?: string) {
-  const s = String(status || "").toLowerCase();
-  return s === "done" || s === "completed" || s === "closed";
+function isOverdueBackend(task: Task, today: Date): boolean {
+  const dd = parseDateOnly(task.deadline);
+  if (!dd) return false;
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const d0 = new Date(dd.getFullYear(), dd.getMonth(), dd.getDate());
+  return d0.getTime() < t0.getTime() && String(task.status || "").toLowerCase() !== "done";
 }
 
-function decodeUnicodeEscapesMaybe(input: string) {
-  // If the string contains literal \uXXXX sequences, try to decode them.
-  if (!input.includes("\\u")) return input;
+function isTodayBackend(task: Task, today: Date): boolean {
+  const dd = parseDateOnly(task.deadline);
+  if (!dd) return false;
+  return isoDateLocal(dd) === isoDateLocal(today);
+}
+
+function isLegacyUrgentBackend(task: Task): boolean {
+  const pr = String(task.priority || "").toLowerCase();
+  const noDeadline = !task.deadline;
+  const t = String(task.title || "").trim();
+  return ((pr === "urgent" || pr === "high" || pr === "p1") && noDeadline) || t.startsWith("!");
+}
+
+function groupTasksByDateBackend(tasks: Task[]): Record<string, Task[]> {
+  const map: Record<string, Task[]> = {};
+  for (const t of tasks) {
+    const dd = parseDateOnly(t.deadline);
+    if (!dd) continue;
+    const key = isoDateLocal(dd);
+    if (!map[key]) map[key] = [];
+    map[key].push(t);
+  }
+  return map;
+}
+
+function groupManualByDate(tasks: ManualTask[]): Record<string, ManualTask[]> {
+  const map: Record<string, ManualTask[]> = {};
+  for (const t of tasks) {
+    const dd = parseDateOnly(t.due_date || undefined);
+    if (!dd) continue;
+    const key = isoDateLocal(dd);
+    if (!map[key]) map[key] = [];
+    map[key].push(t);
+  }
+  return map;
+}
+
+function monthGrid(year: number, monthIndex0: number): Date[] {
+  const first = new Date(year, monthIndex0, 1);
+  const firstDow = (first.getDay() + 6) % 7; // 0=Mon .. 6=Sun
+  const start = new Date(year, monthIndex0, 1 - firstDow);
+  const days: Date[] = [];
+  for (let i = 0; i < 42; i++) {
+    days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  }
+  return days;
+}
+
+function loadIndex(): AttachmentIndex {
   try {
-    // Wrap into JSON string and parse.
-    const json = `"${input.replace(/\\/g, "\\\\").replace(/\"/g, "\\\"")}"`;
-    const parsed = JSON.parse(json);
-    return typeof parsed === "string" ? parsed : input;
+    const raw = localStorage.getItem(LS_ATTACH_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === "object") return obj as AttachmentIndex;
   } catch {
-    return input;
+    // ignore
+  }
+  return {};
+}
+
+function saveIndex(idx: AttachmentIndex) {
+  try {
+    localStorage.setItem(LS_ATTACH_KEY, JSON.stringify(idx));
+  } catch {
+    // ignore
   }
 }
 
-function taskTitle(t: TaskItem) {
-  const raw = String(t.title || t.id || "task");
-  return decodeUnicodeEscapesMaybe(raw);
+function loadManualTasks(): ManualTask[] {
+  try {
+    const raw = localStorage.getItem(LS_MANUAL_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x) => x && typeof x === "object" && typeof x.id === "string" && typeof x.title === "string")
+      .map((x) => ({
+        id: String(x.id),
+        title: String(x.title),
+        note: typeof x.note === "string" ? x.note : "",
+        assignee: typeof x.assignee === "string" ? x.assignee : "",
+        due_date: typeof x.due_date === "string" ? x.due_date : null,
+        status: (x.status === "in_progress" || x.status === "done" ? x.status : "todo") as ManualTaskStatus,
+        pinned: Boolean((x as any).pinned),
+        created_at: typeof x.created_at === "string" ? x.created_at : nowIso(),
+        updated_at: typeof x.updated_at === "string" ? x.updated_at : nowIso(),
+      }));
+  } catch {
+    return [];
+  }
 }
 
-function DeadlinePill({ deadline }: { deadline?: string }) {
-  const d = String(deadline || "").slice(0, 10);
-  return (
-    <span
-      style={{
-        fontSize: 12,
-        padding: "2px 8px",
-        borderRadius: 999,
-        border: "1px solid rgba(120,120,140,0.35)",
-        background: "rgba(120,120,140,0.10)",
-      }}
-      title={deadline || ""}
-    >
-      {d || "no-deadline"}
-    </span>
-  );
+function saveManualTasks(items: ManualTask[]) {
+  try {
+    localStorage.setItem(LS_MANUAL_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
 }
 
-function BucketCard({ b }: { b: Bucket }) {
-  return (
-    <section
-      style={{
-        border: "1px solid rgba(120,120,140,0.20)",
-        borderRadius: 16,
-        padding: 12,
-        background: "rgba(255,255,255,0.65)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <div style={{ fontSize: 18, fontWeight: 900 }}>{b.title}</div>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>{b.subtitle}</div>
-        <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>
-          {b.items.length}
-        </div>
-      </div>
+function makeId(): string {
+  const a = Math.random().toString(16).slice(2);
+  const b = Date.now().toString(16);
+  return `m_${b}_${a}`;
+}
 
-      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-        {b.items.length === 0 ? (
-          <div style={{ fontSize: 13, opacity: 0.7 }}>empty</div>
-        ) : (
-          b.items.map((t, idx) => (
-            <div
-              key={(t.id || t.title || "t") + ":" + idx}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto",
-                gap: 10,
-                padding: "10px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(120,120,140,0.15)",
-                background: "rgba(255,255,255,0.7)",
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 800, lineHeight: 1.2 }}>
-                  {taskTitle(t)}
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                  {(t.client_id && `client: ${t.client_id}`) || "client: -"}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <DeadlinePill deadline={t.deadline} />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
+async function fileToDataUrl(file: File): Promise<{ mime: string; dataUrl: string }> {
+  const mime = file.type || "application/octet-stream";
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(new Error("file read failed"));
+    r.readAsDataURL(file);
+  });
+  return { mime, dataUrl };
+}
+
+function statusLabel(s: ManualTaskStatus): string {
+  if (s === "todo") return "\u041d\u0435 \u043d\u0430\u0447\u0430\u0442\u043e";
+  if (s === "in_progress") return "\u0412 \u0440\u0430\u0431\u043e\u0442\u0435";
+  return "\u0413\u043e\u0442\u043e\u0432\u043e";
+}
+
+function normalizeManualQuery(s: string): string {
+  return String(s || "").trim().toLowerCase();
+}
+
+function compareManual(a: ManualTask, b: ManualTask): number {
+  const ap = a.pinned ? 1 : 0;
+  const bp = b.pinned ? 1 : 0;
+  if (ap !== bp) return bp - ap;
+
+  const sRank = (x: ManualTaskStatus) => (x === "todo" ? 0 : x === "in_progress" ? 1 : 2);
+  const ar = sRank(a.status);
+  const br = sRank(b.status);
+  if (ar !== br) return ar - br;
+
+  const ad = a.due_date ? a.due_date : "9999-99-99";
+  const bd = b.due_date ? b.due_date : "9999-99-99";
+  if (ad !== bd) return ad.localeCompare(bd);
+
+  return String(b.updated_at).localeCompare(String(a.updated_at));
 }
 
 export default function DayDashboardPage() {
-  const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [proc, setProc] = useState<ProcessInstance[]>([]);
+  const [manual, setManual] = useState<ManualTask[]>(() => loadManualTasks());
+
+  const [loading, setLoading] = useState<boolean>(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const today = useMemo(() => new Date(), []);
+  const [calMonth, setCalMonth] = useState<number>(today.getMonth());
+  const [calYear, setCalYear] = useState<number>(today.getFullYear());
+
+  // Manual quick-create
+  const [mTitle, setMTitle] = useState<string>("");
+  const [mNote, setMNote] = useState<string>("");
+  const [mAssignee, setMAssignee] = useState<string>("");
+  const [mDue, setMDue] = useState<string>("");
+  const [uiErr, setUiErr] = useState<string | null>(null);
+
+  // Manual filter
+  const [mQuery, setMQuery] = useState<string>("");
+  const [mShowDone, setMShowDone] = useState<boolean>(false);
+
+  const [attIdx, setAttIdx] = useState<AttachmentIndex>(() => loadIndex());
+  const fileInputsRef = useRef<Record<string, HTMLInputElement | null>>({});
+
+  async function reloadBackend() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const [t, p] = await Promise.all([
+        apiGetJson("/api/internal/tasks"),
+        apiGetJson("/api/internal/process-instances-v2/"),
+      ]);
+      setTasks(Array.isArray(t) ? t : []);
+      setProc(Array.isArray(p) ? p : []);
+      setAttIdx(loadIndex());
+    } catch (e: any) {
+      setErr(String(e?.message || e || "error"));
+      setTasks([]);
+      setProc([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function reloadManual() {
+    const m = loadManualTasks();
+    m.sort(compareManual);
+    setManual(m);
+    setAttIdx(loadIndex());
+  }
 
   useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError(null);
-
-    fetchTasksSafe()
-      .then((res) => {
-        if (!alive) return;
-        setTasks(Array.isArray(res?.tasks) ? res.tasks : []);
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setTasks([]);
-        setError(String(e?.message || e || "failed"));
-      })
-      .finally(() => {
-        if (!alive) return;
-        setLoading(false);
-      });
-
+    let cancelled = false;
+    (async () => {
+      await reloadBackend();
+      if (cancelled) return;
+      reloadManual();
+    })();
     return () => {
-      alive = false;
+      cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const buckets = useMemo(() => {
-    const now = new Date();
-    const todayKey = toDateKey(now);
-    const today = parseDateKey(todayKey) || now;
-    const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const end7 = new Date(startToday);
-    end7.setDate(end7.getDate() + 7);
+  const backendVisible = useMemo(() => tasks.filter((t) => !isLegacyUrgentBackend(t)), [tasks]);
 
-    const pending = tasks.filter((t) => !isDone(t.status));
+  const overdue = useMemo(
+    () => backendVisible.filter((t) => isOverdueBackend(t, today)).slice(0, 8),
+    [backendVisible, today],
+  );
+  const todayTasks = useMemo(
+    () => backendVisible.filter((t) => isTodayBackend(t, today)).slice(0, 10),
+    [backendVisible, today],
+  );
 
-    const overdue: TaskItem[] = [];
-    const dueToday: TaskItem[] = [];
-    const upcoming7: TaskItem[] = [];
-    const inProgress: TaskItem[] = [];
+  const manualFiltered = useMemo(() => {
+    const q = normalizeManualQuery(mQuery);
+    return manual.filter((t) => {
+      if (!mShowDone && t.status === "done") return false;
+      if (!q) return true;
+      const hay = `${t.title} ${t.note || ""} ${t.assignee || ""} ${t.due_date || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [manual, mQuery, mShowDone]);
 
-    for (const t of pending) {
-      const d = parseDateKey(t.deadline);
-      const st = String(t.status || "").toLowerCase();
+  const manualUrgent = useMemo(() => manualFiltered.slice(0, 16), [manualFiltered]);
 
-      if (st === "in_progress" || st === "doing" || st === "wip") {
-        inProgress.push(t);
-      }
+  const tasksByDate = useMemo(() => groupTasksByDateBackend(backendVisible), [backendVisible]);
+  const manualByDate = useMemo(() => groupManualByDate(manual), [manual]);
+  const grid = useMemo(() => monthGrid(calYear, calMonth), [calYear, calMonth]);
 
-      if (!d) continue;
+  const procSummary = useMemo(() => {
+    const total = proc.length;
+    const planned = proc.filter((x) => String(x.status || "").toLowerCase() === "planned").length;
+    return { total, planned };
+  }, [proc]);
 
-      if (d < startToday) overdue.push(t);
-      else if (toDateKey(d) === todayKey) dueToday.push(t);
-      else if (d >= startToday && d < end7) upcoming7.push(t);
+  const monthLabel = useMemo(() => {
+    const names = [
+      "\u042f\u043d\u0432\u0430\u0440\u044c",
+      "\u0424\u0435\u0432\u0440\u0430\u043b\u044c",
+      "\u041c\u0430\u0440\u0442",
+      "\u0410\u043f\u0440\u0435\u043b\u044c",
+      "\u041c\u0430\u0439",
+      "\u0418\u044e\u043d\u044c",
+      "\u0418\u044e\u043b\u044c",
+      "\u0410\u0432\u0433\u0443\u0441\u0442",
+      "\u0421\u0435\u043d\u0442\u044f\u0431\u0440\u044c",
+      "\u041e\u043a\u0442\u044f\u0431\u0440\u044c",
+      "\u041d\u043e\u044f\u0431\u0440\u044c",
+      "\u0414\u0435\u043a\u0430\u0431\u0440\u044c",
+    ];
+    return `${names[calMonth]} ${calYear}`;
+  }, [calYear, calMonth]);
+
+  function prevMonth() {
+    const m = calMonth - 1;
+    if (m < 0) {
+      setCalMonth(11);
+      setCalYear((y) => y - 1);
+    } else {
+      setCalMonth(m);
+    }
+  }
+
+  function nextMonth() {
+    const m = calMonth + 1;
+    if (m > 11) {
+      setCalMonth(0);
+      setCalYear((y) => y + 1);
+    } else {
+      setCalMonth(m);
+    }
+  }
+
+  function createManual() {
+    setUiErr(null);
+    const title = mTitle.trim();
+    if (!title) return;
+
+    const due = mDue.trim();
+    const dueNorm = due ? due.slice(0, 10) : null;
+
+    const item: ManualTask = {
+      id: makeId(),
+      title: title.startsWith("!") ? title : `! ${title}`,
+      note: mNote.trim(),
+      assignee: mAssignee.trim(),
+      due_date: dueNorm,
+      status: "todo",
+      pinned: false,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+
+    const items = loadManualTasks();
+    items.unshift(item);
+    saveManualTasks(items);
+
+    setMTitle("");
+    setMNote("");
+    setMAssignee("");
+    setMDue("");
+    reloadManual();
+  }
+
+  function updateManual(id: string, patch: Partial<ManualTask>) {
+    const items = loadManualTasks();
+    const idx = items.findIndex((x) => x.id === id);
+    if (idx < 0) return;
+    items[idx] = { ...items[idx], ...patch, updated_at: nowIso() };
+    saveManualTasks(items);
+    reloadManual();
+  }
+
+  function deleteManual(id: string) {
+    const items = loadManualTasks().filter((x) => x.id !== id);
+    saveManualTasks(items);
+
+    const a = loadIndex();
+    if (a[id]) {
+      delete a[id];
+      saveIndex(a);
+    }
+    reloadManual();
+  }
+
+  function togglePin(id: string) {
+    const items = loadManualTasks();
+    const idx = items.findIndex((x) => x.id === id);
+    if (idx < 0) return;
+    const cur = Boolean(items[idx].pinned);
+    items[idx] = { ...items[idx], pinned: !cur, updated_at: nowIso() };
+    saveManualTasks(items);
+    reloadManual();
+  }
+
+  function triggerFile(taskId: string) {
+    const el = fileInputsRef.current[taskId];
+    if (el) el.click();
+  }
+
+  async function attachFile(taskId: string, file: File) {
+    setUiErr(null);
+
+    if (file.size > MAX_FILE_BYTES) {
+      setUiErr("\u0424\u0430\u0439\u043b \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0431\u043e\u043b\u044c\u0448\u043e\u0439 (max 2MB).");
+      return;
     }
 
-    const focus: TaskItem[] = [...overdue, ...dueToday, ...upcoming7].slice(0, 7);
+    try {
+      const { mime, dataUrl } = await fileToDataUrl(file);
+      const idx = loadIndex();
+      const arr = Array.isArray(idx[taskId]) ? idx[taskId] : [];
+      arr.unshift({ name: file.name, mime, data_url: dataUrl, added_at: nowIso() });
+      idx[taskId] = arr.slice(0, 6);
+      saveIndex(idx);
+      setAttIdx(idx);
+    } catch (e: any) {
+      setUiErr(String(e?.message || e || "error"));
+    }
+  }
 
-    return [
-      { key: "focus", title: "Focus", subtitle: "top items", items: focus },
-      { key: "overdue", title: "Overdue", subtitle: "should be done earlier", items: overdue },
-      { key: "inprog", title: "In progress", subtitle: "today work", items: inProgress },
-      { key: "today", title: "Due today", subtitle: "deadline today", items: dueToday },
-      { key: "up7", title: "Next 7 days", subtitle: "prepare ahead", items: upcoming7 },
-    ] as Bucket[];
-  }, [tasks]);
+  function deleteAttachment(taskId: string, addedAt: string) {
+    const idx = loadIndex();
+    const arr = Array.isArray(idx[taskId]) ? idx[taskId] : [];
+    idx[taskId] = arr.filter((x) => String(x.added_at) !== String(addedAt));
+    saveIndex(idx);
+    setAttIdx(idx);
+  }
 
-  const dateKey = useMemo(() => toDateKey(new Date()), []);
+  function dayCount(key: string): number {
+    const a = (tasksByDate[key] || []).length;
+    const b = (manualByDate[key] || []).length;
+    return a + b;
+  }
 
   return (
-    <div style={{ padding: 14, maxWidth: 980 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-        <div style={{ fontSize: 26, fontWeight: 950 }}>Day</div>
-        <div style={{ fontSize: 13, opacity: 0.75 }}>{dateKey}</div>
-        {loading ? (
-          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>loading</div>
-        ) : (
-          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>
-            tasks: {tasks.length}
+    <div className="daydash">
+      <div className="daydash-top">
+        <div className="daydash-title">
+          <div className="daydash-h1">{"\u0413\u043b\u0430\u0432\u043d\u044b\u0439 \u0434\u0435\u043d\u044c"}</div>
+          <div className="daydash-sub">
+            {isoDateLocal(today)}{" "}
+            <span className="daydash-muted">
+              {procSummary.total > 0
+                ? `\u2022 \u041f\u0440\u043e\u0446\u0435\u0441\u0441\u044b: ${procSummary.total} \u2022 \u041f\u043b\u0430\u043d: ${procSummary.planned}`
+                : "\u2022 \u041f\u0440\u043e\u0446\u0435\u0441\u0441\u044b: 0"}
+            </span>
           </div>
-        )}
-      </div>
-
-      {error ? (
-        <div
-          style={{
-            marginTop: 12,
-            border: "1px solid rgba(255,120,80,0.35)",
-            borderRadius: 16,
-            padding: 12,
-            background: "rgba(255,120,80,0.08)",
-            fontSize: 13,
-            fontWeight: 700,
-          }}
-        >
-          error: {error}
         </div>
-      ) : null}
 
-      <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-        {buckets.map((b) => (
-          <BucketCard key={b.key} b={b} />
-        ))}
+        <div className="daydash-counters">
+          <div className={"dd-kpi " + (overdue.length > 0 ? "dd-kpi-bad" : "")}>
+            <div className="dd-kpi-num">{overdue.length}</div>
+            <div className="dd-kpi-lbl">{"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e"}</div>
+          </div>
+          <div className="dd-kpi">
+            <div className="dd-kpi-num">{todayTasks.length}</div>
+            <div className="dd-kpi-lbl">{"\u041d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f"}</div>
+          </div>
+          <div className={"dd-kpi " + (manualUrgent.length > 0 ? "dd-kpi-warn" : "")}>
+            <div className="dd-kpi-num">{manualUrgent.length}</div>
+            <div className="dd-kpi-lbl">{"\u0421\u0440\u043e\u0447\u043d\u043e \u0432\u043d\u0435 \u0440\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442\u0430"}</div>
+          </div>
+        </div>
       </div>
+
+      {loading ? (
+        <div className="daydash-panel">{"\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026"}</div>
+      ) : err ? (
+        <div className="daydash-panel daydash-error">
+          <div className="daydash-error-title">{"\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438"}</div>
+          <div className="daydash-mono">{err}</div>
+        </div>
+      ) : (
+        <>
+          <div className={"daydash-panel daydash-urgent-top " + (manualUrgent.length > 0 ? "daydash-panel-warn" : "")}>
+            <div className="daydash-panel-head">
+              <div className="daydash-panel-title">{"\u0421\u0440\u043e\u0447\u043d\u043e \u0432\u043d\u0435 \u0440\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442\u0430"}</div>
+              <div className="dd-right-actions">
+                <button className="dd-btn dd-btn-small" type="button" onClick={reloadManual}>
+                  {"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c"}
+                </button>
+              </div>
+            </div>
+
+            <div className="dd-urgent-create dd-urgent-create-v3">
+              <input
+                className="dd-input dd-input-title"
+                value={mTitle}
+                onChange={(e) => setMTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (mTitle.trim()) createManual();
+                  }
+                }}
+                placeholder={"\u041d\u043e\u0432\u0430\u044f \u0441\u0440\u043e\u0447\u043d\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430\u2026"}
+              />
+              <input
+                className="dd-input"
+                value={mAssignee}
+                onChange={(e) => setMAssignee(e.target.value)}
+                placeholder={"\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 (optional)"}
+              />
+              <input
+                className="dd-input dd-input-date"
+                type="date"
+                value={mDue}
+                onChange={(e) => setMDue(e.target.value)}
+              />
+              <button className="dd-btn dd-btn-primary" onClick={createManual} disabled={!mTitle.trim()} type="button">
+                {"\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c"}
+              </button>
+
+              <textarea
+                className="dd-textarea"
+                value={mNote}
+                onChange={(e) => setMNote(e.target.value)}
+                placeholder={"\u041a\u043e\u0440\u043e\u0442\u043a\u0430\u044f \u0437\u0430\u043c\u0435\u0442\u043a\u0430 (optional)\u2026"}
+              />
+            </div>
+
+            <div className="dd-manual-tools">
+              <input
+                className="dd-input dd-input-search"
+                value={mQuery}
+                onChange={(e) => setMQuery(e.target.value)}
+                placeholder={"\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u0441\u0440\u043e\u0447\u043d\u044b\u043c\u2026"}
+              />
+              <label className="dd-check">
+                <input
+                  type="checkbox"
+                  checked={mShowDone}
+                  onChange={(e) => setMShowDone(Boolean(e.target.checked))}
+                />
+                <span>{"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435"}</span>
+              </label>
+              <button
+                className="dd-btn dd-btn-small"
+                type="button"
+                onClick={() => {
+                  setMQuery("");
+                  setMShowDone(false);
+                }}
+              >
+                {"\u0421\u0431\u0440\u043e\u0441"}
+              </button>
+            </div>
+
+            {uiErr ? (
+              <div className="dd-inline-error">
+                <div className="daydash-mono">{uiErr}</div>
+              </div>
+            ) : null}
+
+            {manualUrgent.length === 0 ? (
+              <div className="daydash-empty">{"\u041d\u0435\u0442 \u0441\u0440\u043e\u0447\u043d\u044b\u0445 \u0437\u0430\u0434\u0430\u0447."}</div>
+            ) : (
+              <div className="dd-urgent-grid dd-urgent-grid-v2">
+                {manualUrgent.map((t) => {
+                  const atts = attIdx[t.id] || [];
+                  return (
+                    <div key={t.id} className={"dd-urgent-card " + (t.status === "done" ? "dd-urgent-done" : "")}>
+                      <div className="dd-urgent-head">
+                        <button
+                          className={"dd-pin " + (t.pinned ? "dd-pin-on" : "")}
+                          type="button"
+                          onClick={() => togglePin(t.id)}
+                          title="pin"
+                        >
+                          {"\u2605"}
+                        </button>
+                        <div className="dd-urgent-title">{t.title}</div>
+                      </div>
+
+                      <div className="dd-urgent-meta">
+                        <span className="daydash-pill">{t.assignee ? t.assignee : "\u041e\u0431\u0449\u0430\u044f"}</span>
+                        <span className={"daydash-pill " + (t.status === "todo" ? "daydash-pill-warn" : "")}>
+                          {statusLabel(t.status)}
+                        </span>
+                        <span className="daydash-pill">{t.due_date ? t.due_date : "\u0411\u0435\u0437 \u0441\u0440\u043e\u043a\u0430"}</span>
+                      </div>
+
+                      {t.note ? <div className="dd-note">{t.note}</div> : null}
+
+                      <div className="dd-actions">
+                        <button className="dd-btn dd-btn-small" type="button" onClick={() => updateManual(t.id, { status: "todo" })}>
+                          {"\u0422\u043e\u0434\u043e"}
+                        </button>
+                        <button className="dd-btn dd-btn-small" type="button" onClick={() => updateManual(t.id, { status: "in_progress" })}>
+                          {"\u0412 \u0440\u0430\u0431\u043e\u0442\u0435"}
+                        </button>
+                        <button className="dd-btn dd-btn-small" type="button" onClick={() => updateManual(t.id, { status: "done" })}>
+                          {"\u0413\u043e\u0442\u043e\u0432\u043e"}
+                        </button>
+                        <button className="dd-btn dd-btn-small" type="button" onClick={() => triggerFile(t.id)}>
+                          {"\u041f\u0440\u0438\u043a\u0440\u0435\u043f\u0438\u0442\u044c"}
+                        </button>
+                        <button className="dd-btn dd-btn-small dd-btn-danger" type="button" onClick={() => deleteManual(t.id)}>
+                          {"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}
+                        </button>
+
+                        <input
+                          ref={(el) => {
+                            fileInputsRef.current[t.id] = el;
+                          }}
+                          className="dd-hidden"
+                          type="file"
+                          onChange={(e) => {
+                            const f = e.target.files && e.target.files[0];
+                            if (!f) return;
+                            e.target.value = "";
+                            void attachFile(t.id, f);
+                          }}
+                        />
+                      </div>
+
+                      {atts.length > 0 ? (
+                        <div className="dd-attach-list">
+                          {atts.slice(0, 6).map((a) => (
+                            <div key={a.added_at + a.name} className="dd-attach-row">
+                              <a className="dd-attach" href={a.data_url} download={a.name}>
+                                {a.name}
+                              </a>
+                              <button
+                                className="dd-attach-del"
+                                type="button"
+                                onClick={() => deleteAttachment(t.id, a.added_at)}
+                                title="remove"
+                              >
+                                {"\u00d7"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="dd-urgent-note">
+              {"\u0421\u0440\u043e\u0447\u043d\u044b\u0435 \u0437\u0430\u0434\u0430\u0447\u0438 \u0445\u0440\u0430\u043d\u044f\u0442\u0441\u044f \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e \u043e\u0442 \u0440\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442\u043d\u044b\u0445 (localStorage, MVP)."}
+            </div>
+          </div>
+
+          <div className="daydash-main">
+            <div className="daydash-left">
+              <div className="daydash-panel">
+                <div className="daydash-panel-head">
+                  <div className="daydash-panel-title">{"\u0421\u0435\u0433\u043e\u0434\u043d\u044f"}</div>
+                  <a className="dd-link" href="/tasks">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a"}</a>
+                </div>
+
+                {todayTasks.length === 0 ? (
+                  <div className="daydash-empty">{"\u041d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f \u043d\u0435\u0442 \u0437\u0430\u0434\u0430\u0447."}</div>
+                ) : (
+                  <ul className="daydash-list">
+                    {todayTasks.map((t) => (
+                      <li key={t.id} className="daydash-item">
+                        <div className="daydash-item-title">{t.title}</div>
+                        <div className="daydash-item-meta">
+                          <span className="daydash-pill">{t.client_label || t.client_code || "\u0411\u0435\u0437 \u043a\u043b\u0438\u0435\u043d\u0442\u0430"}</span>
+                          <span className="daydash-pill">{t.deadline ? String(t.deadline).slice(0, 10) : "\u0411\u0435\u0437 \u0434\u0430\u0442\u044b"}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className={"daydash-panel " + (overdue.length > 0 ? "daydash-panel-bad" : "")}>
+                <div className="daydash-panel-head">
+                  <div className="daydash-panel-title">{"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043d\u044b\u0435"}</div>
+                  <a className="dd-link" href="/tasks">{"\u0412\u0441\u0435 \u0437\u0430\u0434\u0430\u0447\u0438"}</a>
+                </div>
+
+                {overdue.length === 0 ? (
+                  <div className="daydash-empty">{"\u041d\u0435\u0442 \u043f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043a."}</div>
+                ) : (
+                  <ul className="daydash-list">
+                    {overdue.map((t) => (
+                      <li key={t.id} className="daydash-item">
+                        <div className="daydash-item-title">{t.title}</div>
+                        <div className="daydash-item-meta">
+                          <span className="daydash-pill">{t.client_label || t.client_code || "\u0411\u0435\u0437 \u043a\u043b\u0438\u0435\u043d\u0442\u0430"}</span>
+                          <span className="daydash-pill daydash-pill-bad">{t.deadline ? String(t.deadline).slice(0, 10) : "\u0411\u0435\u0437 \u0434\u0430\u0442\u044b"}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="daydash-right">
+              <div className="daydash-panel">
+                <div className="daydash-panel-head">
+                  <div className="daydash-panel-title">{"\u041a\u0430\u043b\u0435\u043d\u0434\u0430\u0440\u044c"}</div>
+                  <div className="daydash-cal-ctrl">
+                    <button className="dd-btn" onClick={prevMonth} type="button">
+                      {"\u2039"}
+                    </button>
+                    <div className="daydash-cal-month">{monthLabel}</div>
+                    <button className="dd-btn" onClick={nextMonth} type="button">
+                      {"\u203a"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="daydash-cal">
+                  <div className="daydash-cal-dow">{"\u041f\u043d"}</div>
+                  <div className="daydash-cal-dow">{"\u0412\u0442"}</div>
+                  <div className="daydash-cal-dow">{"\u0421\u0440"}</div>
+                  <div className="daydash-cal-dow">{"\u0427\u0442"}</div>
+                  <div className="daydash-cal-dow">{"\u041f\u0442"}</div>
+                  <div className="daydash-cal-dow daydash-cal-dow-weekend">{"\u0421\u0431"}</div>
+                  <div className="daydash-cal-dow daydash-cal-dow-weekend">{"\u0412\u0441"}</div>
+
+                  {grid.map((d) => {
+                    const inMonth = d.getMonth() === calMonth;
+                    const key = isoDateLocal(d);
+                    const count = dayCount(key);
+                    const isWknd = d.getDay() === 0 || d.getDay() === 6;
+                    const isNow = isoDateLocal(d) === isoDateLocal(today);
+
+                    const cls =
+                      "daydash-cal-cell" +
+                      (inMonth ? "" : " daydash-cal-out") +
+                      (isWknd ? " daydash-cal-weekend" : "") +
+                      (isNow ? " daydash-cal-today" : "") +
+                      (count > 0 ? " daydash-cal-has" : "");
+
+                    return (
+                      <div className={cls} key={key}>
+                        <div className="daydash-cal-num">{d.getDate()}</div>
+                        {count > 0 ? <div className="daydash-cal-dot">{count}</div> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="daydash-hint">
+                  <span className="daydash-hint-dot" />{" "}
+                  {"\u0414\u043d\u0438 \u0441 \u0437\u0430\u0434\u0430\u0447\u0430\u043c\u0438 \u043f\u043e\u043c\u0435\u0447\u0435\u043d\u044b \u0447\u0438\u0441\u043b\u043e\u043c (manual + reglement)."}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

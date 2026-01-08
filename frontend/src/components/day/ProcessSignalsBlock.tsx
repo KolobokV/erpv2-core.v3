@@ -125,7 +125,7 @@ export default function ProcessSignalsBlock() {
                 <div key={(p.id || p.key || "") + idx} className="rounded-lg border border-slate-200 p-3 flex items-center justify-between gap-3">
                   <div className="flex flex-col">
                     <div className="text-sm font-medium">
-                      {p.label || p.key || "Process"}
+                      {p.label || p.key || "\u041f\u0440\u043e\u0446\u0435\u0441\u0441"}
                     </div>
                     <div className="text-xs text-slate-500">
                       {p.client_id ? t("signals.client", { id: p.client_id }) : null}

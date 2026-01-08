@@ -40,37 +40,14 @@ def _load_instances_raw() -> Any:
 
 def _load_profiles_map() -> Dict[str, str]:
     """
-    Load profiles and normalize into {client_code: client_label}.
+    Return mapping client_code -> label.
     """
-    try:
-        raw = _load_json(PROFILES_PATH, [])
-    except Exception:
-        return {}
-
-    return _profiles_to_map(raw)
-
-def _profiles_to_map(profiles: Any) -> Dict[str, str]:
-    """
-    Convert various client profile shapes into {client_code: client_label}.
-    We tolerate different keys because the project evolved over time.
-    """
-    out: Dict[str, str] = {}
-    if not isinstance(profiles, list):
-        return out
-
-    for p in profiles:
-        if not isinstance(p, dict):
-            continue
-
-        code = p.get("code") or p.get("client_code") or p.get("id")
-        if not code:
-            continue
-
-        label = p.get("label") or p.get("name") or str(code)
-        out[str(code)] = str(label)
-
-    return out
-
+    data = _load_json(PROFILES_PATH, {"profiles": []})
+    profiles = []
+    if isinstance(data, dict) and isinstance(data.get("profiles"), list):
+        profiles = data["profiles"]
+    elif isinstance(data, list):
+        profiles = data
 
     result: Dict[str, str] = {}
     for p in profiles:
@@ -81,72 +58,72 @@ def _profiles_to_map(profiles: Any) -> Dict[str, str]:
     return result
 
 
-
-def _ensure_demo_profiles() -> None:
-    """Create deterministic demo client profiles if profiles store is empty (local/dev)."""
-    try:
-        raw = _load_json(PROFILES_PATH, [])
-    except Exception:
-        return
-    if isinstance(raw, list) and len(raw) > 0:
-        return
-    demo = [
-        {"id": "demo_a", "code": "demo_a", "label": "Demo Client A", "name": "Demo Client A", "client_code": "demo_a"},
-        {"id": "demo_b", "code": "demo_b", "label": "Demo Client B", "name": "Demo Client B", "client_code": "demo_b"},
-        {"id": "demo_c", "code": "demo_c", "label": "Demo Client C", "name": "Demo Client C", "client_code": "demo_c"},
-    ]
-
-    try:
-        PROFILES_PATH.write_text(json.dumps(demo, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        return
+def _load_profile_codes() -> List[str]:
+    data = _load_json(PROFILES_PATH, {"profiles": []})
+    profiles = data.get("profiles", []) if isinstance(data, dict) else []
+    out: List[str] = []
+    for p in profiles:
+        if not isinstance(p, dict):
+            continue
+        code = p.get("id") or p.get("client_code") or p.get("code")
+        if isinstance(code, str) and code.strip():
+            out.append(code.strip())
+    # stable order
+    return sorted(set(out))
 
 
-def _ensure_instances_seeded() -> None:
-    """Seed baseline process instances if instances store is empty and profiles exist (local/dev)."""
-    try:
-        existing = _load_instances_raw()
-        if isinstance(existing, list) and len(existing) > 0:
-            return
-        if isinstance(existing, dict) and len(existing.keys()) > 0:
-            return
-    except Exception:
-        return
-    profiles_map = _load_profiles_map()
-    if not profiles_map:
-        return
-    from datetime import date
-    today = date.today()
+def _is_instances_empty(raw: Any) -> bool:
+    if raw is None:
+        return True
+    if isinstance(raw, list):
+        return len(raw) == 0
+    if isinstance(raw, dict):
+        if "instances" in raw and isinstance(raw.get("instances"), list):
+            return len(raw.get("instances")) == 0
+        # treat empty dict as empty store
+        return len(raw.keys()) == 0
+    return True
+
+
+def _autogen_instances_if_needed() -> bool:
+    raw = _load_instances_raw()
+    if not _is_instances_empty(raw):
+        return False
+
+    client_codes = _load_profile_codes()
+    if len(client_codes) == 0:
+        return False
+
+    today = datetime.date.today()
+    periods: List[str] = []
+    # current month + next 2 months
     y = today.year
     m = today.month
-    months = []
     for _ in range(3):
-        months.append((y, m))
+        periods.append(f"{y:04d}-{m:02d}")
         m += 1
         if m == 13:
             m = 1
             y += 1
-    seeded = []
-    for client_code, label in profiles_map.items():
-        for (yy, mm) in months:
-            period = f"{yy:04d}-{mm:02d}"
-            instance_key = f"baseline::{client_code}::{period}"
-            seeded.append({
-                "instance_key": instance_key,
+
+    instances: List[Dict[str, Any]] = []
+    for client_code in client_codes:
+        for period in periods:
+            inst_id = f"auto::{client_code}::{period}"
+            instances.append({
+                "id": inst_id,
+                "key": inst_id,
                 "client_code": client_code,
-                "client_label": label,
-                "year": yy,
-                "month": mm,
                 "period": period,
                 "status": "planned",
-                "steps_count": 0,
-                "source": "seed",
+                "title": f"Auto process instance {period}",
+                "steps": [],
+                "source": "auto-bootstrap-v0"
             })
-    try:
-        INSTANCES_PATH.parent.mkdir(parents=True, exist_ok=True)
-        INSTANCES_PATH.write_text(json.dumps(seeded, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        return
+
+    payload = {"instances": instances}
+    INSTANCES_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
 
 def _normalize_instances() -> List[Dict[str, Any]]:
     """
@@ -224,31 +201,6 @@ def _normalize_instances() -> List[Dict[str, Any]]:
     return items
 
 
-@router.post("/dev/seed")
-def dev_seed() -> Dict[str, Any]:
-    """
-    Explicit bootstrap endpoint (local/dev).
-    Creates demo profiles (if missing) and baseline instances (if missing).
-    """
-    _ensure_demo_profiles()
-    _ensure_instances_seeded()
-
-    profiles = _load_json(PROFILES_PATH, [])
-    instances = _load_instances_raw()
-
-    profiles_count = len(profiles) if isinstance(profiles, list) else 0
-    instances_count = len(instances) if isinstance(instances, list) else (len(instances.keys()) if isinstance(instances, dict) else 0)
-
-    return {
-        "ok": True,
-        "profiles_count": profiles_count,
-        "instances_count": instances_count,
-        "profiles_path": str(PROFILES_PATH),
-        "instances_path": str(INSTANCES_PATH),
-        "instances_file_exists": INSTANCES_PATH.exists(),
-    }
-
-
 @router.get("/")
 def list_instances(
     client_code: Optional[str] = Query(None),
@@ -261,9 +213,7 @@ def list_instances(
 
     Filters are optional; if omitted, all instances are returned.
     """
-
-    _ensure_demo_profiles()
-    _ensure_instances_seeded()
+    _autogen_instances_if_needed()
     items = _normalize_instances()
     result: List[Dict[str, Any]] = []
 
