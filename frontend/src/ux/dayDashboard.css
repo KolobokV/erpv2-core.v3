@@ -118,3 +118,8 @@
   .dd-urgent-create-v3 { grid-template-columns: 1fr; }
   .dd-input-search { max-width: none; }
 }
+
+
+/* compact lists */
+.daydash-list-compact { gap: 6px; }
+.daydash-item-compact { padding: 8px 10px; }

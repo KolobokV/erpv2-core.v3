@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SharedDocsBlock } from "../components/sharedDocs/SharedDocsBlock";
 import { apiGetJson } from "../api";
 import "../ux/dayDashboard.css";
+import "../ux/sharedDocs.css";
 
 type Task = {
   id: string;
@@ -231,8 +233,16 @@ function compareManual(a: ManualTask, b: ManualTask): number {
   return String(b.updated_at).localeCompare(String(a.updated_at));
 }
 
+type ClientProfile = {
+  id: string;
+  name: string;
+  client_code?: string;
+};
+
 export default function DayDashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [clients, setClients] = useState<ClientProfile[]>([]);
+  const [clientQ, setClientQ] = useState<string>("");
   const [proc, setProc] = useState<ProcessInstance[]>([]);
   const [manual, setManual] = useState<ManualTask[]>(() => loadManualTasks());
 
@@ -783,6 +793,47 @@ export default function DayDashboardPage() {
                   {"\u0414\u043d\u0438 \u0441 \u0437\u0430\u0434\u0430\u0447\u0430\u043c\u0438 \u043f\u043e\u043c\u0435\u0447\u0435\u043d\u044b \u0447\u0438\u0441\u043b\u043e\u043c (manual + reglement)."}
                 </div>
               </div>
+              <div className="daydash-panel">
+                <div className="daydash-panel-head">
+                  <div className="daydash-panel-title">{"\u041a\u043b\u0438\u0435\u043d\u0442\u044b"}</div>
+                  <a className="dd-link" href="/client-profile">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c"}</a>
+                </div>
+
+                <input
+                  className="dd-input dd-input-search"
+                  value={clientQ}
+                  onChange={(e) => setClientQ(e.target.value)}
+                  placeholder={"\u041f\u043e\u0438\u0441\u043a \u043a\u043b\u0438\u0435\u043d\u0442\u0430\u2026"}
+                />
+
+                {clients.length === 0 ? (
+                  <div className="daydash-empty">{"\u041a\u043b\u0438\u0435\u043d\u0442\u043e\u0432 \u043f\u043e\u043a\u0430 \u043d\u0435\u0442."}</div>
+                ) : (
+                  <ul className="daydash-list daydash-list-compact">
+                    {clients
+                      .filter((c) => {
+                        const qq = clientQ.trim().toLowerCase();
+                        if (!qq) return true;
+                        const hay = `${c.name || ""} ${c.client_code || ""}`.toLowerCase();
+                        return hay.includes(qq);
+                      })
+                      .slice(0, 12)
+                      .map((c) => (
+                        <li key={c.id} className="daydash-item daydash-item-compact">
+                          <div className="daydash-item-title">{c.name}</div>
+                          <div className="daydash-item-meta">
+                            <span className="daydash-pill">{c.client_code || c.id}</span>
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="daydash-panel">
+                <SharedDocsBlock />
+              </div>
+
             </div>
           </div>
         </>
