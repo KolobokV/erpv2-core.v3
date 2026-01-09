@@ -49,6 +49,76 @@ type ManualTask = {
 
 const LS_ATTACH_KEY = "erpv2_task_attachments_v1";
 const LS_MANUAL_KEY = "erpv2_manual_tasks_v1";
+
+const LS_DEMO_REGL_TASKS = "erpv2_demo_reglement_tasks_v1";
+
+function loadDemoReglementTasks(): Task[] {
+  try {
+    const raw = localStorage.getItem(LS_DEMO_REGL_TASKS);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDemoReglementTasks(items: Task[]) {
+  try {
+    localStorage.setItem(LS_DEMO_REGL_TASKS, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
+}
+
+function genDemoReglementTasks(now: Date): Task[] {
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const base = new Date(y, m, 1);
+  const out: Task[] = [];
+
+  const clients = [
+    { code: "demo_a", label: "Demo Client A" },
+    { code: "demo_b", label: "Demo Client B" },
+    { code: "demo_c", label: "Demo Client C" },
+  ];
+
+  const titles = [
+    "Bank statement request",
+    "Document request",
+    "USN advance",
+    "Payroll check",
+    "VAT draft",
+    "Reconcile with counterparty",
+    "Primary docs review",
+    "Contact client",
+    "Tax payment reminder",
+  ];
+
+  let idn = 1;
+  for (const c of clients) {
+    for (let i = 0; i < 28; i++) {
+      const d = new Date(base.getTime());
+      d.setDate(1 + i * 2 + (c.code === "demo_b" ? 1 : 0));
+      d.setMonth(m + (i > 18 ? 1 : 0));
+      const deadline = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+
+      const title = titles[(i + (c.code === "demo_c" ? 3 : 0)) % titles.length];
+      out.push({
+        id: "demo_regl_" + c.code + "_" + (idn++).toString().padStart(4, "0"),
+        client_code: c.code,
+        client_label: c.label,
+        title: title + " (" + isoDateOnly(deadline).slice(0, 7) + ")",
+        status: "open",
+        priority: i % 7 === 0 ? "high" : "normal",
+        deadline,
+      });
+    }
+  }
+
+  return out;
+}
+
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 function nowIso(): string {
@@ -69,14 +139,8 @@ function isoDateLocal(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function formatDateRuKey(key: string): string {
-  const d = parseDateOnly(key);
-  if (!d) return key;
-  try {
-    return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", year: "numeric" }).format(d);
-  } catch {
-    return key;
-  }
+function isoDateOnly(d: Date): string {
+  return isoDateLocal(d);
 }
 
 function parseDateOnly(s?: string | null): Date | null {
@@ -262,8 +326,7 @@ export default function DayDashboardPage() {
   const today = useMemo(() => new Date(), []);
   const [calMonth, setCalMonth] = useState<number>(today.getMonth());
   const [calYear, setCalYear] = useState<number>(today.getFullYear());
-
-  const [selectedDayKey, setSelectedDayKey] = useState<string>(() => isoDateLocal(today));
+  const [calSelectedIso, setCalSelectedIso] = useState<string | null>(null);
 
   // Manual quick-create
   const [mTitle, setMTitle] = useState<string>("");
@@ -283,22 +346,36 @@ export default function DayDashboardPage() {
     setLoading(true);
     setErr(null);
     try {
-      const [t, p, c] = await Promise.all([
+      const [t, p] = await Promise.all([
         apiGetJson("/api/internal/tasks"),
         apiGetJson("/api/internal/process-instances-v2/"),
-        apiGetJson("/api/internal/client-profiles"),
       ]);
-      setTasks(Array.isArray(t) ? t : []);
+      const backendTasks = Array.isArray(t) ? t : [];
+      const demo = loadDemoReglementTasks();
+      setTasks(backendTasks.length > 0 ? backendTasks : demo);
+
       setProc(Array.isArray(p) ? p : []);
-      setClients(Array.isArray(c) ? c : []);
       setAttIdx(loadIndex());
     } catch (e: any) {
       setErr(String(e?.message || e || "error"));
       setTasks([]);
       setProc([]);
-      setClients([]);
-      } finally {
+    } finally {
       setLoading(false);
+    }
+  }
+
+  function generateDemoCalendarData() {
+    const demo = genDemoReglementTasks(new Date());
+    saveDemoReglementTasks(demo);
+    setTasks(demo);
+  }
+
+  function clearDemoCalendarData() {
+    try {
+      localStorage.removeItem(LS_DEMO_REGL_TASKS);
+    } catch {
+      // ignore
     }
   }
 
@@ -328,9 +405,18 @@ export default function DayDashboardPage() {
     () => backendVisible.filter((t) => isOverdueBackend(t, today)).slice(0, 8),
     [backendVisible, today],
   );
+  const activeDate = useMemo(() => {
+    return calSelectedIso ? parseDateOnly(calSelectedIso) : today;
+  }, [calSelectedIso, today]);
+
+  const activeIso = useMemo(() => isoDateOnly(activeDate), [activeDate]);
+
   const todayTasks = useMemo(
-    () => backendVisible.filter((t) => isTodayBackend(t, today)).slice(0, 10),
-    [backendVisible, today],
+    () =>
+      backendVisible
+        .filter((t) => !!t.deadline && isoDateOnly(t.deadline!) === activeIso)
+        .slice(0, 10),
+    [backendVisible, activeIso],
   );
 
   const manualFiltered = useMemo(() => {
@@ -347,19 +433,6 @@ export default function DayDashboardPage() {
 
   const tasksByDate = useMemo(() => groupTasksByDateBackend(backendVisible), [backendVisible]);
   const manualByDate = useMemo(() => groupManualByDate(manual), [manual]);
-  const selectedLabel = useMemo(() => formatDateRuKey(selectedDayKey), [selectedDayKey]);
-  const selectedBackend = useMemo(() => tasksByDate[selectedDayKey] || [], [tasksByDate, selectedDayKey]);
-  const selectedManual = useMemo(() => {
-    const items = (manualByDate[selectedDayKey] || []).slice();
-    items.sort((a, b) => {
-      const aDone = a.status === "done";
-      const bDone = b.status === "done";
-      if (aDone !== bDone) return aDone ? 1 : -1;
-      return (b.created_at || "").localeCompare(a.created_at || "");
-    });
-    return items;
-  }, [manualByDate, selectedDayKey]);
-
   const grid = useMemo(() => monthGrid(calYear, calMonth), [calYear, calMonth]);
 
   const procSummary = useMemo(() => {
@@ -724,7 +797,7 @@ export default function DayDashboardPage() {
             <div className="daydash-left">
               <div className="daydash-panel">
                 <div className="daydash-panel-head">
-                  <div className="daydash-panel-title">{"\u0421\u0435\u0433\u043e\u0434\u043d\u044f"}</div>
+                  <div className="daydash-panel-title">{calSelectedIso ? "\u041d\u0430 \u0434\u0430\u0442\u0443: " + formatDateRu(activeDate) : "\u0421\u0435\u0433\u043e\u0434\u043d\u044f"}</div>
                   <a className="dd-link" href="/tasks">{"\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a"}</a>
                 </div>
 
@@ -778,6 +851,14 @@ export default function DayDashboardPage() {
                       {"\u2039"}
                     </button>
                     <div className="daydash-cal-month">{monthLabel}</div>
+                  <button
+                    type="button"
+                    className="daydash-cal-reset"
+                    onClick={() => setCalSelectedIso(null)}
+                    disabled={!calSelectedIso}
+                  >
+                    {"\u0421\u0431\u0440\u043e\u0441"}
+                  </button>
                     <button className="dd-btn" onClick={nextMonth} type="button">
                       {"\u203a"}
                     </button>
@@ -805,15 +886,14 @@ export default function DayDashboardPage() {
                       (inMonth ? "" : " daydash-cal-out") +
                       (isWknd ? " daydash-cal-weekend" : "") +
                       (isNow ? " daydash-cal-today" : "") +
-                      (count > 0 ? " daydash-cal-has" : "") +
-                      (key === selectedDayKey ? " daydash-cal-selected" : "");
+                      (count > 0 ? " daydash-cal-has" : "");
 
                     return (
                       <button
-                        className={cls}
-                        key={key}
                         type="button"
-                        onClick={() => setSelectedDayKey(key)}
+                        className={cls + (calSelectedIso === key ? " daydash-cal-selected" : "")}
+                        key={key}
+                        onClick={() => setCalSelectedIso(key)}
                       >
                         <div className="daydash-cal-num">{d.getDate()}</div>
                         {count > 0 ? <div className="daydash-cal-dot">{count}</div> : null}
@@ -826,66 +906,22 @@ export default function DayDashboardPage() {
                   <span className="daydash-hint-dot" />{" "}
                   {"\u0414\u043d\u0438 \u0441 \u0437\u0430\u0434\u0430\u0447\u0430\u043c\u0438 \u043f\u043e\u043c\u0435\u0447\u0435\u043d\u044b \u0447\u0438\u0441\u043b\u043e\u043c (manual + reglement)."}
                 </div>
-              </div>
-              <div className="daydash-panel">
-                <div className="daydash-panel-head">
-                  <div className="daydash-panel-title">{"\u0412\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0439 \u0434\u0435\u043d\u044c"}</div>
-                  <button className="dd-btn dd-btn-ghost" type="button" onClick={() => setSelectedDayKey(isoDateLocal(today))}>
-                    {"\u0421\u0435\u0433\u043e\u0434\u043d\u044f"}
+                <div className="daydash-demo-row">
+                  <button type="button" className="daydash-demo-btn" onClick={generateDemoCalendarData}>
+                    {"\u0421\u043e\u0437\u0434\u0430\u0442\u044c demo \u0437\u0430\u0434\u0430\u0447\u0438 (local)"}
+                  </button>
+                  <button
+                    type="button"
+                    className="daydash-demo-btn"
+                    onClick={() => {
+                      clearDemoCalendarData();
+                      setTasks([]);
+                    }}
+                  >
+                    {"\u0423\u0431\u0440\u0430\u0442\u044c demo"}
                   </button>
                 </div>
-
-                <div className="daydash-selected-meta">
-                  <div className="daydash-selected-date">{selectedLabel}</div>
-                  <div className="daydash-selected-counts">
-                    <span className="daydash-pill">{selectedBackend.length}</span>
-                    <span className="daydash-muted">{"\u0440\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442"}</span>
-                    <span className="daydash-pill">{selectedManual.length}</span>
-                    <span className="daydash-muted">{"\u0441\u0440\u043e\u0447\u043d\u044b\u0435"}</span>
-                  </div>
-                </div>
-
-                {(selectedBackend.length === 0 && selectedManual.length === 0) ? (
-                  <div className="daydash-empty">{"\u041d\u0430 \u044d\u0442\u043e\u0442 \u0434\u0435\u043d\u044c \u0437\u0430\u0434\u0430\u0447 \u043d\u0435\u0442."}</div>
-                ) : (
-                  <div className="daydash-selected-lists">
-                    {selectedBackend.length > 0 ? (
-                      <div className="daydash-selected-block">
-                        <div className="daydash-selected-head">{"\u0420\u0435\u0433\u043b\u0430\u043c\u0435\u043d\u0442"}</div>
-                        <ul className="daydash-list daydash-list-compact">
-                          {selectedBackend.slice(0, 8).map((t) => (
-                            <li key={t.id} className="daydash-item daydash-item-compact">
-                              <div className="daydash-item-title">{t.title}</div>
-                              <div className="daydash-item-meta">
-                                {t.client_label ? <span className="daydash-pill">{t.client_label}</span> : null}
-                                <span className="daydash-pill">{t.status}</span>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    {selectedManual.length > 0 ? (
-                      <div className="daydash-selected-block">
-                        <div className="daydash-selected-head">{"\u0421\u0440\u043e\u0447\u043d\u044b\u0435"}</div>
-                        <ul className="daydash-list daydash-list-compact">
-                          {selectedManual.slice(0, 8).map((t) => (
-                            <li key={t.id} className={"daydash-item daydash-item-compact" + (t.status === "done" ? " daydash-item-done" : "")}>
-                              <div className="daydash-item-title">{t.title}</div>
-                              <div className="daydash-item-meta">
-                                {t.assignee ? <span className="daydash-pill">{t.assignee}</span> : null}
-                                {t.status === "done" ? <span className="daydash-pill">{"\u0433\u043e\u0442\u043e\u0432\u043e"}</span> : <span className="daydash-pill">{"\u043d\u0435 \u0441\u0434\u0435\u043b\u0430\u043d\u043e"}</span>}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
               </div>
-
               <div className="daydash-panel">
                 <div className="daydash-panel-head">
                   <div className="daydash-panel-title">{"\u041a\u043b\u0438\u0435\u043d\u0442\u044b"}</div>
