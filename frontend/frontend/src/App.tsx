@@ -10,7 +10,6 @@ import ProcessCoveragePage from "./pages/ProcessCoveragePage";
 import ClientCreatePage from "./pages/ClientCreatePage";
 import OnboardingClientsPage from "./pages/OnboardingClientsPage";
 import ClientProfilePage from "./pages/ClientProfilePage";
-import ClientProfileEditPage from "./pages/ClientProfileEditPage";
 import ControlEventsPage from "./pages/ControlEventsPage";
 import InternalControlEventsStorePage from "./pages/InternalControlEventsStorePage";
 import ClientProcessOverviewPage from "./pages/ClientProcessOverviewPage";
@@ -21,6 +20,8 @@ import TaskDetailPage from "./pages/TaskDetailPage";
 import DayDashboardPage from "./pages/DayDashboardPage";
 import OnboardingStubPage from "./pages/OnboardingStubPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import ClientProfilesPage from "./pages/ClientProfilesPage";
+import ClientProfileEditPage from "./pages/ClientProfileEditPage";
 
 function getClientFromUrl(): string | null {
   try {
@@ -81,9 +82,9 @@ function App() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/task/:taskId" element={<TaskDetailPage />} />
 
-          <Route path="/client-profile" element={<ClientProfilePage />} />
-        <Route path="/client-profile/:id" element={<ClientProfilePage />} />
-        <Route path="/client-profile/:id/edit" element={<ClientProfileEditPage />} />
+          <Route path="/client-profile" element={<ClientProfilesPage />} />
+          <Route path="/client-profile/:id" element={<ClientProfilePage />} />
+          <Route path="/client-profile/:id/edit" element={<ClientProfileEditPage />} />
 
           <Route path="/internal-processes" element={<InternalProcessesPage />} />
           <Route path="/process-coverage" element={<ProcessCoveragePage />} />

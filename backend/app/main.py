@@ -6,8 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 # === INTERNAL TASKS ===
 from app.routes_internal_tasks import router as tasks_router
 
-# === CLIENT PROFILES ===
+# === CLIENT PROFILES (legacy + list endpoints) ===
 from app.routes_client_profiles import router as client_profiles_router
+
+# === INTERNAL CLIENT PROFILES STORE (v3) ===
+from app.routes_internal_client_profiles_store_v3 import router as client_profiles_store_v3_router
 
 # === PROCESS INSTANCES V2 ===
 from app.routes_process_instances_v2 import router as process_instances_v2_router
@@ -42,21 +45,15 @@ app.add_middleware(
 
 # --- internal core ---
 app.include_router(tasks_router)
-app.include_router(control_events_store_stub_router)
+app.include_router(client_profiles_store_v3_router)
 app.include_router(client_profiles_router)
-app.include_router(control_events_store_stub_router)
 app.include_router(process_instances_v2_router)
-app.include_router(control_events_store_stub_router)
 
 # --- system ---
 app.include_router(control_events_router)
-app.include_router(control_events_store_stub_router)
 app.include_router(onboarding_router)
-app.include_router(control_events_store_stub_router)
 app.include_router(dev_chains_router)
-app.include_router(control_events_store_stub_router)
 
 # --- analytics ---
 app.include_router(risk_router)
-app.include_router(control_events_store_stub_router)
 app.include_router(coverage_router)

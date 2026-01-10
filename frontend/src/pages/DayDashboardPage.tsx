@@ -132,27 +132,58 @@ function nowIso(): string {
   return `${y}-${m}-${day}T${hh}:${mm}:${ss}`;
 }
 
-function isoDateLocal(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+function toDateSafe(x: any): Date | null {
+  if (!x) return null;
+
+  if (x instanceof Date) {
+    if (Number.isNaN(x.getTime())) return null;
+    return x;
+  }
+
+  if (typeof x === "number") {
+    const dt = new Date(x);
+    if (Number.isNaN(dt.getTime())) return null;
+    return dt;
+  }
+
+  if (typeof x === "string") {
+    const m = x.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const d = Number(m[3]);
+      const dt = new Date(y, mo, d);
+      if (Number.isNaN(dt.getTime())) return null;
+      return dt;
+    }
+    const dt = new Date(x);
+    if (Number.isNaN(dt.getTime())) return null;
+    return dt;
+  }
+
+  if (typeof x === "object") {
+    const v = (x as any).deadline ?? (x as any).due_date ?? (x as any).dueDate ?? (x as any).date ?? (x as any).value;
+    if (v && v !== x) return toDateSafe(v);
+  }
+
+  return null;
+}
+
+function isoDateLocal(d: any): string {
+  const dt = toDateSafe(d);
+  if (!dt) return "";
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-function isoDateOnly(d: Date): string {
+function isoDateOnly(d: any): string {
   return isoDateLocal(d);
 }
 
-function parseDateOnly(s?: string | null): Date | null {
-  if (!s) return null;
-  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  const dt = new Date(y, mo, d);
-  if (Number.isNaN(dt.getTime())) return null;
-  return dt;
+function parseDateOnly(s?: any): Date | null {
+  return toDateSafe(s);
 }
 
 function isOverdueBackend(task: Task, today: Date): boolean {
@@ -307,6 +338,13 @@ function compareManual(a: ManualTask, b: ManualTask): number {
   return String(b.updated_at).localeCompare(String(a.updated_at));
 }
 
+function formatDateRu(d: Date | null | undefined): string {
+  if (!d) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear());
+  return `${dd}.${mm}.${yy}`;
+}
 type ClientProfile = {
   id: string;
   name: string;

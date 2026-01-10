@@ -1,528 +1,631 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { apiGetJson, apiPutJson } from "../api";
+import { TaskCard } from "../components/tasks/TaskCard";
 
-import { PageShell } from "../components/PageShell";
-import { UpBackBar } from "../components/UpBackBar";
-import { ClientTasksSummaryCard } from "../components/ClientTasksSummaryCard";
-import ClientCoverageSummaryCard from "../components/ClientCoverageSummaryCard";
-import { RiskBadge } from "../v27/RiskBadge";
+type ClientProfile = {
+  client_code: string;
+  code?: string;
+  id?: string;
+  label?: string;
+  name?: string;
+  profile_type?: string;
+  tax_system?: string;
+  salary_dates?: Record<string, any> | null;
+  has_tourist_tax?: boolean;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_person?: string;
+  settings?: Record<string, any> | null;
+  updated_at?: string;
+  [k: string]: any;
+};
 
-import type { ClientProfileV27, TaxSystemV27, VatModeV27, LegalEntityTypeV27 } from "../v27/types";
-import { deriveReglementV27 } from "../v27/deriveReglement";
-import { evaluateClientRiskV27 } from "../v27/riskEngine";
-import { getClientFromLocation } from "../v27/clientContext";
-import {
-  loadClientProfileV27,
-  resetClientProfileV27,
-  saveClientProfileV27,
-  loadMaterializeMetaV27,
-  materializeFromDerivedV27
-} from "../v27/profileStore";
-import { countProcessIntents, clearProcessIntents } from "../v27/processIntentsStore";
-import ClientCockpitHeader from "../components/client/ClientCockpitHeader";
+type Task = {
+  id: string;
+  client_code?: string;
+  client_label?: string;
+  title: string;
+  status: string;
+  priority?: string;
+  deadline?: string;
+  description?: string;
+  [k: string]: any;
+};
 
-function clampInt(v: any, min: number, max: number): number {
-  const n = parseInt(String(v || "0"), 10);
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
+function s(v: any): string {
+  if (v === null || v === undefined) return "";
+  return String(v);
 }
 
-function toggleInArray(arr: number[], x: number): number[] {
-  const set = new Set(arr);
-  if (set.has(x)) set.delete(x);
-  else set.add(x);
-  return Array.from(set).sort((a, b) => a - b);
-}
-
-function getClientIdSafe(location: { search: string; pathname: string }): string {
-  try {
-    const sp = new URLSearchParams(location.search || "");
-    const fromQuery = (sp.get("client") || sp.get("client_id") || sp.get("cid") || "").trim();
-    if (fromQuery) return fromQuery;
-  } catch {
-    // ignore
+async function tryGetJson(urls: string[]): Promise<any> {
+  let lastErr: any = null;
+  for (const u of urls) {
+    try {
+      return await apiGetJson(u);
+    } catch (e) {
+      lastErr = e;
+    }
   }
+  throw lastErr;
+}
 
-  try {
-    const v = String(getClientFromLocation(location as any) || "").trim();
-    if (v) return v;
-  } catch {
-    // ignore
+function fmtDateIsoLike(v?: string): string {
+  if (!v) return "";
+  const t = v.replace("T", " ").replace("Z", "");
+  return t.length > 16 ? t.slice(0, 16) : t;
+}
+
+function badgeClass(kind: "ok" | "warn" | "bad" | "muted") {
+  switch (kind) {
+    case "ok":
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+    case "warn":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    case "bad":
+      return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+    default:
+      return "bg-slate-50 text-slate-700 ring-1 ring-slate-200";
   }
-
-  const parts = String(location.pathname || "").split("/").filter(Boolean);
-  const idx = parts.indexOf("client-profile");
-  if (idx >= 0 && parts[idx + 1]) return String(parts[idx + 1]).trim();
-
-  return "";
 }
 
-function makeDefaultClientProfileV27Local(clientId: string): ClientProfileV27 {
-  const now = new Date().toISOString();
-  return {
-    clientId,
-    legal: { entityType: "IP", taxSystem: "USN_DR", vatMode: "NONE" },
-    employees: { hasPayroll: false, headcount: 0, payrollDates: [] },
-    operations: { bankAccounts: 1, cashRegister: false, ofd: false, foreignOps: false },
-    specialFlags: { tourismTax: false, excise: false, controlledTransactions: false },
-    updatedAtIso: now
-  };
+function statusToBadgeKind(status?: string): "ok" | "warn" | "bad" | "muted" {
+  const st = (status || "").toLowerCase();
+  if (["completed", "done", "ok"].includes(st)) return "ok";
+  if (["overdue", "late", "expired"].includes(st)) return "bad";
+  if (["in_progress", "inprogress", "working", "open", "new"].includes(st)) return "warn";
+  return "muted";
 }
 
-function normalizeClientProfileV27(input: any, clientId: string): ClientProfileV27 {
-  const base = makeDefaultClientProfileV27Local(clientId);
-  const obj = input && typeof input === "object" ? input : {};
-
-  const legal = obj.legal && typeof obj.legal === "object" ? obj.legal : {};
-  const employees = obj.employees && typeof obj.employees === "object" ? obj.employees : {};
-  const operations = obj.operations && typeof obj.operations === "object" ? obj.operations : {};
-  const specialFlags = obj.specialFlags && typeof obj.specialFlags === "object" ? obj.specialFlags : {};
-
-  const profile: ClientProfileV27 = {
-    clientId: String(obj.clientId || clientId || base.clientId),
-    legal: {
-      entityType: (legal.entityType as LegalEntityTypeV27) || base.legal.entityType,
-      taxSystem: (legal.taxSystem as TaxSystemV27) || base.legal.taxSystem,
-      vatMode: (legal.vatMode as VatModeV27) || base.legal.vatMode
-    },
-    employees: {
-      hasPayroll: !!employees.hasPayroll,
-      headcount: clampInt(employees.headcount, 0, 5000),
-      payrollDates: Array.isArray(employees.payrollDates)
-        ? employees.payrollDates.map((x: any) => clampInt(x, 1, 31)).filter((x: number) => x >= 1 && x <= 31)
-        : []
-    },
-    operations: {
-      bankAccounts: clampInt(operations.bankAccounts, 0, 50),
-      cashRegister: !!operations.cashRegister,
-      ofd: !!operations.ofd,
-      foreignOps: !!operations.foreignOps
-    },
-    specialFlags: {
-      tourismTax: !!specialFlags.tourismTax,
-      excise: !!specialFlags.excise,
-      controlledTransactions: !!specialFlags.controlledTransactions
-    },
-    updatedAtIso: String(obj.updatedAtIso || base.updatedAtIso)
-  };
-
-  return profile;
+function pickClientName(p?: ClientProfile | null): string {
+  if (!p) return "";
+  return s(p.name || p.label || p.code || p.client_code || p.id);
 }
 
-const S_CLIENT_CARD = "\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430: ";
-const S_DAY = "\u0414\u0435\u043d\u044c";
-const S_TASKS = "\u0417\u0430\u0434\u0430\u0447\u0438";
-const S_RESET = "\u0421\u0431\u0440\u043e\u0441";
-const S_SAVE = "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c";
-const S_CTX_REQUIRED = "\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u0435\u043d";
-const S_OPEN_WITH_PARAM = "\u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u044d\u0442\u0443 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443 \u0441 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u043c ?client=...";
-const S_OPEN = "\u041e\u0442\u043a\u0440\u044b\u0442\u044c";
-const S_GO_TO_TASKS = "\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0437\u0430\u0434\u0430\u0447\u0430\u043c";
+function pickClientCode(p?: ClientProfile | null): string {
+  if (!p) return "";
+  return s(p.client_code || p.code || p.id || "");
+}
 
-const S_PASSPORT = "\u041f\u0430\u0441\u043f\u043e\u0440\u0442 \u043a\u043b\u0438\u0435\u043d\u0442\u0430";
-const S_LEGAL = "\u042e\u0440. \u0434\u0430\u043d\u043d\u044b\u0435";
-const S_EMPLOYEES = "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0438";
-const S_OPS = "\u041e\u043f\u0435\u0440\u0430\u0446\u0438\u0438";
-const S_FLAGS = "\u0421\u043f\u0435\u0446. \u043f\u0440\u0438\u0437\u043d\u0430\u043a\u0438";
-const S_DERIVED = "\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435";
+function TaskMiniList(props: { title: string; tasks: Task[]; emptyText: string }) {
+  const { title, tasks, emptyText } = props;
+  return (
+    <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div className="font-semibold text-slate-900">{title}</div>
+        <div className="text-xs text-slate-500">{tasks.length}</div>
+      </div>
+      <div className="p-3 space-y-3">
+        {tasks.length === 0 ? (
+          <div className="text-sm text-slate-500">{emptyText}</div>
+        ) : (
+          tasks.slice(0, 6).map((t) => <TaskCard key={t.id} task={t as any} />)
+        )}
+      </div>
+    </div>
+  );
+}
 
-const S_TOAST_MISSING_CLIENT = "\u041d\u0435\u0442 \u043a\u043e\u0434\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 \u0432 URL";
-const S_TOAST_SAVED = "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e";
-const S_TOAST_SAVE_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f";
-const S_TOAST_RESET = "\u0421\u0431\u0440\u043e\u0448\u0435\u043d\u043e";
-const S_TOAST_RESET_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0431\u0440\u043e\u0441\u0430";
+function FieldRow(props: { label: string; value?: string; mono?: boolean }) {
+  const { label, value, mono } = props;
+  return (
+    <div className="flex items-start justify-between gap-4 py-2">
+      <div className="text-xs text-slate-500 shrink-0 w-40">{label}</div>
+      <div className={"text-sm text-slate-900 text-right break-words " + (mono ? "font-mono" : "")}>
+        {value && value.trim() ? value : "\u2014"}
+      </div>
+    </div>
+  );
+}
 
-const S_MAT_TASKS = "\u0421\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438 (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
-const S_RESET_TASKS = "\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438 (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
-const S_CLEAR_QUEUE = "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u043e\u0447\u0435\u0440\u0435\u0434\u044c \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0432";
-const S_TOAST_QUEUE_CLEARED = "\u041e\u0447\u0435\u0440\u0435\u0434\u044c \u043e\u0447\u0438\u0449\u0435\u043d\u0430";
-const S_TOAST_MAT_OK = "\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u044b (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
-const S_TOAST_MAT_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0437\u0430\u0434\u0430\u0447";
-const S_TOAST_TASKS_RESET_OK = "\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0431\u0440\u043e\u0448\u0435\u043d\u044b (\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)";
-const S_TOAST_TASKS_RESET_FAILED = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0431\u0440\u043e\u0441\u0430 \u0437\u0430\u0434\u0430\u0447";
+function PanelTitle(props: { title: string; right?: React.ReactNode }) {
+  return (
+    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div className="font-semibold text-slate-900">{props.title}</div>
+      {props.right ? <div className="flex items-center gap-2">{props.right}</div> : null}
+    </div>
+  );
+}
 
-const S_ENTITY_TYPE = "\u0422\u0438\u043f \u0441\u0443\u0431\u044a\u0435\u043a\u0442\u0430";
-const S_TAX_SYSTEM = "\u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u043d\u0430\u043b\u043e\u0433\u043e\u043e\u0431\u043b\u043e\u0436\u0435\u043d\u0438\u044f";
-const S_VAT_MODE = "\u0420\u0435\u0436\u0438\u043c \u041d\u0414\u0421";
+function normalizeProfilesList(data: any): ClientProfile[] {
+  const arr = (data?.items ?? data?.profiles ?? data?.clients ?? data) as any;
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((x) => {
+      const p = (x?.profile ?? x) as any;
+      if (!p) return null;
+      const code = s(p.client_code || p.code || p.id || "");
+      if (!code) return null;
+      return {
+        client_code: code,
+        ...p,
+      } as ClientProfile;
+    })
+    .filter(Boolean) as ClientProfile[];
+}
 
-const S_HAS_PAYROLL = "\u0415\u0441\u0442\u044c \u0437\u0430\u0440\u043f\u043b\u0430\u0442\u0430";
-const S_HEADCOUNT = "\u0427\u0438\u0441\u043b\u043043\u0435\u043d\u043d\u043e\u0441\u0442\u044c";
-const S_PAYROLL_DATES = "\u0414\u043d\u0438 \u0432\u044b\u043f\u043b\u0430\u0442\u044b";
-
-const S_BANK_ACCOUNTS = "\u0420\u0430\u0441\u0447\u0435\u0442\u043d\u044b\u0435 \u0441\u0447\u0435\u0442\u0430";
-const S_CASH_REGISTER = "\u041a\u0430\u0441\u0441\u0430";
-const S_OFD = "\u041e\u0424\u0414";
-const S_FOREIGN_OPS = "\u0412\u043d\u0435\u0448\u043d\u0438\u0435 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u0438";
-
-const S_TOURISM_TAX = "\u0422\u0443\u0440\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0441\u0431\u043e\u0440";
-const S_EXCISE = "\u0410\u043a\u0446\u0438\u0437";
-const S_CTRL_TRANS = "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u0438\u0440\u0443\u0435\u043c\u044b\u0435 \u0441\u0434\u0435\u043b\u043a\u0438";
-
-const P_CLIENT_ID = "clientId (e.g. ip_usn_dr)";
+function safeJsonParse(v: string): any | null {
+  const t = (v || "").trim();
+  if (!t) return null;
+  try {
+    return JSON.parse(t);
+  } catch {
+    return null;
+  }
+}
 
 export default function ClientProfilePage() {
-  const location = useLocation();
+  const params = useParams();
   const navigate = useNavigate();
+  const clientId = (params as any)?.id as string | undefined;
 
-  const clientId = useMemo(() => getClientIdSafe(location as any), [location]);
-  const hasClient = useMemo(() => !!(clientId && String(clientId).trim().length > 0), [clientId]);
+  const [list, setList] = useState<ClientProfile[]>([]);
+  const [listErr, setListErr] = useState<string | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [q, setQ] = useState("");
 
-  const [openClientId, setOpenClientId] = useState<string>("");
+  const [profile, setProfile] = useState<ClientProfile | null>(null);
+  const [profileErr, setProfileErr] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
-  const [profile, setProfile] = useState<ClientProfileV27>(() =>
-    normalizeClientProfileV27(loadClientProfileV27(clientId), clientId)
-  );
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksErr, setTasksErr] = useState<string | null>(null);
+  const [tasksLoading, setTasksLoading] = useState(false);
 
-  const [savedAt, setSavedAt] = useState<string>(profile.updatedAtIso);
-  const [saving, setSaving] = useState<boolean>(false);
-  const [toast, setToast] = useState<string>("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [tasksRev, setTasksRev] = useState<number>(0);
-  const [tasksMeta, setTasksMeta] = useState<any>(() => loadMaterializeMetaV27(clientId));
+  const [formLabel, setFormLabel] = useState("");
+  const [formTaxSystem, setFormTaxSystem] = useState("");
+  const [formHasTouristTax, setFormHasTouristTax] = useState(false);
+  const [formContactEmail, setFormContactEmail] = useState("");
+  const [formContactPhone, setFormContactPhone] = useState("");
+  const [formContactPerson, setFormContactPerson] = useState("");
+  const [formSalaryDatesJson, setFormSalaryDatesJson] = useState("");
 
-  const [intentRev, setIntentRev] = useState<number>(0);
-  const intentCount = useMemo(() => countProcessIntents(clientId), [clientId, intentRev]);
+  const isListMode = !clientId;
 
-  useEffect(() => {
-    const loaded = normalizeClientProfileV27(loadClientProfileV27(clientId), clientId);
-    setProfile(loaded);
-    setSavedAt(loaded.updatedAtIso);
+  const clientCode = useMemo(() => (clientId ? decodeURIComponent(clientId) : ""), [clientId]);
 
-    setTasksMeta(loadMaterializeMetaV27(clientId));
-    setTasksRev((x) => x + 1);
-
-    setIntentRev((x) => x + 1);
-  }, [clientId]);
-
-  function update(mut: (p: ClientProfileV27) => ClientProfileV27) {
-    setProfile((prev) => {
-      const next = mut(prev);
-      return { ...next };
+  const filteredList = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    if (!qq) return list;
+    return list.filter((p) => {
+      const hay = (pickClientName(p) + " " + pickClientCode(p)).toLowerCase();
+      return hay.includes(qq);
     });
+  }, [list, q]);
+
+  const clientName = useMemo(() => pickClientName(profile), [profile]);
+
+  const overdueTasks = useMemo(() => {
+    const now = Date.now();
+    return tasks.filter((t) => {
+      const dl = t.deadline ? Date.parse(t.deadline) : NaN;
+      if (Number.isNaN(dl)) return false;
+      const st = (t.status || "").toLowerCase();
+      return dl < now && st !== "completed" && st !== "done";
+    });
+  }, [tasks]);
+
+  const upcomingTasks = useMemo(() => {
+    const now = Date.now();
+    return tasks
+      .filter((t) => {
+        const dl = t.deadline ? Date.parse(t.deadline) : NaN;
+        if (Number.isNaN(dl)) return false;
+        const st = (t.status || "").toLowerCase();
+        return dl >= now && st !== "completed" && st !== "done";
+      })
+      .sort((a, b) => (Date.parse(a.deadline || "") || 0) - (Date.parse(b.deadline || "") || 0));
+  }, [tasks]);
+
+  function primeFormFromProfile(p: ClientProfile) {
+    setFormLabel(s(p.label || p.name || ""));
+    setFormTaxSystem(s(p.tax_system || ""));
+    setFormHasTouristTax(Boolean(p.has_tourist_tax));
+    setFormContactEmail(s(p.contact_email || p.settings?.contact_email || ""));
+    setFormContactPhone(s(p.contact_phone || p.settings?.contact_phone || ""));
+    setFormContactPerson(s(p.contact_person || p.settings?.contact_person || ""));
+    const sd = p.salary_dates ?? p.settings?.salary_dates ?? null;
+    try {
+      setFormSalaryDatesJson(sd ? JSON.stringify(sd, null, 2) : "");
+    } catch {
+      setFormSalaryDatesJson("");
+    }
   }
 
-  const derived = useMemo(() => {
+  async function loadList() {
+    setListErr(null);
+    setListLoading(true);
     try {
-      return deriveReglementV27(profile);
+      const data = await tryGetJson([
+        "/api/internal/client-profiles",
+        "/api/internal/client-profiles?items=1",
+        "/api/client-profiles",
+        "/api/client-profile",
+        "/api/clients",
+      ]);
+      const arr = normalizeProfilesList(data);
+      setList(arr);
     } catch (e: any) {
-      return { error: String(e?.message || e) };
+      setList([]);
+      setListErr(e?.message || String(e));
+    } finally {
+      setListLoading(false);
     }
-  }, [profile]);
+  }
 
-  const risk = useMemo(() => {
+  async function loadProfileAndTasks(code: string) {
+    setProfileErr(null);
+    setTasksErr(null);
+
+    setProfileLoading(true);
     try {
-      return evaluateClientRiskV27(profile, derived as any);
-    } catch {
-      return { score: 0, label: "risk_error" };
+      const data = await tryGetJson([
+        `/api/internal/client-profiles/${encodeURIComponent(code)}`,
+        `/api/client-profile/${encodeURIComponent(code)}`,
+        `/api/clients/${encodeURIComponent(code)}`,
+      ]);
+      const p = (data?.profile ?? data) as any;
+      const normalized: ClientProfile = {
+        client_code: s(p?.client_code || p?.code || p?.id || code),
+        ...p,
+      };
+      setProfile(normalized);
+      primeFormFromProfile(normalized);
+    } catch (e: any) {
+      setProfile(null);
+      setProfileErr(e?.message || String(e));
+    } finally {
+      setProfileLoading(false);
     }
-  }, [profile, derived]);
 
-  async function doSave() {
-    if (!hasClient) {
-      setToast(S_TOAST_MISSING_CLIENT);
-      window.setTimeout(() => setToast(""), 1200);
+    setTasksLoading(true);
+    try {
+      const data = await tryGetJson([
+        "/api/internal/tasks",
+        `/api/tasks?client_id=${encodeURIComponent(code)}`,
+        `/api/tasks/by-client/${encodeURIComponent(code)}`,
+      ]);
+      const arr = (data?.tasks ?? data) as any;
+      const all = Array.isArray(arr) ? (arr as Task[]) : [];
+      const filtered = all.filter((t) => s(t.client_code || "").toLowerCase() === code.toLowerCase());
+      setTasks(filtered);
+    } catch (e: any) {
+      setTasks([]);
+      setTasksErr(e?.message || String(e));
+    } finally {
+      setTasksLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (isListMode) {
+      loadList();
       return;
     }
+    if (clientCode) {
+      loadProfileAndTasks(clientCode);
+    }
+  }, [isListMode, clientCode]);
 
+  async function saveProfile() {
+    if (!clientCode) return;
+    setSaveErr(null);
+
+    const salaryDates = safeJsonParse(formSalaryDatesJson);
+
+    const payload: any = {
+      client_code: clientCode,
+      label: formLabel.trim() ? formLabel.trim() : undefined,
+      tax_system: formTaxSystem.trim() ? formTaxSystem.trim() : undefined,
+      has_tourist_tax: Boolean(formHasTouristTax),
+      contact_email: formContactEmail.trim() ? formContactEmail.trim() : undefined,
+      contact_phone: formContactPhone.trim() ? formContactPhone.trim() : undefined,
+      contact_person: formContactPerson.trim() ? formContactPerson.trim() : undefined,
+      salary_dates: salaryDates ? salaryDates : undefined,
+    };
+
+    setSaving(true);
     try {
-      setSaving(true);
-      const fresh = { ...profile, updatedAtIso: new Date().toISOString() };
-      saveClientProfileV27(clientId, fresh);
-      setProfile(fresh);
-      setSavedAt(fresh.updatedAtIso);
-      setToast(S_TOAST_SAVED);
-      window.setTimeout(() => setToast(""), 1200);
-    } catch {
-      setToast(S_TOAST_SAVE_FAILED);
-      window.setTimeout(() => setToast(""), 1200);
+      const data = await apiPutJson(`/api/internal/client-profiles/${encodeURIComponent(clientCode)}`, payload);
+      const p = (data?.profile ?? data) as any;
+      const normalized: ClientProfile = {
+        client_code: s(p?.client_code || p?.code || p?.id || clientCode),
+        ...p,
+      };
+      setProfile(normalized);
+      primeFormFromProfile(normalized);
+      setEditOpen(false);
+    } catch (e: any) {
+      setSaveErr(e?.message || String(e));
     } finally {
       setSaving(false);
     }
   }
 
-  function doOpenWithClient() {
-    const v = String(openClientId || "").trim();
-    if (!v) return;
-    navigate(`/client-profile?client=${encodeURIComponent(v)}`);
-  }
-
-  function doReset() {
-    if (!hasClient) {
-      setToast(S_TOAST_MISSING_CLIENT);
-      window.setTimeout(() => setToast(""), 1200);
-      return;
-    }
-
-    try {
-      resetClientProfileV27(clientId);
-      const fresh = normalizeClientProfileV27(loadClientProfileV27(clientId), clientId);
-      setProfile(fresh);
-      setSavedAt(fresh.updatedAtIso);
-      setToast(S_TOAST_RESET);
-      window.setTimeout(() => setToast(""), 1200);
-
-      setTasksMeta(loadMaterializeMetaV27(clientId));
-      setTasksRev((x) => x + 1);
-    } catch {
-      setToast(S_TOAST_RESET_FAILED);
-      window.setTimeout(() => setToast(""), 1200);
-    }
-  }
-
-  function doMaterializeLocalTasks() {
-    if (!hasClient) {
-      setToast(S_TOAST_MISSING_CLIENT);
-      window.setTimeout(() => setToast(""), 1200);
-      return;
-    }
-
-    try {
-      materializeFromDerivedV27(clientId, derived as any);
-      setTasksMeta(loadMaterializeMetaV27(clientId));
-      setTasksRev((x) => x + 1);
-      setToast(S_TOAST_MAT_OK);
-      window.setTimeout(() => setToast(""), 1200);
-    } catch {
-      setToast(S_TOAST_MAT_FAILED);
-      window.setTimeout(() => setToast(""), 1200);
-    }
-  }
-
-  function doResetLocalTasks() {
-    if (!hasClient) {
-      setToast(S_TOAST_MISSING_CLIENT);
-      window.setTimeout(() => setToast(""), 1200);
-      return;
-    }
-
-    try {
-      const meta = loadMaterializeMetaV27(clientId);
-      if (meta && typeof meta === "object") {
-        meta.count = 0;
-      }
-      setTasksMeta(loadMaterializeMetaV27(clientId));
-      setTasksRev((x) => x + 1);
-      setToast(S_TOAST_TASKS_RESET_OK);
-      window.setTimeout(() => setToast(""), 1200);
-    } catch {
-      setToast(S_TOAST_TASKS_RESET_FAILED);
-      window.setTimeout(() => setToast(""), 1200);
-    }
-  }
-
-  const title = S_CLIENT_CARD + (clientId || "-");
-
   return (
-    <PageShell>
-      <ClientCockpitHeader />
-      <UpBackBar
-        title={title}
-        onUp={() => navigate("/")}
-        right={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <RiskBadge score={risk.score} label={risk.label} />
-            <a className="erp-btn" href={hasClient ? ("/day?client=" + encodeURIComponent(clientId)) : "/day"}>
-              {S_DAY}
-            </a>
-            <a className="erp-btn" href={hasClient ? ("/tasks?client=" + encodeURIComponent(clientId)) : "/tasks"}>
-              {S_TASKS}
-            </a>
-            <button className="erp-btn" onClick={doReset} disabled={saving || !hasClient}>
-              {S_RESET}
-            </button>
-            <button className="erp-btn" onClick={doSave} disabled={saving || !hasClient}>
-              {S_SAVE}
-            </button>
-          </div>
-        }
-      />
-
-      <div style={{ padding: 12, display: "grid", gap: 12 }}>
-        {!hasClient ? (
-          <div style={{ border: "1px solid rgba(255,160,80,0.35)", borderRadius: 16, padding: 12 }}>
-            <div style={{ fontWeight: 800 }}>{S_CTX_REQUIRED}</div>
-            <div style={{ marginTop: 6, opacity: 0.85, fontSize: 12 }}>{S_OPEN_WITH_PARAM}</div>
-            <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <input
-                value={openClientId}
-                onChange={(e) => setOpenClientId(e.target.value)}
-                placeholder={P_CLIENT_ID}
-                style={{ padding: "6px 10px", borderRadius: 12, minWidth: 260, border: "1px solid rgba(15,23,42,0.14)" }}
-              />
-              <button onClick={doOpenWithClient} className="erp-btn" style={{ padding: "6px 10px" }}>
-                {S_OPEN}
-              </button>
-              <a href="/tasks" className="erp-btn" style={{ padding: "6px 10px", opacity: 0.9 }}>
-                {S_GO_TO_TASKS}
-              </a>
-            </div>
-          </div>
-        ) : null}
-
-        <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div style={{ minWidth: 260 }}>
-              <div style={{ fontSize: 12, opacity: 0.65, fontWeight: 700 }}>{S_PASSPORT}</div>
-              <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span className="erp-chip">{"\u0422\u0438\u043f=" + String(profile?.legal?.entityType || "-")}</span>
-                <span className="erp-chip">{"\u041d\u0430\u043b\u043e\u0433=" + String(profile?.legal?.taxSystem || "-")}</span>
-                <span className="erp-chip">{"\u041d\u0414\u0421=" + String(profile?.legal?.vatMode || "-")}</span>
-                <span className="erp-chip">{"\u0417\u0430\u0440\u043f\u043b\u0430\u0442\u0430=" + String(!!profile?.employees?.hasPayroll)}</span>
-                <span className="erp-chip">{"\u0428\u0442\u0430\u0442=" + String(profile?.employees?.headcount ?? 0)}</span>
+    <div className="p-4 md:p-6">
+      <div className="max-w-6xl mx-auto space-y-5">
+        {isListMode ? (
+          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
+            <PanelTitle
+              title={"\u0421\u043f\u0438\u0441\u043e\u043a \u043a\u043b\u0438\u0435\u043d\u0442\u043e\u0432"}
+              right={
+                <button
+                  className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60"
+                  onClick={loadList}
+                  disabled={listLoading}
+                >
+                  {listLoading ? "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430..." : "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c"}
+                </button>
+              }
+            />
+            <div className="p-4">
+              <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <div className="flex-1">
+                  <input
+                    className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    placeholder={"\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u0438\u043c\u0435\u043d\u0438 \u0438\u043b\u0438 \u043a\u043e\u0434\u0443..."}
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                </div>
+                <div className="text-xs text-slate-500">{`\u0412\u0441\u0435\u0433\u043e: ${filteredList.length}`}</div>
               </div>
-              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-                {"updatedAt=" + String(profile?.updatedAtIso || "-")}
+
+              {listErr ? <div className="mt-3 text-sm text-rose-700">{listErr}</div> : null}
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {filteredList.map((p) => {
+                  const code = pickClientCode(p);
+                  const name = pickClientName(p);
+                  const kind = badgeClass(statusToBadgeKind("ok"));
+                  return (
+                    <button
+                      key={code}
+                      className="text-left rounded-xl bg-slate-50 ring-1 ring-slate-100 hover:bg-slate-100 px-4 py-3 transition"
+                      onClick={() => navigate(`/client-profile/${encodeURIComponent(code)}`)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900 truncate">{name || code}</div>
+                          <div className="text-xs text-slate-500 truncate">{code}</div>
+                        </div>
+                        <div className={"text-xs px-2 py-1 rounded-full " + kind}>{"ok"}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+                {filteredList.length === 0 && !listLoading ? (
+                  <div className="text-sm text-slate-500">{`\u041f\u043e\u043a\u0430 \u043d\u0435\u0442 \u043a\u043b\u0438\u0435\u043d\u0442\u043e\u0432 \u0438\u043b\u0438 \u0441\u043f\u0438\u0441\u043e\u043a \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d.`}</div>
+                ) : null}
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <div className="text-xs text-slate-500">
+                  {"\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430"} {clientCode ? `#${clientCode}` : ""}
+                </div>
+                <div className="text-2xl font-semibold text-slate-900 truncate">
+                  {profileLoading ? "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430..." : clientName || "\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f"}
+                </div>
+                {profileErr ? <div className="text-sm text-rose-700 mt-1">{profileErr}</div> : null}
+              </div>
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="erp-btn" onClick={doMaterializeLocalTasks} disabled={!hasClient}>
-                {S_MAT_TASKS}
-              </button>
-              <button className="erp-btn" onClick={doResetLocalTasks} disabled={!hasClient}>
-                {S_RESET_TASKS}
-              </button>
-              <button
-                className="erp-btn"
-                onClick={() => {
-                  if (!hasClient) return;
-                  clearProcessIntents(clientId);
-                  setIntentRev((x) => x + 1);
-                  setToast(S_TOAST_QUEUE_CLEARED);
-                  window.setTimeout(() => setToast(""), 1200);
-                }}
-                disabled={!hasClient}
-              >
-                {S_CLEAR_QUEUE}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="px-3 py-2 rounded-lg bg-white text-slate-900 text-sm ring-1 ring-slate-200 hover:bg-slate-50"
+                  onClick={() => navigate("/client-profile")}
+                >
+                  {"\u0421\u043f\u0438\u0441\u043e\u043a \u043a\u043b\u0438\u0435\u043d\u0442\u043e\u0432"}
+                </button>
+                <button
+                  className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60"
+                  disabled={!profile || profileLoading}
+                  onClick={() => {
+                    if (!profile) return;
+                    primeFormFromProfile(profile);
+                    setEditOpen(true);
+                  }}
+                >
+                  {"\u041f\u0440\u0430\u0432\u043a\u0430"}
+                </button>
+                <button
+                  className="px-3 py-2 rounded-lg bg-white text-slate-900 text-sm ring-1 ring-slate-200 hover:bg-slate-50"
+                  onClick={() => clientCode && loadProfileAndTasks(clientCode)}
+                >
+                  {"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c"}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, opacity: 0.8 }}>
-            <span>{"meta.count=" + String(tasksMeta?.count ?? 0)}</span>
-            <span>{"meta.last=" + String(tasksMeta?.last_materialize_error ?? "-")}</span>
-            <span>{"queue=" + String(intentCount)}</span>
-            <span>{"savedAt=" + String(savedAt)}</span>
-          </div>
-        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-1">
+                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
+                  <PanelTitle title={"\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0435"} />
+                  <div className="p-5">
+                    <div className="space-y-1">
+                      <FieldRow label={"\u041a\u043e\u0434"} value={clientCode} mono />
+                      <FieldRow label={"\u0420\u0435\u0436\u0438\u043c"} value={s(profile?.tax_system)} />
+                      <FieldRow
+                        label={"\u0422\u0443\u0440\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0441\u0431\u043e\u0440"}
+                        value={profile?.has_tourist_tax ? "\u0434\u0430" : "\u043d\u0435\u0442"}
+                      />
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                        <div className="text-xs font-semibold text-slate-700 mb-2">
+                          {"\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u044b"}
+                        </div>
+                        <FieldRow label={"\u042d\u043b. \u043f\u043e\u0447\u0442\u0430"} value={s(profile?.contact_email || profile?.settings?.contact_email)} />
+                        <FieldRow label={"\u0422\u0435\u043b\u0435\u0444\u043e\u043d"} value={s(profile?.contact_phone || profile?.settings?.contact_phone)} />
+                        <FieldRow label={"\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u043e\u0435 \u043b\u0438\u0446\u043e"} value={s(profile?.contact_person || profile?.settings?.contact_person)} />
+                      </div>
+                    </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <ClientTasksSummaryCard clientId={clientId} title={S_TASKS} rev={tasksRev} />
-          <ClientCoverageSummaryCard clientId={clientId} title={"\u041f\u043e\u043a\u0440\u044b\u0442\u0438\u0435 \u043f\u0440\u043e\u0446\u0435\u0441\u0441\u043e\u0432 (local)"} rev={tasksRev} />
-        </div>
+                    {profile?.updated_at ? (
+                      <div className="mt-4 text-xs text-slate-400">
+                        {`\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u043e: ${fmtDateIsoLike(s(profile.updated_at))}`}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
 
-        <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{S_LEGAL}</h3>
+              <div className="lg:col-span-2 space-y-5">
+                <TaskMiniList
+                  title={"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443"}
+                  tasks={overdueTasks}
+                  emptyText={
+                    tasksErr
+                      ? `\u041e\u0448\u0438\u0431\u043a\u043a\u0430: ${tasksErr}`
+                      : "\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043d\u044b\u0445 \u0437\u0430\u0434\u0430\u0447 \u043d\u0435\u0442."
+                  }
+                />
 
-          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>{S_ENTITY_TYPE}</div>
-            <select value={profile.legal.entityType} disabled={!hasClient}
-              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, entityType: e.target.value as LegalEntityTypeV27 } }))}>
-              <option value="IP">IP</option>
-              <option value="OOO">OOO</option>
-            </select>
-
-            <div>{S_TAX_SYSTEM}</div>
-            <select value={profile.legal.taxSystem} disabled={!hasClient}
-              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, taxSystem: e.target.value as TaxSystemV27 } }))}>
-              <option value="USN_DR">USN DR</option>
-              <option value="USN_DO">USN DO</option>
-              <option value="OSNO">OSNO</option>
-              <option value="PATENT">PATENT</option>
-            </select>
-
-            <div>{S_VAT_MODE}</div>
-            <select value={profile.legal.vatMode} disabled={!hasClient}
-              onChange={(e) => update((p) => ({ ...p, legal: { ...p.legal, vatMode: e.target.value as VatModeV27 } }))}>
-              <option value="NONE">NONE</option>
-              <option value="VAT_5">VAT 5</option>
-              <option value="VAT_7">VAT 7</option>
-              <option value="VAT_20">VAT 20</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{S_EMPLOYEES}</h3>
-
-          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>{S_HAS_PAYROLL}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.employees.hasPayroll}
-              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, hasPayroll: e.target.checked } }))} />
-
-            <div>{S_HEADCOUNT}</div>
-            <input type="number" disabled={!hasClient} value={profile.employees.headcount}
-              onChange={(e) => update((p) => ({ ...p, employees: { ...p.employees, headcount: clampInt(e.target.value, 0, 5000) } }))} />
-
-            <div>{S_PAYROLL_DATES}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, opacity: hasClient ? 1 : 0.6 }}>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-                const on = profile.employees.payrollDates.includes(day);
-                return (
-                  <button key={day} disabled={!hasClient} style={{ opacity: on ? 1 : 0.4 }}
-                    onClick={() =>
-                      update((p) => ({
-                        ...p,
-                        employees: { ...p.employees, payrollDates: toggleInArray(p.employees.payrollDates, day) }
-                      }))
-                    }>
-                    {day}
-                  </button>
-                );
-              })}
+                <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
+                  <PanelTitle
+                    title={"\u0411\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438"}
+                    right={<div className="text-xs text-slate-500">{tasksLoading ? "\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0430" : `${upcomingTasks.length}`}</div>}
+                  />
+                  <div className="p-3 space-y-3">
+                    {upcomingTasks.length === 0 ? (
+                      <div className="text-sm text-slate-500">
+                        {tasksErr ? `\u041e\u0448\u0438\u0431\u043a\u043a\u0430: ${tasksErr}` : "\u0411\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0445 \u0437\u0430\u0434\u0430\u0447 \u043d\u0435\u0442."}
+                      </div>
+                    ) : (
+                      upcomingTasks.slice(0, 10).map((t) => <TaskCard key={t.id} task={t as any} />)
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {editOpen ? (
+              <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/30 p-3">
+                <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl ring-1 ring-slate-200 overflow-hidden">
+                  <PanelTitle
+                    title={"\u041f\u0440\u0430\u0432\u043a\u0430 \u043f\u0440\u043e\u0444\u0438\u043b\u044f"}
+                    right={
+                      <button
+                        className="px-3 py-2 rounded-lg bg-white text-slate-900 text-sm ring-1 ring-slate-200 hover:bg-slate-50"
+                        onClick={() => setEditOpen(false)}
+                      >
+                        {"\u0417\u0430\u043a\u0440\u044b\u0442\u044c"}
+                      </button>
+                    }
+                  />
+
+                  <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">{"\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 / \u043b\u0435\u0439\u0431\u043b"}</label>
+                        <input
+                          className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                          value={formLabel}
+                          onChange={(e) => setFormLabel(e.target.value)}
+                          placeholder={"\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: Demo Client A"}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">{"\u0420\u0435\u0436\u0438\u043c \u043d\u0430\u043b\u043e\u0433\u043e\u043e\u0431\u043b\u043e\u0436\u0435\u043d\u0438\u044f"}</label>
+                        <input
+                          className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                          value={formTaxSystem}
+                          onChange={(e) => setFormTaxSystem(e.target.value)}
+                          placeholder={"\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: USN_DR"}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 flex items-center gap-2">
+                        <input
+                          id="hasTouristTax"
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={formHasTouristTax}
+                          onChange={(e) => setFormHasTouristTax(e.target.checked)}
+                        />
+                        <label htmlFor="hasTouristTax" className="text-sm text-slate-800">
+                          {"\u041f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a \u0442\u0443\u0440\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0441\u0431\u043e\u0440\u0430"}
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">{"\u042d\u043b. \u043f\u043e\u0447\u0442\u0430"}</label>
+                        <input
+                          className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                          value={formContactEmail}
+                          onChange={(e) => setFormContactEmail(e.target.value)}
+                          placeholder={"ivan@example.com"}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">{"\u0422\u0435\u043b\u0435\u0444\u043e\u043d"}</label>
+                        <input
+                          className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                          value={formContactPhone}
+                          onChange={(e) => setFormContactPhone(e.target.value)}
+                          placeholder={"+79990001122"}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-xs text-slate-600 mb-1">{"\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u043e\u0435 \u043b\u0438\u0446\u043e"}</label>
+                        <input
+                          className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                          value={formContactPerson}
+                          onChange={(e) => setFormContactPerson(e.target.value)}
+                          placeholder={"Ivan Petrov"}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-xs text-slate-600 mb-1">
+                          {"\u0414\u0430\u0442\u044b \u0437\u0430\u0440\u043f\u043b\u0430\u0442\u044b (JSON)"}
+                        </label>
+                        <textarea
+                          className="w-full min-h-[120px] px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300 font-mono text-xs"
+                          value={formSalaryDatesJson}
+                          onChange={(e) => setFormSalaryDatesJson(e.target.value)}
+                          placeholder={"{\n  \"salary_1\": \"05\",\n  \"salary_2\": \"20\"\n}"}
+                        />
+                        <div className="mt-1 text-xs text-slate-400">
+                          {"\u041e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u043f\u0443\u0441\u0442\u044b\u043c, \u0435\u0441\u043b\u0438 \u043d\u0435 \u043d\u0443\u0436\u043d\u043e."}
+                        </div>
+                      </div>
+                    </div>
+
+                    {saveErr ? <div className="text-sm text-rose-700">{saveErr}</div> : null}
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        className="px-3 py-2 rounded-lg bg-white text-slate-900 text-sm ring-1 ring-slate-200 hover:bg-slate-50"
+                        onClick={() => setEditOpen(false)}
+                        disabled={saving}
+                      >
+                        {"\u041e\u0442\u043c\u0435\u043d\u0430"}
+                      </button>
+                      <button
+                        className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60"
+                        onClick={saveProfile}
+                        disabled={saving}
+                      >
+                        {saving ? "\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u044e..." : "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
-        </div>
-
-        <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{S_OPS}</h3>
-
-          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>{"\u0420\u0430\u0441\u0447\u0435\u0442\u043d\u044b\u0435 \u0441\u0447\u0435\u0442\u0430"}</div>
-            <input type="number" disabled={!hasClient} value={profile.operations.bankAccounts}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, bankAccounts: clampInt(e.target.value, 0, 50) } }))} />
-
-            <div>{S_CASH_REGISTER}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.operations.cashRegister}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, cashRegister: e.target.checked } }))} />
-
-            <div>{S_OFD}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.operations.ofd}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, ofd: e.target.checked } }))} />
-
-            <div>{S_FOREIGN_OPS}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.operations.foreignOps}
-              onChange={(e) => update((p) => ({ ...p, operations: { ...p.operations, foreignOps: e.target.checked } }))} />
-          </div>
-        </div>
-
-        <div style={{ border: "1px solid rgba(15,23,42,0.12)", borderRadius: 16, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{S_FLAGS}</h3>
-
-          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 10, alignItems: "center" }}>
-            <div>{S_TOURISM_TAX}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.specialFlags.tourismTax}
-              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, tourismTax: e.target.checked } }))} />
-
-            <div>{S_EXCISE}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.specialFlags.excise}
-              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, excise: e.target.checked } }))} />
-
-            <div>{S_CTRL_TRANS}</div>
-            <input type="checkbox" disabled={!hasClient} checked={!!profile.specialFlags.controlledTransactions}
-              onChange={(e) => update((p) => ({ ...p, specialFlags: { ...p.specialFlags, controlledTransactions: e.target.checked } }))} />
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <details>
-              <summary style={{ cursor: "pointer" }}>{S_DERIVED}</summary>
-              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(derived, null, 2)}</pre>
-            </details>
-          </div>
-        </div>
-
-        {toast ? <div style={{ opacity: 0.85, fontSize: 12 }}>toast: {toast}</div> : null}
+        )}
       </div>
-    </PageShell>
+    </div>
   );
 }
