@@ -2,7 +2,9 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import "./styles/erp_shell.css";
+import "./ux/sidePanelEngine.css";
 import { ErpShell, type ErpNavItem } from "./components/layout/ErpShell";
+import { SidePanelProvider } from "./components/ux/SidePanelEngine";
 
 import TasksPage from "./pages/TasksPage";
 import InternalProcessesPage from "./pages/InternalProcessesPage";
@@ -13,6 +15,7 @@ import ClientProfilePage from "./pages/ClientProfilePage";
 import ClientProfileEditPage from "./pages/ClientProfileEditPage";
 import ControlEventsPage from "./pages/ControlEventsPage";
 import InternalControlEventsStorePage from "./pages/InternalControlEventsStorePage";
+import DocumentsPage from "./pages/DocumentsPage";
 import ClientProcessOverviewPage from "./pages/ClientProcessOverviewPage";
 import ProcessChainsDevPage from "./pages/ProcessChainsDevPage";
 import ClientProcessStepPage from "./pages/ClientProcessStepPage";
@@ -39,7 +42,7 @@ const NAV: ErpNavItem[] = [
   { to: "/internal-processes", label: "\u041f\u0440\u043e\u0446\u0435\u0441\u0441\u044b" },
   { to: "/process-coverage", label: "\u041f\u043e\u043a\u0440\u044b\u0442\u0438\u0435" },
   { to: "/control-events", label: "\u0421\u043e\u0431\u044b\u0442\u0438\u044f" },
-  { to: "/internal-control-events-store", label: "\u0425\u0440\u0430\u043d\u0438\u043b\u0438\u0449\u0435" },
+  { to: "/documents", label: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b" },
   { to: "/client-process-overview", label: "\u041e\u0431\u0437\u043e\u0440" },
   { to: "/analytics", label: "Analytics" },
   { to: "/process-chains-dev", label: "DEV Chains" },
@@ -66,7 +69,8 @@ function App() {
   const clientId = getClientFromUrl();
 
   return (
-    <Router>
+    <SidePanelProvider>
+      <Router>
       <ErpShell
         title="ERPv2"
         subtitle="Workday v1"
@@ -92,6 +96,7 @@ function App() {
 
           <Route path="/control-events" element={<ControlEventsPage />} />
           <Route path="/internal-control-events-store" element={<InternalControlEventsStorePage />} />
+          <Route path="/documents" element={<DocumentsPage />} />
 
           <Route path="/client-process-overview" element={<ClientProcessOverviewPage />} />
           <Route path="/client-process-overview/step/:stepId" element={<ClientProcessStepPage />} />
@@ -104,6 +109,7 @@ function App() {
 </Routes>
       </ErpShell>
     </Router>
+    </SidePanelProvider>
   );
 }
 

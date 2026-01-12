@@ -1,0 +1,96 @@
+/* Client create / onboarding - compact "edit-like" product UI */
+.erp-onboarding-page .erp-page-inner {
+  padding-bottom: 24px;
+}
+
+.erp-onboarding-page .erp-client-edit-head {
+  padding-bottom: 6px;
+}
+
+.erp-onboarding-page .erp-kicker {
+  margin-bottom: 2px;
+}
+
+.erp-onboarding-page .erp-h1 {
+  line-height: 1.1;
+}
+
+.erp-onboarding-page .erp-compact-card {
+  padding: 12px 14px;
+}
+
+.erp-onboarding-page .erp-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.erp-onboarding-page .erp-label {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.erp-onboarding-page .erp-input {
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.erp-onboarding-page .erp-btn {
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.erp-onboarding-preview {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(248, 250, 252, 0.55);
+}
+
+.erp-row2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.erp-row2-k {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.55);
+  white-space: nowrap;
+}
+
+.erp-row2-v {
+  font-size: 12px;
+  color: rgba(15, 23, 42, 0.9);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* v5: tighter vertical rhythm */
+.erp-onboarding-page .erp-compact-card {
+  padding: 10px 12px;
+}
+
+.erp-onboarding-preview {
+  padding: 10px;
+}
+
+.erp-onboarding-page .erp-page-head {
+  padding-bottom: 6px;
+}
+
+.erp-onboarding-page .erp-page-head .erp-kicker {
+  margin-bottom: 0;
+}
+
+.erp-onboarding-page .erp-page-head .erp-h1 {
+  margin-bottom: 2px;
+}
+
+.erp-onboarding-page .erp-muted,
+.erp-onboarding-page .erp-alert {
+  margin-top: 6px;
+}

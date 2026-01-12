@@ -1,0 +1,32 @@
+/* Control page: side panel payload helpers */
+
+.cp-panel-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.cp-btn{
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.12);
+  background: rgba(59,130,246,0.12);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.cp-btn2{
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.12);
+  background: rgba(248,250,252,0.9);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.cp-kv{
+  display:grid;
+  grid-template-columns: 90px 1fr;
+  gap: 6px 10px;
+  font-size: 13px;
+}
+
+.cp-muted{ color: rgba(15,23,42,0.62); font-size: 13px; }

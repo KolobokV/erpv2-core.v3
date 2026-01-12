@@ -1,0 +1,73 @@
+/* Client profile edit - compact product layout */
+.erp-client-edit-page .erp-page-inner {
+  padding-bottom: 84px;
+}
+
+.erp-client-edit-head {
+  padding-bottom: 6px;
+}
+
+.erp-client-edit-page .erp-kicker {
+  margin-bottom: 2px;
+}
+
+.erp-client-edit-page .erp-h1 {
+  line-height: 1.1;
+}
+
+.erp-client-edit-page .erp-compact-card {
+  padding: 12px 14px;
+}
+
+.erp-client-edit-page .erp-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.erp-client-edit-page .erp-field {
+  margin: 0;
+}
+
+.erp-client-edit-page .erp-label {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.erp-client-edit-page .erp-input {
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.erp-client-edit-page .erp-btn {
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.erp-field-inlineAction .erp-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.erp-client-edit-footer {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.erp-client-edit-footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.erp-client-edit-footer-status {
+  min-width: 140px;
+}

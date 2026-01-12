@@ -248,3 +248,8 @@
     top: 8px;
   }
 }
+/* --- nav hiding (product cleanup) --- */
+.erp-nav a[href="/process-chains-dev"],
+.erp-nav a[href="/client-create"] {
+  display: none !important;
+}

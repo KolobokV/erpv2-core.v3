@@ -4,6 +4,7 @@ import { useSidePanel } from "../components/ux/SidePanelEngine";
 import StorageWorkspace from "../components/storage/StorageWorkspace";
 import { apiGetJson } from "../api";
 import "../ux/dayDashboard.css";
+
 type Task = {
   id: string;
   client_code?: string;
@@ -977,7 +978,7 @@ const [loading, setLoading] = useState<boolean>(true);
 <details className="ddq-details">
                   <summary className="ddq-details-sum">{"\u041e\u0431\u0449\u0438\u0435 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b"}</summary>
                   <div className="ddq-card">
-                    <StorageWorkspace defaultView="documents" />
+                    <StorageWorkspace defaultView="documents" embedded={true} />
                   </div>
                 </details>
               </div>

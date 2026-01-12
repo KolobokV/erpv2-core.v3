@@ -1,283 +1,325 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGetJson, apiPutJson } from "../api";
+import "../ux/clientProfileEdit.css";
 
-type ClientProfile = {
-  client_code: string;
-  code?: string;
-  id?: string;
-  label?: string;
-  profile_type?: string;
+type ClientProfileDto = {
+  id: string;
+  name?: string;
   tax_system?: string;
+  tourist_tax?: boolean;
   salary_dates?: any;
-  has_tourist_tax?: boolean;
-  contact_email?: string;
-  contact_phone?: string;
-  contact_person?: string;
-  settings?: any;
-  [k: string]: any;
+  contacts?: {
+    email?: string;
+    phone?: string;
+    person?: string;
+  };
+  updated_at?: string;
 };
 
-function s(v: any): string {
-  if (v === null || v === undefined) return "";
-  return String(v);
-}
-
-function t(key: string): string {
+function tFactory() {
   const dict: Record<string, string> = {
-    title: "\u041f\u0440\u0430\u0432\u043a\u0430 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438",
+    kicker: "\u041a\u043b\u0438\u0435\u043d\u0442 \u00b7 \u041f\u0440\u0430\u0432\u043a\u0430",
+    title: "\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0430",
     back: "\u041d\u0430\u0437\u0430\u0434",
+    cancel: "\u041e\u0442\u043c\u0435\u043d\u0430",
     save: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c",
-    saving: "\u0421\u043e\u0445\u0440\u0430\u043d\u044f\u044e...",
+    saving: "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...",
+    loading: "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...",
+    basic: "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0435",
+    taxes: "\u041d\u0430\u043b\u043e\u0433\u0438 \u0438 \u0444\u043b\u0430\u0433\u0438",
+    label: "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435",
     taxSystem: "\u0420\u0435\u0436\u0438\u043c \u043d\u0430\u043b\u043e\u0433\u043e\u043e\u0431\u043b\u043e\u0436\u0435\u043d\u0438\u044f",
-    touristTax: "\u041f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a \u0442\u0443\u0440\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0441\u0431\u043e\u0440\u0430",
-    salaryDates: "\u0414\u0430\u0442\u044b \u0437\u0430\u0440\u043f\u043b\u0430\u0442\u044b (JSON)",
+    touristTax: "\u0422\u0443\u0440\u0441\u0431\u043e\u0440",
+    payroll: "\u0417\u0430\u0440\u043f\u043b\u0430\u0442\u0430",
+    salary1: "\u0414\u0435\u043d\u044c \u0437\u0430\u0440\u043f\u043b\u0430\u0442\u044b #1",
+    salary2: "\u0414\u0435\u043d\u044c \u0437\u0430\u0440\u043f\u043b\u0430\u0442\u044b #2",
+    salaryHint: "\u0417\u043d\u0430\u0447\u0435\u043d\u0438\u044f: 1-31. \u041f\u0443\u0441\u0442\u043e \u2014 \u0435\u0441\u043b\u0438 \u043d\u0435 \u043d\u0443\u0436\u043d\u043e.",
+    advancedJson: "\u0414\u043e\u043f.\u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 (JSON)",
+    salaryHelp: "\u041f\u0440\u0438\u043c\u0435\u0440: { \"salary_1\": 10, \"salary_2\": 25 }",
     contacts: "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u044b",
     email: "\u042d\u043b.\u043f\u043e\u0447\u0442\u0430",
     phone: "\u0422\u0435\u043b\u0435\u0444\u043e\u043d",
     person: "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u043e\u0435 \u043b\u0438\u0446\u043e",
-    errLoad: "\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438",
-    errSave: "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f",
+    footerNote: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f. \u0412\u043e\u0437\u0432\u0440\u0430\u0442 \u2014 \u0432 \u0441\u043f\u0438\u0441\u043e\u043a.",
+    jsonErr: "salary_dates JSON parse error.",
+    saved: "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e",
+    unsaved: "\u041d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e",
   };
-  return dict[key] || key;
+
+  return (k: string) => dict[k] ?? k;
 }
 
-function parseJsonOrEmptyObject(v: string): any {
-  const s0 = (v || "").trim();
-  if (!s0) return {};
+function safeJsonStringify(v: any) {
   try {
-    return JSON.parse(s0);
+    if (v === null || v === undefined) return "";
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return "";
+  }
+}
+
+function safeJsonParse(v: string): any {
+  try {
+    if (!v.trim()) return {};
+    return JSON.parse(v);
   } catch {
     return null;
   }
 }
 
+function clampDay(v: string): number | null {
+  const s = v.trim();
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.floor(n);
+  if (i < 1 || i > 31) return null;
+  return i;
+}
+
 export default function ClientProfileEditPage() {
+  const t = useMemo(() => tFactory(), []);
+  const nav = useNavigate();
   const params = useParams();
-  const navigate = useNavigate();
-  const clientCode = (params as any)?.id as string | undefined;
+  const id = (params as any)?.id as string | undefined;
 
-  const [profile, setProfile] = useState<ClientProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string>("");
 
+  const [name, setName] = useState("");
   const [taxSystem, setTaxSystem] = useState("");
-  const [hasTouristTax, setHasTouristTax] = useState(false);
-  const [salaryDatesJson, setSalaryDatesJson] = useState("{}");
+  const [touristTax, setTouristTax] = useState(false);
 
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
-  const [contactPerson, setContactPerson] = useState("");
+  const [salary1, setSalary1] = useState<string>("");
+  const [salary2, setSalary2] = useState<string>("");
+  const [salaryJson, setSalaryJson] = useState<string>("{}");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [jsonErr, setJsonErr] = useState("");
 
-  const [saveBusy, setSaveBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [person, setPerson] = useState("");
 
-  const headline = useMemo(() => {
-    if (!profile) return clientCode ? clientCode : "\u2014";
-    return s(profile.label || profile.client_code || profile.code || profile.id || clientCode || "\u2014");
-  }, [profile, clientCode]);
+  const load = async () => {
+    if (!id) return;
+    setErr("");
+    setJsonErr("");
+    setLoading(true);
 
-  const prettyJson = useMemo(() => {
     try {
-      return JSON.stringify(profile, null, 2);
-    } catch {
-      return String(profile);
-    }
-  }, [profile]);
+      const dto = (await apiGetJson(`/api/internal/client-profiles/${encodeURIComponent(id)}`)) as ClientProfileDto;
 
+      setName(dto.name || "");
+      setTaxSystem(dto.tax_system || "");
+      setTouristTax(Boolean(dto.tourist_tax));
+
+      const salary = dto.salary_dates ?? {};
+      const s1 = salary?.salary_1 ?? salary?.salary1 ?? salary?.day1 ?? null;
+      const s2 = salary?.salary_2 ?? salary?.salary2 ?? salary?.day2 ?? null;
+
+      setSalary1(s1 !== null && s1 !== undefined ? String(s1) : "");
+      setSalary2(s2 !== null && s2 !== undefined ? String(s2) : "");
+      setSalaryJson(safeJsonStringify(salary) || "{}");
+
+      setEmail(dto.contacts?.email || "");
+      setPhone(dto.contacts?.phone || "");
+      setPerson(dto.contacts?.person || "");
+    } catch (e: any) {
+      setErr(String(e?.message || e || "error"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-    async function load() {
-      if (!clientCode) {
-        setErr("Missing client code in URL.");
-        setLoading(false);
-        return;
-      }
+  // Keep JSON in sync when user edits the structured salary fields
+  useEffect(() => {
+    const obj = safeJsonParse(salaryJson);
+    if (obj === null) return;
 
-      setErr(null);
-      setLoading(true);
-      try {
-        const p = await apiGetJson(`/api/internal/client-profiles/${encodeURIComponent(clientCode)}`);
-        if (!alive) return;
+    const v1 = clampDay(salary1);
+    const v2 = clampDay(salary2);
 
-        const prof = (p?.profile ?? p) as ClientProfile;
-        setProfile(prof || null);
+    const next = { ...(obj || {}) } as any;
 
-        setTaxSystem(s(prof?.tax_system || ""));
-        setHasTouristTax(Boolean(prof?.has_tourist_tax));
-        setSalaryDatesJson(() => {
-          try {
-            return JSON.stringify(prof?.salary_dates ?? {}, null, 2);
-          } catch {
-            return "{}";
-          }
-        });
+    if (v1 === null) delete next.salary_1;
+    else next.salary_1 = v1;
 
-        setContactEmail(s(prof?.contact_email || prof?.settings?.contact_email || ""));
-        setContactPhone(s(prof?.contact_phone || prof?.settings?.contact_phone || ""));
-        setContactPerson(s(prof?.contact_person || prof?.settings?.contact_person || ""));
-      } catch (e: any) {
-        if (!alive) return;
-        setErr(t("errLoad") + ": " + String(e?.message || e || "error"));
-      } finally {
-        if (alive) setLoading(false);
-      }
-    }
+    if (v2 === null) delete next.salary_2;
+    else next.salary_2 = v2;
 
-    load();
-    return () => {
-      alive = false;
-    };
-  }, [clientCode]);
+    const str = safeJsonStringify(next) || "{}";
+    if (str !== salaryJson) setSalaryJson(str);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salary1, salary2]);
 
-  async function onSave() {
-    if (!clientCode) return;
-    setErr(null);
+  const save = async () => {
+    if (!id) return;
 
-    const sd = parseJsonOrEmptyObject(salaryDatesJson);
-    if (sd === null) {
-      setErr("salary_dates JSON parse error.");
+    setErr("");
+    setJsonErr("");
+    setSaving(true);
+
+    const salaryObj = safeJsonParse(salaryJson);
+    if (salaryObj === null) {
+      setJsonErr(t("jsonErr"));
+      setSaving(false);
       return;
     }
 
-    setSaveBusy(true);
+    const body: ClientProfileDto = {
+      id,
+      name,
+      tax_system: taxSystem,
+      tourist_tax: touristTax,
+      salary_dates: salaryObj,
+      contacts: {
+        email,
+        phone,
+        person,
+      },
+    };
+
     try {
-      const payload: any = {
-        client_code: clientCode,
-        tax_system: taxSystem.trim() || "",
-        has_tourist_tax: Boolean(hasTouristTax),
-        salary_dates: sd,
-        contact_email: contactEmail.trim() || "",
-        contact_phone: contactPhone.trim() || "",
-        contact_person: contactPerson.trim() || "",
-      };
-
-      const saved = await apiPutJson(`/api/internal/client-profiles/${encodeURIComponent(clientCode)}`, payload);
-      const prof = (saved?.profile ?? saved) as ClientProfile;
-
-      setProfile(prof || null);
-      navigate(`/client-profile/${encodeURIComponent(clientCode)}`);
+      await apiPutJson(`/api/internal/client-profiles/${encodeURIComponent(id)}`, body);
+      nav("/client-profile?client=" + encodeURIComponent(id));
     } catch (e: any) {
-      setErr(t("errSave") + ": " + String(e?.message || e || "error"));
+      setErr(String(e?.message || e || "error"));
     } finally {
-      setSaveBusy(false);
+      setSaving(false);
     }
-  }
+  };
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0">
-          <div className="text-xs text-slate-500">
-            {t("title")} {clientCode ? `#${clientCode}` : ""}
+    <div className="erp-page erp-client-edit-page">
+      <div className="erp-page-inner">
+        <div className="erp-page-head erp-client-edit-head">
+          <div className="min-w-0">
+            <div className="erp-kicker">{t("kicker")}</div>
+            <div className="erp-h1">
+              {t("title")} {id ? <span className="font-mono text-xs text-slate-500">{"#" + id}</span> : null}
+            </div>
+            <div className="mt-1 text-sm text-slate-500">{t("footerNote")}</div>
           </div>
-          <div className="text-2xl font-semibold text-slate-900 truncate">{loading ? "\u2026" : headline}</div>
-          {err ? <div className="text-sm text-rose-700 mt-1">{err}</div> : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="px-3 py-2 rounded-lg bg-white text-slate-900 text-sm ring-1 ring-slate-200 hover:bg-slate-50"
-            type="button"
-            onClick={() => navigate(`/client-profile/${encodeURIComponent(clientCode || "")}`)}
-          >
-            {t("back")}
-          </button>
+        {loading ? <div className="erp-muted">{t("loading")}</div> : null}
+        {err ? <div className="erp-alert erp-alert-danger">{err}</div> : null}
 
-          <button
-            className="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 disabled:opacity-60"
-            type="button"
-            disabled={saveBusy || !clientCode}
-            onClick={onSave}
-          >
-            {saveBusy ? t("saving") : t("save")}
-          </button>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="lg:col-span-2 space-y-3">
+            <div className="erp-card erp-compact-card">
+              <div className="erp-card-title">{t("basic")}</div>
+
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div className="erp-field">
+                  <div className="erp-label">{t("label")}</div>
+                  <input className="erp-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={"Acme LLC"} />
+                </div>
+
+                <div className="erp-field">
+                  <div className="erp-label">{t("taxSystem")}</div>
+                  <input className="erp-input" value={taxSystem} onChange={(e) => setTaxSystem(e.target.value)} placeholder={"usn_income_minus_expense"} />
+                </div>
+              </div>
+
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" checked={touristTax} onChange={(e) => setTouristTax(e.target.checked)} />
+                  <span className="text-sm text-slate-700">{t("touristTax")}</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="erp-card erp-compact-card">
+              <div className="erp-card-title">{t("payroll")}</div>
+
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="erp-field">
+                  <div className="erp-label">{t("salary1")}</div>
+                  <input className="erp-input" value={salary1} onChange={(e) => setSalary1(e.target.value)} placeholder={"10"} inputMode="numeric" />
+                </div>
+                <div className="erp-field">
+                  <div className="erp-label">{t("salary2")}</div>
+                  <input className="erp-input" value={salary2} onChange={(e) => setSalary2(e.target.value)} placeholder={"25"} inputMode="numeric" />
+                </div>
+                <div className="erp-field erp-field-inlineAction">
+                  <div className="erp-label">{" "}</div>
+                  <button className="erp-btn" type="button" onClick={() => setShowAdvanced((v) => !v)}>
+                    {t("advancedJson")}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-1 text-xs text-slate-500">{t("salaryHint")}</div>
+
+              {showAdvanced ? (
+                <div className="mt-2">
+                  <div className="erp-field">
+                    <div className="erp-label">{t("advancedJson")}</div>
+                    <textarea
+                      className="erp-input"
+                      style={{ height: 120, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+                      value={salaryJson}
+                      onChange={(e) => setSalaryJson(e.target.value)}
+                    />
+                    <div className="mt-1 text-xs text-slate-500">{t("salaryHelp")}</div>
+                  </div>
+                  {jsonErr ? <div className="erp-alert erp-alert-danger">{jsonErr}</div> : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="lg:col-span-1 space-y-3">
+            <div className="erp-card erp-compact-card">
+              <div className="erp-card-title">{t("contacts")}</div>
+
+              <div className="mt-2 space-y-2">
+                <div className="erp-field">
+                  <div className="erp-label">{t("email")}</div>
+                  <input className="erp-input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={"name@company.com"} />
+                </div>
+
+                <div className="erp-field">
+                  <div className="erp-label">{t("phone")}</div>
+                  <input className="erp-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={"+7 999 111-22-33"} />
+                </div>
+
+                <div className="erp-field">
+                  <div className="erp-label">{t("person")}</div>
+                  <input className="erp-input" value={person} onChange={(e) => setPerson(e.target.value)} placeholder={"Ivan"} />
+                </div>
+              </div>
+            </div>
+
+            {err ? <div className="erp-alert erp-alert-danger">{err}</div> : null}
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        <div className="lg:col-span-2 space-y-4 md:space-y-6">
-          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <div className="font-semibold text-slate-900">{t("taxSystem")}</div>
-            </div>
-            <div className="p-4">
-              <input
-                className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                value={taxSystem}
-                onChange={(e) => setTaxSystem(e.target.value)}
-                placeholder="USN_DR / OSNO_NDS / ..."
-              />
-              <label className="mt-3 inline-flex items-center gap-2 text-sm text-slate-800 select-none">
-                <input type="checkbox" checked={hasTouristTax} onChange={(e) => setHasTouristTax(e.target.checked)} />
-                <span>{t("touristTax")}</span>
-              </label>
-            </div>
+      <div className="erp-client-edit-footer">
+        <div className="erp-client-edit-footer-inner">
+          <div className="erp-client-edit-footer-status">
+            <span className="text-xs text-slate-500">{saving ? t("saving") : t("saved")}</span>
           </div>
-
-          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <div className="font-semibold text-slate-900">{t("salaryDates")}</div>
-              <div className="text-xs text-slate-500 mt-1">{"Example: { \"salary_1\": 10, \"salary_2\": 25 }"}</div>
-            </div>
-            <div className="p-4">
-              <textarea
-                className="w-full min-h-[140px] px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300 font-mono text-xs"
-                value={salaryDatesJson}
-                onChange={(e) => setSalaryDatesJson(e.target.value)}
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <button className="erp-btn" type="button" onClick={() => nav("/client-profile")} disabled={saving || loading}>
+              {t("back")}
+            </button>
+            <button className="erp-btn" type="button" onClick={() => nav(-1)} disabled={saving || loading}>
+              {t("cancel")}
+            </button>
+            <button className="erp-btn erp-btn-primary" type="button" disabled={saving || loading} onClick={save}>
+              {saving ? t("saving") : t("save")}
+            </button>
           </div>
-        </div>
-
-        <div className="space-y-4 md:space-y-6">
-          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <div className="font-semibold text-slate-900">{t("contacts")}</div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">{t("email")}</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                  placeholder="name@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">{t("phone")}</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                  value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
-                  placeholder="+79990001122"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">{t("person")}</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                  value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)}
-                  placeholder="Ivan Petrov"
-                />
-              </div>
-            </div>
-          </div>
-
-          <details className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 overflow-hidden">
-            <summary className="cursor-pointer select-none px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <div className="font-semibold text-slate-900">{"JSON"}</div>
-              <div className="text-xs text-slate-500">{"view"}</div>
-            </summary>
-            <pre className="p-4 overflow-auto text-xs text-slate-700 whitespace-pre-wrap">
-              {prettyJson}
-            </pre>
-          </details>
         </div>
       </div>
     </div>
