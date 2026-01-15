@@ -29,7 +29,7 @@
   grid-template-columns: 260px 1fr;
   gap: 16px;
   padding: 16px;
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
 }
 
@@ -50,6 +50,10 @@
 }
 
 .erp-topbar {
+  position: sticky;
+  top: 16px;
+  z-index: 20;
+  backdrop-filter: blur(10px);
   background: var(--erp-panel);
   border: 1px solid var(--erp-border);
   border-radius: var(--erp-radius);
@@ -253,3 +257,70 @@
 .erp-nav a[href="/client-create"] {
   display: none !important;
 }
+
+
+/* --- dashboard shell additions --- */
+.dash-page {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.erp-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.erp-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.erp-clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--erp-muted);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.70);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.dash-card {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  padding: 14px 14px;
+}
+
+.dash-card-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--erp-text);
+  margin-bottom: 8px;
+}
+
+.dash-muted {
+  color: var(--erp-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.70);
+}
+
+.badge.red   { border-color: rgba(239, 68, 68, 0.25); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.08) inset; }
+.badge.amb   { border-color: rgba(245, 158, 11, 0.25); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.08) inset; }
+.badge.blue  { border-color: rgba(59, 130, 246, 0.25); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08) inset; }
+.badge.green { border-color: rgba(16, 185, 129, 0.25); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.08) inset; }

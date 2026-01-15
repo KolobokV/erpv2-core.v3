@@ -4,6 +4,89 @@ import { useNavigate, useParams, useSearchParams, useLocation } from "react-rout
 import { apiGetJson } from "../api";
 import { useSidePanel } from "../components/ux/SidePanelEngine";
 import { TaskCard } from "../components/tasks/TaskCard";
+import { t } from "../i18n/t";
+import "../ux/clientReglement.css";
+
+
+const LS_LIB = "erp_reglement_library_v1";
+const LS_CLIENT_PREFIX = "erp_client_reglement_v1:";
+
+type ReglementTemplate = {
+  id: string;
+  title: string;
+  category?: string;
+  description?: string;
+  notify_offsets?: number[];
+};
+
+type ClientReglementItem = {
+  template_id: string;
+  enabled: boolean;
+  overrides?: { notify_offsets?: number[] };
+};
+
+function loadReglementLibrary(): ReglementTemplate[] {
+  try {
+    const raw = localStorage.getItem(LS_LIB);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) return data as any;
+    if (data && Array.isArray(data.items)) return data.items as any;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function loadClientReglement(clientCode: string): ClientReglementItem[] {
+  try {
+    const raw = localStorage.getItem(LS_CLIENT_PREFIX + clientCode);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? (data as any) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveClientReglement(clientCode: string, items: ClientReglementItem[]) {
+  try {
+    localStorage.setItem(LS_CLIENT_PREFIX + clientCode, JSON.stringify(items));
+  } catch {}
+}
+
+function uniqByTemplate(items: ClientReglementItem[]): ClientReglementItem[] {
+  const seen = new Set<string>();
+  const out: ClientReglementItem[] = [];
+  for (const it of items) {
+    if (!seen.has(it.template_id)) {
+      seen.add(it.template_id);
+      out.push(it);
+    }
+  }
+  return out;
+}
+
+function formatOffsets(offsets?: number[]): string {
+  const arr = (offsets || []).slice().sort((a, b) => a - b);
+  if (arr.length === 0) return t("reglementClient.noOffsets");
+  return arr.map((d) => (d === 0 ? "T0" : (d > 0 ? "T+" + d : "T" + d))).join(", ");
+}
+
+function parseOffsets(input: string): number[] {
+  const parts = input
+    .split(/[ ,;]+/g)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const out: number[] = [];
+  for (const p of parts) {
+    const n = Number(p);
+    if (Number.isFinite(n)) out.push(Math.trunc(n));
+  }
+  return Array.from(new Set(out)).slice().sort((a, b) => a - b).slice(0, 12);
+}
+
 
 type ClientProfile = {
   client_code: string;
@@ -452,7 +535,51 @@ export default function ClientProfilePage() {
 
   const clientName = useMemo(() => (profile ? pickClientName(profile) : ""), [profile]);
 
-  const overdueTasks = useMemo(() => tasks.filter((x) => computeTaskKind(x) === "overdue"), [tasks]);
+  
+  const [reglementOpen, setReglementOpen] = useState(false);
+  const [reglementLib, setReglementLib] = useState<ReglementTemplate[]>([]);
+  const [clientReg, setClientReg] = useState<ClientReglementItem[]>([]);
+
+  useEffect(() => {
+    if (!profile?.client_code) return;
+    setReglementLib(loadReglementLibrary());
+    setClientReg(loadClientReglement(profile.client_code));
+  }, [profile?.client_code]);
+
+  const enabledReg = useMemo(() => {
+    const map = new Map(reglementLib.map((x) => [x.id, x]));
+    return clientReg
+      .filter((x) => x.enabled)
+      .map((x) => ({ item: x, tpl: map.get(x.template_id) }))
+      .filter((x) => !!x.tpl) as any;
+  }, [clientReg, reglementLib]);
+
+  const toggleTemplate = (id: string, enabled: boolean) => {
+    if (!profile?.client_code) return;
+    const next = uniqByTemplate([
+      ...clientReg.filter((x) => x.template_id !== id),
+      { template_id: id, enabled, overrides: {} },
+    ]);
+    setClientReg(next);
+    saveClientReglement(profile.client_code, next);
+  };
+
+  const setOverrides = (id: string, offsets: number[]) => {
+    if (!profile?.client_code) return;
+    const next = clientReg.map((x) =>
+      x.template_id === id ? { ...x, overrides: { ...(x.overrides || {}), notify_offsets: offsets } } : x
+    );
+    setClientReg(next);
+    saveClientReglement(profile.client_code, next);
+  };
+
+  const openClientDocs = () => {
+    if (!profile?.client_code) return;
+    try { localStorage.setItem("erp_docs_client", profile.client_code); } catch {}
+    navigate("/documents?client=" + encodeURIComponent(profile.client_code));
+  };
+
+const overdueTasks = useMemo(() => tasks.filter((x) => computeTaskKind(x) === "overdue"), [tasks]);
   const upcomingTasks = useMemo(() => {
     return tasks
       .filter((x) => computeTaskKind(x) !== "overdue")

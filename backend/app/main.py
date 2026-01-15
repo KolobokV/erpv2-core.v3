@@ -8,6 +8,7 @@ from app.routes_internal_tasks import router as tasks_router
 
 # === INTERNAL DOCUMENTS (v1) ===
 from app.routes_internal_documents_api import router as documents_router
+from app.routes_internal_reglement_defs_api import router as reglement_defs_router
 
 # === CLIENT PROFILES (legacy + list endpoints) ===
 from app.routes_client_profiles import router as client_profiles_router
@@ -49,6 +50,7 @@ app.add_middleware(
 # --- internal core ---
 app.include_router(tasks_router)
 app.include_router(documents_router)
+app.include_router(reglement_defs_router)
 app.include_router(client_profiles_store_v3_router)
 app.include_router(client_profiles_router)
 app.include_router(process_instances_v2_router)

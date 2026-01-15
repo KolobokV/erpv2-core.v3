@@ -1,0 +1,142 @@
+/* Client reglement tab (no Cyrillic) */
+
+.client-reg-card{
+  border: 1px solid rgba(15,23,42,0.10);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 18px 45px rgba(15,23,42,0.08);
+  padding: 12px 12px 10px;
+  margin: 12px 0 14px;
+}
+
+.client-reg-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap: 12px;
+}
+
+.client-reg-title{
+  font-size: 14px;
+  font-weight: 900;
+  color: rgba(15,23,42,0.92);
+}
+
+.client-reg-sub{
+  font-size: 12px;
+  color: rgba(15,23,42,0.70);
+  margin-top: 2px;
+}
+
+.client-reg-actions{
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.client-reg-btn{
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.16);
+  background: rgba(255,255,255,0.92);
+  padding: 0 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.client-reg-btn:hover{ background: rgba(248,250,252,0.96); }
+.client-reg-btn.is-on{
+  border-color: rgba(59,130,246,0.35);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.14);
+}
+
+.client-reg-list{ margin-top: 10px; display:flex; flex-direction:column; gap: 10px; }
+
+.client-reg-item{
+  border: 1px solid rgba(15,23,42,0.10);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.92);
+  padding: 10px 10px;
+  display:flex;
+  gap: 10px;
+  align-items:flex-start;
+  justify-content:space-between;
+}
+
+.client-reg-item-title{ font-weight: 900; font-size: 13px; color: rgba(15,23,42,0.92); }
+.client-reg-item-meta{ margin-top: 6px; display:flex; gap: 6px; flex-wrap:wrap; }
+.client-reg-chip{
+  display:inline-flex;
+  align-items:center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(15,23,42,0.14);
+  background: rgba(248,250,252,0.92);
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(15,23,42,0.78);
+}
+
+.client-reg-item-ov{ min-width: 220px; max-width: 280px; }
+.client-reg-ov-label{ font-size: 11px; font-weight: 800; color: rgba(15,23,42,0.70); margin-bottom: 4px; }
+.client-reg-input{
+  width: 100%;
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.16);
+  background: rgba(255,255,255,0.92);
+  padding: 0 10px;
+  outline: none;
+}
+.client-reg-input:focus{ box-shadow: 0 0 0 3px rgba(59,130,246,0.18); }
+
+.client-reg-item-right{ display:flex; align-items:center; }
+.client-reg-link{
+  height: 30px;
+  border-radius: 12px;
+  border: 1px solid rgba(239,68,68,0.22);
+  background: rgba(255,255,255,0.92);
+  padding: 0 10px;
+  font-weight: 900;
+  cursor:pointer;
+  color: rgba(239,68,68,0.95);
+}
+.client-reg-link:hover{ background: rgba(254,242,242,0.92); }
+
+.client-reg-empty{ margin-top: 10px; padding: 8px 2px 2px; }
+.client-reg-empty-title{ font-weight: 900; color: rgba(15,23,42,0.88); }
+.client-reg-empty-hint{ margin-top: 6px; font-size: 12px; color: rgba(15,23,42,0.72); }
+
+.client-reg-lib{ margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(15,23,42,0.08); }
+.client-reg-lib-title{ font-size: 12px; font-weight: 900; color: rgba(15,23,42,0.88); }
+.client-reg-lib-sub{ font-size: 12px; color: rgba(15,23,42,0.70); margin-top: 4px; }
+
+.client-reg-lib-grid{
+  margin-top: 10px;
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.client-reg-lib-card{
+  border: 1px solid rgba(15,23,42,0.10);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.92);
+  padding: 10px;
+}
+.client-reg-lib-card-title{ font-weight: 900; font-size: 13px; color: rgba(15,23,42,0.92); }
+.client-reg-lib-card-meta{ margin-top: 6px; display:flex; gap: 6px; flex-wrap:wrap; }
+.client-reg-lib-card-desc{ margin-top: 8px; font-size: 12px; color: rgba(15,23,42,0.72); min-height: 32px; }
+.client-reg-lib-card-actions{ margin-top: 10px; }
+
+.client-reg-lib-empty{
+  font-size: 12px;
+  color: rgba(15,23,42,0.72);
+  padding: 8px 2px;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px){
+  .client-reg-lib-grid{ grid-template-columns: 1fr; }
+  .client-reg-item{ flex-direction: column; }
+  .client-reg-item-ov{ min-width: unset; max-width: unset; width: 100%; }
+}

@@ -523,6 +523,23 @@ const [loading, setLoading] = useState<boolean>(true);
     () => backendVisible.filter((t) => isOverdueBackend(t, today) && !isDoneLocal("backend", t.id)).slice(0, 8),
     [backendVisible, today],
   );
+
+  const kpiOverdueCount = useMemo(
+    () => backendVisible.filter((t) => isOverdueBackend(t, today) && !isDoneLocal("backend", t.id)).length,
+    [backendVisible, today],
+  );
+
+  const kpiTodayCount = useMemo(
+    () => backendVisible.filter((t) => isTodayBackend(t, today) && !isDoneLocal("backend", t.id)).length,
+    [backendVisible, today],
+  );
+
+  const kpiUpcomingCount = useMemo(
+    () =>
+      backendVisible.filter((t) => !isOverdueBackend(t, today) && !isTodayBackend(t, today) && !isDoneLocal("backend", t.id))
+        .length,
+    [backendVisible, today],
+  );
   const activeDate = useMemo(() => {
     return calSelectedIso ? parseDateOnly(calSelectedIso) : today;
   }, [calSelectedIso, today]);
@@ -812,6 +829,98 @@ const [loading, setLoading] = useState<boolean>(true);
     return a + b;
   }
 
+
+  const weekdayLabels = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+  function renderRail() {
+    return (
+      <div className="ddq-rail-stack">
+        <div className="ddq-kpis">
+          <div className="ddq-kpi ddq-kpi-danger">
+            <div className="ddq-kpi-k">{"\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e"}</div>
+            <div className="ddq-kpi-v">{kpiOverdueCount}</div>
+          </div>
+          <div className="ddq-kpi ddq-kpi-warn">
+            <div className="ddq-kpi-k">{"\u0421\u0435\u0433\u043e\u0434\u043d\u044f"}</div>
+            <div className="ddq-kpi-v">{kpiTodayCount}</div>
+          </div>
+          <div className="ddq-kpi ddq-kpi-ok">
+            <div className="ddq-kpi-k">{"\u0414\u0430\u043b\u044c\u0448\u0435"}</div>
+            <div className="ddq-kpi-v">{kpiUpcomingCount}</div>
+          </div>
+        </div>
+
+        <div className="ddq-rail-card">
+          <div className="ddq-rail-head">
+            <div className="ddq-rail-title">
+              {monthLabel} {String(calYear)}
+            </div>
+            <div className="ddq-rail-nav">
+              <button className="ddq-rail-navbtn" type="button" onClick={prevMonth} aria-label="Prev month">
+                {"<"}
+              </button>
+              <button className="ddq-rail-navbtn" type="button" onClick={nextMonth} aria-label="Next month">
+                {">"}
+              </button>
+            </div>
+          </div>
+
+          <div className="ddq-cal">
+            {weekdayLabels.map((w) => (
+              <div key={w} className="ddq-cal-wd">
+                {w}
+              </div>
+            ))}
+
+            {grid.map((d) => {
+              const iso = isoDateLocal(d);
+              const inMonth = d.getMonth() === calMonth;
+              const isSel = iso === activeIso;
+              const isT = iso === isoDateLocal(today);
+              const cnt = dayCount(iso);
+
+              const cls =
+                "ddq-cal-day" +
+                (inMonth ? "" : " ddq-cal-day-out") +
+                (isSel ? " ddq-cal-day-sel" : "") +
+                (isT ? " ddq-cal-day-today" : "") +
+                (cnt > 0 ? " ddq-cal-day-has" : "");
+
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  className={cls}
+                  onClick={() => setCalSelectedIso(iso)}
+                  title={cnt > 0 ? `${iso} (${cnt})` : iso}
+                >
+                  <span className="ddq-cal-n">{String(d.getDate())}</span>
+                  {cnt > 0 ? <span className="ddq-cal-c">{cnt}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="ddq-rail-card">
+          <div className="ddq-rail-head">
+            <div className="ddq-rail-title">{"\u0411\u044b\u0441\u0442\u0440\u044b\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f"}</div>
+          </div>
+          <div className="ddq-rail-actions">
+            <button className="ddq-rail-action" type="button" onClick={() => (window.location.href = "/tasks")}>
+              {"\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438"}
+            </button>
+            <button className="ddq-rail-action" type="button" onClick={() => (window.location.href = "/documents")}>
+              {"\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b"}
+            </button>
+            <button className="ddq-rail-action" type="button" onClick={() => setCalSelectedIso(isoDateLocal(today))}>
+              {"\u0421\u0435\u0433\u043e\u0434\u043d\u044f"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="ddq">
       <div className="ddq-top">
@@ -841,14 +950,26 @@ const [loading, setLoading] = useState<boolean>(true);
       </div>
 
       {loading ? (
-        <div className="ddq-card">{"\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026"}</div>
+        <div className="ddq-body">
+          <div className="ddq-main">
+            <div className="ddq-card">{"\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026"}</div>
+          </div>
+          <div className="ddq-rail">{renderRail()}</div>
+        </div>
       ) : err ? (
-        <div className="ddq-card ddq-card-danger">
+        <div className="ddq-body">
+          <div className="ddq-main">
+            <div className="ddq-card ddq-card-danger">
           <div className="ddq-card-title">{"\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438"}</div>
           <div className="ddq-mono">{err}</div>
         </div>
+          </div>
+          <div className="ddq-rail">{renderRail()}</div>
+        </div>
       ) : (
-        <>
+        <div className="ddq-body">
+          <div className="ddq-main">
+            <>
           {(() => {
             const nowQueue = backendVisible
               .filter((t) => isOverdueBackend(t, today) && !isDoneLocal("backend", t.id))
@@ -984,10 +1105,11 @@ const [loading, setLoading] = useState<boolean>(true);
             );
           })()}
         </>
+          </div>
+          <div className="ddq-rail">{renderRail()}</div>
+        </div>
       )}
-    
-
-      {/* Note modal */}
+{/* Note modal */}
       {noteOpen ? (
         <div className="ddq-modal" role="dialog" aria-modal="true">
           <div className="ddq-modal-card">

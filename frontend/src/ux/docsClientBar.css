@@ -1,0 +1,45 @@
+/* Documents client bar (no Cyrillic) */
+
+.docs-page{
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 16px 40px;
+}
+
+.docs-clientbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(15,23,42,0.10);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 18px 45px rgba(15,23,42,0.08);
+  margin-bottom: 12px;
+}
+
+.docs-clientbar-title{
+  font-size: 14px;
+  font-weight: 900;
+  color: rgba(15,23,42,0.92);
+}
+
+.docs-clientbar-sub{
+  font-size: 12px;
+  color: rgba(15,23,42,0.70);
+  margin-top: 2px;
+}
+
+.docs-clientbar-btn{
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.16);
+  background: rgba(255,255,255,0.92);
+  padding: 0 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.docs-clientbar-btn:hover{
+  background: rgba(248,250,252,0.96);
+}

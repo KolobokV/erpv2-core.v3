@@ -5,11 +5,14 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  background: #f9fafb;
-  color: #111827;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  color: #0f172a;
+  background: radial-gradient(1200px 800px at 15% 10%, rgba(59,130,246,0.10), transparent 60%),
+              radial-gradient(900px 700px at 85% 0%, rgba(16,185,129,0.08), transparent 55%),
+              linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  min-height: 100vh;
 }
+
 
 /* Layout helpers */
 .w-full {
@@ -339,3 +342,57 @@ button {
 .bg-gray-100:hover {
   background-color: #e5e7eb;
 }
+
+/* --- ERPv2 core theme (no Cyrillic) --- */
+:root{
+  --erp-bg: #f8fafc;
+  --erp-surface: rgba(255,255,255,0.92);
+  --erp-border: rgba(15,23,42,0.10);
+  --erp-shadow: 0 18px 45px rgba(15,23,42,0.08);
+  --erp-shadow-sm: 0 10px 25px rgba(15,23,42,0.08);
+  --erp-radius: 16px;
+  --erp-radius-sm: 12px;
+
+  --erp-danger-bg: rgba(239,68,68,0.10);
+  --erp-warn-bg: rgba(245,158,11,0.10);
+  --erp-ok-bg: rgba(34,197,94,0.10);
+  --erp-info-bg: rgba(59,130,246,0.10);
+}
+
+#root{
+  min-height: 100vh;
+}
+
+.erp-surface{
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--erp-shadow);
+}
+
+.erp-surface-sm{
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-sm);
+  box-shadow: var(--erp-shadow-sm);
+}
+
+.erp-muted{
+  color: rgba(15,23,42,0.70);
+}
+
+.erp-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15,23,42,0.12);
+  background: rgba(255,255,255,0.88);
+}
+
+.erp-chip--danger{ background: var(--erp-danger-bg); border-color: rgba(239,68,68,0.22); }
+.erp-chip--warn{ background: var(--erp-warn-bg); border-color: rgba(245,158,11,0.24); }
+.erp-chip--ok{ background: var(--erp-ok-bg); border-color: rgba(34,197,94,0.22); }
+.erp-chip--info{ background: var(--erp-info-bg); border-color: rgba(59,130,246,0.22); }

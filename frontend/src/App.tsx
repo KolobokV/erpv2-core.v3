@@ -5,6 +5,8 @@ import "./styles/erp_shell.css";
 import "./ux/sidePanelEngine.css";
 import { ErpShell, type ErpNavItem } from "./components/layout/ErpShell";
 import { SidePanelProvider } from "./components/ux/SidePanelEngine";
+import { MoscowClock } from "./ui/time/MoscowClock";
+import { t } from "./i18n/t";
 
 import TasksPage from "./pages/TasksPage";
 import InternalProcessesPage from "./pages/InternalProcessesPage";
@@ -16,6 +18,7 @@ import ClientProfileEditPage from "./pages/ClientProfileEditPage";
 import ControlEventsPage from "./pages/ControlEventsPage";
 import InternalControlEventsStorePage from "./pages/InternalControlEventsStorePage";
 import DocumentsPage from "./pages/DocumentsPage";
+import ReglementPage from "./pages/ReglementPage";
 import ClientProcessOverviewPage from "./pages/ClientProcessOverviewPage";
 import ProcessChainsDevPage from "./pages/ProcessChainsDevPage";
 import ClientProcessStepPage from "./pages/ClientProcessStepPage";
@@ -36,16 +39,11 @@ function getClientFromUrl(): string | null {
 }
 
 const NAV: ErpNavItem[] = [
-  { to: "/day", label: "\u0414\u0435\u043d\u044c" },
-  { to: "/tasks", label: "\u0417\u0430\u0434\u0430\u0447\u0438" },
-  { to: "/client-profile", label: "\u041a\u043b\u0438\u0435\u043d\u0442" },
-  { to: "/internal-processes", label: "\u041f\u0440\u043e\u0446\u0435\u0441\u0441\u044b" },
-  { to: "/process-coverage", label: "\u041f\u043e\u043a\u0440\u044b\u0442\u0438\u0435" },
-  { to: "/control-events", label: "\u0421\u043e\u0431\u044b\u0442\u0438\u044f" },
-  { to: "/documents", label: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b" },
-  { to: "/client-process-overview", label: "\u041e\u0431\u0437\u043e\u0440" },
-  { to: "/analytics", label: "Analytics" },
-  { to: "/process-chains-dev", label: "DEV Chains" },
+  { to: "/day", label: t("nav.day") },
+  { to: "/tasks", label: t("nav.tasks") },
+  { to: "/client-profile", label: t("nav.clients") },
+  { to: "/documents", label: t("nav.documents") },
+  { to: "/reglement", label: t("nav.reglement") },
 ];
 
 function RightActions() {
@@ -54,16 +52,18 @@ function RightActions() {
   const hrefTasks = clientId ? ("/tasks?client=" + encodeURIComponent(clientId)) : "/tasks";
 
   return (
-    <>
-      <a className="erp-btn" href={hrefDay}>
-        {"\u0414\u0435\u043d\u044c"}
+    <div className="erp-right">
+      <MoscowClock />
+      <div className="erp-right-actions">
+<a className="erp-btn" href={hrefDay}>
+        {t("nav.day")}
       </a>
       <a className="erp-btn" href={hrefTasks}>
-        {"\u0417\u0430\u0434\u0430\u0447\u0438"}
+        {t("nav.tasks")}
       </a>
-    </>
-  );
-}
+      </div>
+    </div>
+  );}
 
 function App() {
   const clientId = getClientFromUrl();
@@ -97,6 +97,8 @@ function App() {
           <Route path="/control-events" element={<ControlEventsPage />} />
           <Route path="/internal-control-events-store" element={<InternalControlEventsStorePage />} />
           <Route path="/documents" element={<DocumentsPage />} />
+
+          <Route path="/reglement" element={<ReglementPage />} />
 
           <Route path="/client-process-overview" element={<ClientProcessOverviewPage />} />
           <Route path="/client-process-overview/step/:stepId" element={<ClientProcessStepPage />} />

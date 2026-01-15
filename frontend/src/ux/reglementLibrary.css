@@ -1,0 +1,75 @@
+/* Reglement library layout (ASCII-only) */
+.regl-page { max-width: 1050px; margin: 0 auto; padding: 18px 16px 40px; }
+.regl-head { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; margin-bottom: 14px; }
+.regl-title { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.regl-sub { font-size: 13px; opacity: 0.75; margin-top: 4px; }
+.regl-actions { display:flex; align-items:center; gap:10px; }
+.regl-status { font-size: 12px; opacity: 0.8; }
+
+.regl-warn { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(220, 38, 38, 0.25); background: rgba(220, 38, 38, 0.06); font-size: 13px; }
+
+.regl-filters { display:flex; align-items:flex-end; gap:12px; margin: 14px 0; flex-wrap: wrap; }
+.regl-filter { display:flex; flex-direction:column; gap:6px; }
+.regl-label { font-size: 12px; opacity: 0.75; }
+.regl-mini { font-size: 11px; opacity: 0.7; margin-bottom: 4px; }
+.regl-input, .regl-select { height: 36px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.12); background: rgba(255,255,255,0.9); outline: none; }
+.regl-input:focus, .regl-select:focus { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 0 3px rgba(59,130,246,0.18); }
+.regl-hint { margin-left:auto; font-size: 12px; opacity: 0.7; }
+
+.regl-list { display:flex; flex-direction:column; gap: 10px; }
+
+.regl-row { border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; background: rgba(255,255,255,0.92); box-shadow: 0 10px 30px rgba(0,0,0,0.06); overflow: hidden; }
+.regl-row-head { width:100%; display:flex; align-items:center; justify-content:space-between; gap: 12px; padding: 12px 12px; background: transparent; border: 0; cursor: pointer; text-align:left; }
+.regl-row-main { display:flex; flex-direction:column; gap:6px; }
+.regl-row-title { font-size: 15px; font-weight: 700; }
+.regl-row-meta { display:flex; gap:8px; flex-wrap: wrap; }
+
+.regl-row-right { opacity: 0.7; font-size: 14px; }
+
+.chip { display:inline-flex; align-items:center; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(0,0,0,0.10); background: rgba(0,0,0,0.02); font-size: 12px; }
+
+.regl-expand { padding: 12px; border-top: 1px solid rgba(0,0,0,0.06); }
+
+.regl-grid { display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; align-items: start; }
+.regl-box { min-width: 0; }
+.regl-box-wide { grid-column: 1 / -1; }
+
+.regl-params { display:flex; gap: 10px; flex-wrap: wrap; padding: 10px 0 2px; }
+.regl-param { min-width: 180px; }
+
+.regl-danger { display:flex; justify-content:flex-end; padding-top: 10px; }
+
+.btn { height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.10); background: rgba(255,255,255,0.95); cursor: pointer; font-weight: 600; }
+.btn:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+.btn-primary { border-color: rgba(59,130,246,0.35); background: rgba(59,130,246,0.10); }
+.btn-danger { border-color: rgba(220, 38, 38, 0.35); background: rgba(220, 38, 38, 0.10); }
+
+.regl-dates { margin-top: 12px; }
+.regl-date-list { display:flex; flex-direction:column; gap: 6px; margin-top: 8px; }
+.regl-date-row { display:flex; align-items:center; justify-content:space-between; padding: 10px 10px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.02); }
+.regl-date { font-weight: 700; letter-spacing: 0.2px; }
+.regl-date-meta { font-size: 12px; opacity: 0.7; }
+
+@media (max-width: 860px) {
+  .regl-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .regl-grid { grid-template-columns: 1fr; }
+  .regl-hint { margin-left: 0; }
+}
+
+
+.regl-sections{ display:flex; flex-direction:column; gap: 16px; }
+.regl-section{ display:flex; flex-direction:column; gap: 10px; }
+.regl-section-head{ display:flex; align-items:center; justify-content:space-between; padding: 6px 4px 0; }
+.regl-section-title{ font-size: 13px; font-weight: 900; color: rgba(15,23,42,0.75); }
+.regl-section-count{ font-size: 12px; font-weight: 900; color: rgba(15,23,42,0.55); }
+
+
+.regl-section-head{ width:100%; background: transparent; border: 0; cursor: pointer; }
+.regl-section-head:hover{ filter: brightness(0.99); }
+.regl-section-right{ display:flex; align-items:center; gap:10px; }
+.regl-section-chev{ font-size: 12px; color: rgba(15,23,42,0.55); }
+.regl-section.open .regl-section-chev{ color: rgba(15,23,42,0.75); }
+.regl-section{ border-radius: 14px; }
+.regl-section .regl-list{ margin-top: 8px; }

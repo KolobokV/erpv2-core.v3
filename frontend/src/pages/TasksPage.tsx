@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGetJson, apiPutJson } from "../api";
 import { TaskCard } from "../components/tasks/TaskCard";
+import "../ux/tasksDashboard.css";
 
 type Task = {
   id: string;
@@ -54,13 +55,17 @@ export default function TasksPage() {
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2 style={{ marginTop: 0 }}>{S_TITLE}</h2>
+    <div className="tasks-page">
+      <div className="tasks-header">
+        <div>
+          <h2 className="tasks-title">{S_TITLE}</h2>
+        </div>
+      </div>
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <label style={{ fontSize: 12, opacity: 0.75, fontWeight: 700 }}>{S_CLIENT}</label>
+      <div className="tasks-filterbar">
+        <label className="tasks-filterlabel">{S_CLIENT}</label>
 
-        <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
+        <select className="tasks-select" value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
           <option value="">{S_ALL_CLIENTS}</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
@@ -70,11 +75,11 @@ export default function TasksPage() {
         </select>
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      <div className="tasks-card">
         {visibleTasks.length === 0 ? (
-          <div style={{ fontSize: 13, opacity: 0.85 }}>
-            <div style={{ fontWeight: 800 }}>{S_NO_TASKS}</div>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>{S_HINT}</div>
+          <div className="tasks-empty">
+            <div className="tasks-empty-title">{S_NO_TASKS}</div>
+            <div className="tasks-empty-hint">{S_HINT}</div>
           </div>
         ) : null}
 

@@ -1,0 +1,73 @@
+/* Tasks page dashboard wrapper (no Cyrillic) */
+
+.tasks-page{
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 18px 16px 40px;
+}
+
+.tasks-header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.tasks-title{
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.tasks-filterbar{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap:wrap;
+  margin-top: 10px;
+}
+
+.tasks-filterlabel{
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(15,23,42,0.70);
+}
+
+.tasks-select{
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(15,23,42,0.16);
+  background: rgba(255,255,255,0.92);
+  padding: 0 10px;
+  outline: none;
+}
+
+.tasks-select:focus{
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.18);
+}
+
+.tasks-card{
+  border: 1px solid rgba(15,23,42,0.10);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 18px 45px rgba(15,23,42,0.08);
+  padding: 12px;
+}
+
+.tasks-empty{
+  font-size: 13px;
+  color: rgba(15,23,42,0.80);
+  padding: 10px 4px 14px;
+}
+
+.tasks-empty-title{
+  font-weight: 900;
+}
+
+.tasks-empty-hint{
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(15,23,42,0.72);
+}

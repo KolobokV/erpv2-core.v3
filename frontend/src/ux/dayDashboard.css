@@ -433,3 +433,216 @@
   gap: 8px;
   margin-top: 10px;
 }
+
+
+/* --- Dashboard layout v1 --- */
+
+.ddq-body{
+  display: grid;
+  grid-template-columns: minmax(520px, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.ddq-main{
+  min-width: 0;
+}
+
+.ddq-rail{
+  position: sticky;
+  top: 86px;
+  align-self: start;
+}
+
+.ddq-rail-stack{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ddq-rail-card{
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(15,23,42,0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(15,23,42,0.06);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.ddq-rail-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ddq-rail-title{
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(15,23,42,0.9);
+}
+
+.ddq-rail-nav{
+  display: flex;
+  gap: 6px;
+}
+
+.ddq-rail-navbtn{
+  height: 28px;
+  width: 28px;
+  border-radius: 10px;
+  border: 1px solid rgba(15,23,42,0.10);
+  background: rgba(255,255,255,0.9);
+  cursor: pointer;
+}
+
+.ddq-rail-navbtn:hover{
+  background: rgba(248,250,252,1);
+}
+
+.ddq-kpis{
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.ddq-kpi{
+  border-radius: 14px;
+  padding: 10px 10px;
+  border: 1px solid rgba(15,23,42,0.08);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 8px 20px rgba(15,23,42,0.05);
+}
+
+.ddq-kpi-k{
+  font-size: 12px;
+  color: rgba(15,23,42,0.62);
+  font-weight: 600;
+}
+
+.ddq-kpi-v{
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  color: rgba(15,23,42,0.92);
+}
+
+.ddq-kpi-danger{
+  background: rgba(254,242,242,0.92);
+  border-color: rgba(239,68,68,0.18);
+}
+
+.ddq-kpi-warn{
+  background: rgba(255,251,235,0.92);
+  border-color: rgba(245,158,11,0.20);
+}
+
+.ddq-kpi-ok{
+  background: rgba(236,253,245,0.92);
+  border-color: rgba(16,185,129,0.18);
+}
+
+.ddq-cal{
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.ddq-cal-wd{
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(15,23,42,0.45);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.ddq-cal-day{
+  position: relative;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.08);
+  background: rgba(255,255,255,0.92);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ddq-cal-day:hover{
+  background: rgba(248,250,252,1);
+}
+
+.ddq-cal-day-out{
+  opacity: 0.45;
+}
+
+.ddq-cal-day-sel{
+  outline: 2px solid rgba(59,130,246,0.35);
+  border-color: rgba(59,130,246,0.35);
+}
+
+.ddq-cal-day-today{
+  border-color: rgba(99,102,241,0.35);
+}
+
+.ddq-cal-n{
+  position: absolute;
+  left: 9px;
+  top: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(15,23,42,0.9);
+}
+
+.ddq-cal-c{
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  border: 1px solid rgba(15,23,42,0.12);
+  background: rgba(241,245,249,1);
+  color: rgba(15,23,42,0.75);
+}
+
+.ddq-cal-day-has{
+  border-color: rgba(59,130,246,0.18);
+}
+
+.ddq-rail-actions{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ddq-rail-action{
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.10);
+  background: rgba(255,255,255,0.92);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+  color: rgba(15,23,42,0.88);
+  text-align: left;
+  padding: 0 12px;
+}
+
+.ddq-rail-action:hover{
+  background: rgba(248,250,252,1);
+}
+
+@media (max-width: 980px){
+  .ddq-body{
+    grid-template-columns: 1fr;
+  }
+  .ddq-rail{
+    position: static;
+    top: auto;
+  }
+}
